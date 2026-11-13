@@ -1,0 +1,31 @@
+tamber imp
+
+// Catalogue: white paper, black ink, one cobalt action, square corners, engraved art in greyscale. Headlines are
+// Instrument Serif with a Pinyon Script capital, prose is Newsreader, labels and numbers are IBM Plex Mono.
+
+theme
+  AccentColor = light-dark(#2341d6, #5b74f2)
+  Highlight = light-dark(#dfe4fb, #26305e)
+  HighlightText = light-dark(#111111, #f2f2f0)
+
+  ink.strong = light-dark(#111111, #f2f2f0)
+  ink.muted = light-dark(#6b6b6b, #9b9b97)  pair=surface.page
+  ink.faint = light-dark(#a3a3a3, #64645f)
+  ink.on-fill = #ffffff  scheme=fixed
+
+  surface.page = light-dark(#ffffff, #0d0d0d)
+  surface.soft = light-dark(#f3f3f1, #1b1b1a)
+  line.subtle = light-dark(#e4e4e1, #262625)
+  line.strong = light-dark(#c9c9c5, #3d3d3a)
+  danger.soft = light-dark(#fdeeee, #3a1d20)
+
+  family.display = "Instrument Serif", "Iowan Old Style", Georgia, serif
+  family.text = "Newsreader", "Iowan Old Style", Georgia, serif
+  family.script = "Pinyon Script", "Snell Roundhand", serif
+  family.mono = "IBM Plex Mono", ui-monospace, monospace
+
+icons
+  icon.terminal = icon(sf "terminal", svg "icons/terminal.svg")
+  icon.panel = icon(sf "sidebar.right", svg "icons/panel-right.svg")
+  icon.expand = icon(sf "arrow.up.left.and.arrow.down.right", svg "icons/expand.svg")
+  icon.imp = icon(sf "face.smiling", svg "icons/imp.svg")

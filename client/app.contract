@@ -1,0 +1,652 @@
+// Imp's shell: ChatGPT sign-in first, then the chat home and the installed apps, compiled into one
+// plan. Every source goes to the host through the one data module in app.ts, which streams each resource live. Each
+// app's resources and mutations live here, in the root, because Contract allows them only there; its screen is
+// imported from apps/<id>/app.contract. Colours and type are app.tamber's; the look is "Catalogue": white paper,
+// black ink, engraved art, square corners, mono labels and one cobalt action.
+use TodosScreen, Todo from "./apps/todos/app.contract"
+
+font "Instrument Serif" = "assets/fonts/InstrumentSerif-Regular.ttf"
+font "Pinyon Script" = "assets/fonts/PinyonScript-Regular.ttf"
+font "Newsreader"
+  200 800 = "assets/fonts/Newsreader.ttf"
+  200 800 italic = "assets/fonts/Newsreader-Italic.ttf"
+font "IBM Plex Mono"
+  400 = "assets/fonts/IBMPlexMono-Regular.ttf"
+  500 = "assets/fonts/IBMPlexMono-Medium.ttf"
+
+routes nav
+  tab chat "/"
+  tab todos "/todos"
+  tab settings "/settings"
+
+// Where the host answers: the page's own origin on the web, API_BASE_URL in a native build.
+shape Host
+  origin: string
+
+// The ChatGPT account the agent runs on. `status` is "checking", "signedOut", "starting", "waiting" (for the person
+// to enter `code` at `url`), "signedIn", or "failed" (with `error`).
+shape Account
+  status: string
+  code: string
+  url: string
+  error: string
+  email: string
+  plan: string
+
+// A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
+shape ChatMessage
+  id: string
+  role: string
+  text: string
+  title: string
+  detail: string
+  icon: string
+  failed: bool
+
+// While the assistant writes, its partial answer is the last message, with id "live".
+shape ChatState
+  messages: ChatMessage[]
+  busy: bool
+
+// An installed app. `cover` is its engraving in the client's assets ("" for none), `symbol` its fallback icon.
+shape AppTile
+  id: string
+  name: string
+  description: string
+  symbol: string
+  cover: string
+
+shape Reply
+  ok: bool
+  error: string
+
+shape Media
+  prefersReducedMotion: bool
+  width: number
+
+shape Time
+  epochAtZero: number
+  utcOffset: number
+
+// The catalogue's small capitals: mono, upper case, spaced.
+style Label
+  font-family = "family.mono"
+  font-size = "0.6875rem"
+  font-weight = 500
+  letter-spacing = "0.12em"
+  text-transform = "uppercase"
+  color = "ink.muted"
+
+style Rule
+  height = 1
+  background-color = "line.subtle"
+
+keyframes rise
+  from opacity=0 translate="0px 6px"
+keyframes pulse
+  0% opacity=0.25
+  50% opacity=1
+  100% opacity=0.25
+
+fn tabTitle(name: string, wide: bool): string = name == "chat" ? (wide ? "Chat" : "Imp") : name == "todos" ? "Todos" : "Settings"
+fn capitalized(s: string): string = s == "" ? "" : `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
+fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUpperCase()
+fn localPart(email: string): string = email.includes("@") ? email.slice(0, email.indexOf("@")) : email
+fn givenName(email: string): string =
+  capitalized(localPart(email).includes(".") ? localPart(email).slice(0, localPart(email).indexOf(".")) : localPart(email))
+fn hourOf(ms: number, offset: number): number = floor(((ms + offset * 60000) % 86400000) / 3600000)
+fn greeting(hour: number): string = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
+fn tabLabel(name: string, apps: AppTile[]): string =
+  name == "chat" ? "Chat" : name == "settings" ? "Settings" : match first(apps.filter(a => a.id == name)) { case some(a) => a.name, case none => capitalized(name) }
+fn tabSymbol(name: string, apps: AppTile[]): string =
+  name == "chat" ? "symbol:messages" : name == "settings" ? "symbol:settings" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:layers" }
+fn tabCover(name: string, apps: AppTile[]): string =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.cover, case none => "" }
+fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
+
+component App
+  state draft = ""
+  state todoDraft = ""
+  state scheme = "system" persist
+  state now = 0
+  // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
+  state chatDocked = true persist
+  resource media = exactViewport() as shape Media
+  resource time = exactTime() as shape Time
+  resource host = hostOrigin() as shape Host else empty()
+  resource account = account() when host.origin != "" as shape Account else empty()
+  resource chat = chat() when signedIn as shape ChatState else empty()
+  resource apps = apps() when signedIn as shape AppTile[] else empty()
+  resource todos = todosList() when signedIn as shape Todo[] else empty()
+  mutation signInStarted as shape Reply
+  mutation signInCancelled as shape Reply
+  mutation signedOut as shape Reply
+  mutation sent as shape Reply then toEnd
+  mutation stopped as shape Reply
+  mutation todoAdded as shape Reply then afterTodoAdd
+  mutation todoSaved as shape Reply queue
+  derive still = media.prefersReducedMotion
+  // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
+  derive wide = media.width >= 960
+  derive onApp = nav.tab != "chat" and nav.tab != "settings"
+  derive docked = wide and onApp and chatDocked
+  // The apps the top bar lists: the installed ones this build has a screen (a tab) for.
+  derive shownApps = apps.filter(a => nav.tabs.map(t => t.name).includes(a.id))
+  derive openAppName = match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
+  derive signedIn = account.status == "signedIn"
+  derive shown = time.epochAtZero + now
+  derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
+  derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
+  derive sendError = match sent { case some(r) => r.error, case none => "" }
+  derive todoAddError = match todoAdded { case some(r) => r.error, case none => "" }
+  // A live stream that ended (the host restarted, the network dropped) is opened again.
+  derive hostLost = match failure(host) { case some(f) => true, case none => false }
+  derive accountLost = match failure(account) { case some(f) => true, case none => false }
+  derive chatLost = match failure(chat) { case some(f) => true, case none => false }
+  derive appsLost = match failure(apps) { case some(f) => true, case none => false }
+  derive todosLost = match failure(todos) { case some(f) => true, case none => false }
+
+  task appearance mount
+    after(1, applyScheme)
+  task heal mount
+    every(3000, reconnect)
+  task clock mount
+    every(60000, tick)
+
+  action applyScheme
+    setScheme(scheme)
+  action tick
+    now = performanceNow()
+  action reconnect
+    if hostLost
+      refresh host
+    if accountLost
+      refresh account
+    if chatLost
+      refresh chat
+    if appsLost
+      refresh apps
+    if todosLost
+      refresh todos
+  action pick(name: string)
+    nav = select(nav, name)
+  action follow(url: string)
+    nav = go(nav, url)
+  action signIn
+    send signInStarted = accountSignIn()
+  action cancelSignIn
+    send signInCancelled = accountCancel()
+  action askSignOut
+    showModal("confirm-signout")
+  action signOut
+    send signedOut = accountSignOut()
+  action copyCode
+    copyText(account.code)
+  action setAppearance(value: string)
+    scheme = value
+    setScheme(value)
+  action edit(v: string)
+    draft = v
+  action post(where: string)
+    if draft.trim() != "" and not pending(sent)
+      send sent = chatSend(draft.trim(), where == "side-" ? nav.tab : "")
+      draft = ""
+    if where == "side-"
+      focus("side-composer")
+    else
+      focus("composer")
+  action suggest(text: string)
+    if not pending(sent)
+      send sent = chatSend(text, "")
+  action startApp
+    draft = "Build me an app that "
+    focus("composer")
+  action stop
+    send stopped = chatStop()
+  action toEnd
+    if docked
+      scrollIntoView("side-transcript", lastId, block="end")
+    else
+      scrollIntoView("transcript", lastId, block="end")
+  action toggleDock
+    chatDocked = not chatDocked
+  action editTodo(v: string)
+    todoDraft = v
+  action addTodo
+    if todoDraft.trim() != ""
+      send todoAdded = todosAdd(todoDraft.trim())
+  action afterTodoAdd
+    if todoAddError == ""
+      todoDraft = ""
+  action toggleTodo(id: string, done: bool)
+    send todoSaved = todosSetDone(id, done)
+
+  view
+    main navigationKey=`${top(nav).id}` navigate=follow testId="app" width="100%" height="100%"
+      display="flex" flex-direction="column" position="relative" viewport-fit="cover" interactive-widget="resizes-content"
+      background-color="surface.page"
+      color="ink.strong" font-family="family.text"
+      if signedIn
+        // The routes. On a wide window they sit under the top bar, and beside the chat panel while an app is open.
+        column position="absolute" left=0 bottom=0 top=(wide ? "3.25rem" : "0px") right=(docked ? "26rem" : "0px")
+          for t in nav.tabs key=t.name
+            column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
+              for e in t.stack key=e.id
+                column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "todos" ? "todos-list" : "settings-list")
+                  position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
+                  padding-bottom=(wide ? "4.75rem" : "calc(3.5rem + env(safe-area-inset-bottom))")
+                  // Under the top bar the page's header is its title, with no rule of its own.
+                  header display="flex" justify-content="center" padding="0 20px"
+                    border-bottom=(wide ? "none" : "1px solid line.subtle") background-color="surface.page"
+                    row width="100%" max-width="46rem" align-items="center" gap=12 padding=(wide ? "22px 0 0" : "12px 0 11px")
+                      if e.name == "chat" and not wide
+                        image "symbol:icon.imp" width=26 height=26 aria-hidden=true
+                      Initialled(word=tabTitle(e.name, wide), size="1.5rem", heading=1)
+                      row flex=1
+                      if e.name == "chat" and chat.busy
+                        row gap=8 align-items="center" testId="busy"
+                          row width=6 height=6 background-color="AccentColor" aria-hidden=true
+                            animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
+                          text "Imp at work" class=Label color="ink.strong"
+                      else if not wide
+                        text formatDate(shown, time.utcOffset, "medium") class=Label
+                      if wide and e.name != "chat" and e.name != "settings"
+                        button press=toggleDock aria-pressed=chatDocked testId="dock-toggle" appearance="none"
+                          display="flex" align-items="center" gap=7 padding="7px 10px" border="1px solid line.strong"
+                          background-color=(chatDocked ? "ink.strong" : "transparent")
+                          color=(chatDocked ? "surface.page" : "ink.strong")
+                          image "symbol:icon.panel" width=14 height=14 aria-hidden=true
+                          text "Chat" class=Label color="inherit"
+                  if e.name == "chat"
+                    if chat.messages.length == 0 and not chat.busy
+                      // Home with nothing said yet: the day, a greeting, the workshop, and the apps.
+                      scroll id="home-scroll" flex=1 min-height=0
+                        column max-width="48.5rem" margin="0 auto" padding="28px 20px 28px" gap=28 box-sizing="border-box"
+                          width="100%" testId="home"
+                          column gap=12
+                            Initialled(word=salutation, size="2.5rem", heading=2)
+                            text "Ask for anything. I can use your apps, work on a computer of my own, and build new apps for you."
+                              color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+                          column gap=8
+                            image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines, and a small egg-shaped imp handing them a page"
+                              width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover" border="1px solid line.subtle"
+                              box-sizing="border-box"
+                            text "Fig. 1 — The workshop. Your imp hands over a new app." font-style="italic" font-size="0.875rem"
+                              color="ink.muted"
+                          column
+                            row align-items="baseline" justify-content="space-between" padding-bottom=10
+                              border-bottom="1px solid ink.strong"
+                              text "Your apps" class=Label color="ink.strong" role="heading" aria-level=3
+                              text `No. ${numbered(apps.length)}` class=Label
+                            for a in apps key=a.id
+                              button press=pick(a.id) display="flex" align-items="center" gap=14 padding="14px 0"
+                                background-color="transparent" border="none" border-bottom="1px solid line.subtle"
+                                text-align="start" color="ink.strong" testId=`app-${a.id}`
+                                transition="background-color 120ms ease"
+                                :hover
+                                  background-color="surface.soft"
+                                if a.cover != ""
+                                  image a.cover alt="" width=44 height=44 min-width=44 object-fit="cover"
+                                    border="1px solid line.subtle" box-sizing="border-box"
+                                else
+                                  row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                                    border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                                    image a.symbol width=18 height=18
+                                column gap=2 flex=1 min-width=0
+                                  text a.name font-family="family.display" font-size="1.375rem" line-height=1.1
+                                  text a.description font-size="0.9375rem" color="ink.muted" line-clamp=1
+                                text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+                            button press=startApp display="flex" align-items="center" gap=14 padding="14px 0"
+                              background-color="transparent" border="none" border-bottom="1px solid line.subtle"
+                              text-align="start" color="ink.strong" testId="app-new"
+                              transition="background-color 120ms ease"
+                              :hover
+                                background-color="surface.soft"
+                              row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                                border="1px dashed line.strong" box-sizing="border-box" aria-hidden=true color="ink.muted"
+                                image "symbol:add" width=18 height=18
+                              column gap=2 flex=1 min-width=0
+                                text "Build a new app" font-family="family.display" font-size="1.375rem" line-height=1.1
+                                text "Describe it in a sentence. It stays here." font-size="0.9375rem" color="ink.muted"
+                              text "+" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+                          column gap=10
+                            text "Try" class=Label
+                            row flex-wrap="wrap" gap=8
+                              for s in ["Add todo: Buy flowers", "What's on my todo list?", "Build me an app that tracks my runs"] key=s
+                                button press=suggest(s) disabled=pending(sent) padding="8px 12px"
+                                  background-color="transparent" border="1px solid line.strong" color="ink.strong"
+                                  font-size="0.9375rem" transition="border-color 120ms ease, background-color 120ms ease"
+                                  testId=`suggest-${s.length}`
+                                  :hover
+                                    border-color="ink.strong"
+                                    background-color="surface.soft"
+                                  text s
+                    else
+                      Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
+                    Composer(prefix="", placeholder="Ask your imp", compact=false, draft=draft, busy=chat.busy,
+                      sending=pending(sent), stopping=pending(stopped), error=sendError, edit=edit, post=post, stop=stop)
+                  else if e.name == "todos"
+                    TodosScreen(todos=todos, draft=todoDraft, edit=editTodo, add=addTodo, toggle=toggleTodo)
+                  else
+                    scroll id="settings-list" flex=1 min-height=0
+                      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=32 box-sizing="border-box" width="100%"
+                        column
+                          row padding-bottom=10 border-bottom="1px solid ink.strong"
+                            text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
+                          row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
+                            text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
+                              text-align="center" line-height="2.75rem" font-family="family.script" font-size="1.75rem"
+                              border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                            column flex=1 min-width=0 gap=4 align-items="flex-start"
+                              text (account.email == "" ? "ChatGPT account" : account.email) font-family="family.display"
+                                font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere" testId="account-email"
+                              if account.plan != ""
+                                text capitalized(account.plan) class=Label testId="account-plan"
+                          text "Your imp runs on this plan. Nothing is billed separately." font-size="0.9375rem"
+                            color="ink.muted" padding-top=10
+                        column
+                          row padding-bottom=10 border-bottom="1px solid ink.strong"
+                            text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
+                          row role="radiogroup" aria-label="Appearance" padding-top=14 gap=0
+                            for s, i in ["system", "light", "dark"] key=s
+                              button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
+                                padding="10px 0" border="1px solid line.strong" margin-left=(i == 0 ? "0px" : "-1px")
+                                background-color=(scheme == s ? "ink.strong" : "transparent")
+                                color=(scheme == s ? "surface.page" : "ink.strong")
+                                font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                                text capitalized(s)
+                        column
+                          button press=askSignOut disabled=pending(signedOut) testId="signout" display="flex" align-items="center"
+                            gap=10 padding="14px 0" color="-exact-system-red" background-color="transparent" border="none"
+                            border-top="1px solid line.subtle" border-bottom="1px solid line.subtle" text-align="start"
+                            :hover
+                              background-color="danger.soft"
+                            image "symbol:sign-out" width=16 height=16
+                            text "Sign out" class=Label color="-exact-system-red"
+                    dialog id="confirm-signout" role="alertdialog" aria-label="Sign out of ChatGPT?"
+                      text "Your imp stops until you sign in again. Your chats and apps stay."
+                      button commandfor="confirm-signout" command="close" testId="signout-cancel"
+                        text "Cancel"
+                      button press=signOut commandfor="confirm-signout" command="close" destructive=true testId="signout-confirm"
+                        text "Sign Out"
+        // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
+        if docked
+          aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
+            display="flex" flex-direction="column" border-left="1px solid line.subtle" background-color="surface.page"
+            aria-label="Chat" testId="chat-panel"
+            row align-items="center" gap=10 padding="0 10px 0 18px" height="3.25rem" box-sizing="border-box"
+              border-bottom="1px solid line.subtle"
+              text "Chat" class=Label color="ink.strong" role="heading" aria-level=2
+              if chat.busy
+                row width=6 height=6 background-color="AccentColor" aria-label="Imp at work" testId="side-busy"
+                  animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
+              row flex=1
+              button press=pick("chat") aria-label="Open the full chat" testId="chat-expand" appearance="none"
+                width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
+                border="none" background-color="transparent" color="ink.muted"
+                :hover
+                  background-color="surface.soft"
+                image "symbol:icon.expand" width=15 height=15
+              button press=toggleDock aria-label="Hide chat" testId="chat-hide" appearance="none"
+                width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
+                border="none" background-color="transparent" color="ink.muted"
+                :hover
+                  background-color="surface.soft"
+                image "symbol:close" width=15 height=15
+            if chat.messages.length == 0 and not chat.busy
+              column flex=1 min-height=0 justify-content="flex-end" padding="24px 18px" gap=8 testId="side-empty"
+                Initialled(word=`Ask about ${openAppName}.`, size="1.75rem", heading=3)
+                text "I can read it, change it, and build on it while you watch." font-style="italic" color="ink.muted"
+            else
+              Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
+            Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
+              sending=pending(sent), stopping=pending(stopped), error=sendError, edit=edit, post=post, stop=stop)
+        // The apps, drawn: on a wide window a dock floating over the bottom of the page (Chat, each app's cover, and
+        // Settings at the end; the open one shows its name), on a phone a bar of symbols along the bottom.
+        row role="tablist" appearance="none" testId="tabs" position="absolute" box-sizing="border-box"
+          left=(wide ? (docked ? "calc((100% - 26rem) / 2)" : "50%") : "0px") right=(wide ? "auto" : "0px")
+          translate=(wide ? "-50% 0" : "0 0") bottom=(wide ? "16px" : "0px")
+          height=(wide ? "auto" : "calc(3.5rem + env(safe-area-inset-bottom))")
+          padding=(wide ? "5px" : "0 0 env(safe-area-inset-bottom)") gap=(wide ? 4 : 0)
+          align-items=(wide ? "center" : "stretch") background-color="surface.page"
+          border=(wide ? "1px solid line.strong" : "none") border-top=(wide ? "1px solid line.strong" : "1px solid line.subtle")
+          box-shadow=(wide ? "0 10px 28px -12px rgba(0, 0, 0, 0.35)" : "none")
+          for t in nav.tabs key=t.name
+            button role="tab" aria-controls=`panel-${t.name}` aria-selected=(nav.tab == t.name) press=pick(t.name)
+              aria-label=tabLabel(t.name, apps) testId=`tab-${t.name}` appearance="none" display="flex"
+              align-items="center" justify-content="center" position="relative"
+              flex-direction=(wide ? "row" : "column") flex=(wide ? "0 0 auto" : "1 1 0") gap=(wide ? 9 : 4)
+              height=(wide ? "2.75rem" : "auto") min-width=(wide ? "2.75rem" : "0px") box-sizing="border-box"
+              padding=(wide ? (nav.tab == t.name ? "0 14px 0 4px" : "0") : "0")
+              margin-left=(wide and t.name == "settings" ? "6px" : "0px")
+              margin-right=(wide and t.name == "chat" ? "6px" : "0px")
+              background-color=(wide and nav.tab == t.name ? "surface.soft" : "transparent")
+              border=(wide ? (nav.tab == t.name ? "1px solid ink.strong" : "1px solid transparent") : "none")
+              border-top=(wide ? (nav.tab == t.name ? "1px solid ink.strong" : "1px solid transparent") : (nav.tab == t.name ? "2px solid ink.strong" : "2px solid transparent"))
+              color=(nav.tab == t.name ? "ink.strong" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
+              :hover
+                color="ink.strong"
+              if wide and tabCover(t.name, apps) != ""
+                image tabCover(t.name, apps) alt="" width=34 height=34 min-width=34 object-fit="cover"
+                  border="1px solid line.subtle" box-sizing="border-box"
+              else if wide
+                row width=34 height=34 min-width=34 align-items="center" justify-content="center" box-sizing="border-box"
+                  border=(nav.tab == t.name ? "1px solid transparent" : "1px solid line.strong") aria-hidden=true
+                  image tabSymbol(t.name, apps) width=16 height=16
+              else
+                image tabSymbol(t.name, apps) width=19 height=19 aria-hidden=true
+              if wide and nav.tab == t.name
+                text tabLabel(t.name, apps) font-family="family.display" font-size="1.25rem" white-space="nowrap"
+                  aria-hidden=true
+              else if not wide
+                text tabLabel(t.name, apps) font-family="family.mono" font-size="0.625rem" font-weight=500
+                  letter-spacing="0.1em" text-transform="uppercase" aria-hidden=true
+        // The masthead above everything on a wide window: the wordmark and the day.
+        if wide
+          row position="absolute" top=0 left=0 right=0 height="3.25rem" box-sizing="border-box" align-items="center"
+            padding="0 20px" border-bottom="1px solid line.subtle" background-color="surface.page"
+            row gap=9 align-items="center"
+              image "symbol:icon.imp" width=26 height=26 aria-hidden=true
+              text aria-label="Imp" font-family="family.display" font-size="1.625rem" line-height=1.05
+                text "I" font-family="family.script" font-size="1.18em" line-height=0.8
+                text "mp"
+            row flex=1
+            text formatDate(shown, time.utcOffset, "medium") class=Label
+      else
+        scroll flex=1 min-height=0
+          column min-height="100%" box-sizing="border-box" padding="36px 24px 40px" gap=28 max-width="34rem" margin="0 auto"
+            justify-content="center" testId="onboarding"
+            column gap=14
+              row align-items="center" gap=12 padding-bottom=12 border-bottom="1px solid ink.strong"
+                image "symbol:icon.imp" width=40 height=40 aria-hidden=true
+                Initialled(word="Imp", size="2.5rem", heading=1)
+                row flex=1
+                text "Vol. 1" class=Label
+              column gap=6
+                image "assets/art/imp.jpg" alt="A blue-and-white porcelain imp: an egg-shaped body with googly eyes, small horns and a spade-tipped tail, one finger raised, a quill in the other hand"
+                  width="100%" height="auto" aspect-ratio="4 / 3" max-height="20rem" object-fit="cover"
+                  border="1px solid line.subtle" box-sizing="border-box"
+                text "Fig. 1 — Your imp. Looks fragile, is surprisingly handy." font-style="italic" font-size="0.875rem" color="ink.muted"
+              text "Meet your imp. It runs errands in your apps, builds new ones for you, and keeps them."
+                font-family="family.display" font-size="1.625rem" line-height=1.2
+            if account.status == "waiting"
+              column gap=20 testId="signin-waiting" animation=(still ? "none" : "rise 260ms ease-out both")
+                column gap=10
+                  Step(number="01", title="Open ChatGPT's sign-in page")
+                  link href=account.url testId="signin-open" display="flex" align-items="center" justify-content="center"
+                    gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
+                    font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
+                    text-decoration-line="none"
+                    text "Open ChatGPT"
+                    image "symbol:open-app" width=14 height=14 aria-hidden=true
+                column gap=10
+                  Step(number="02", title="Enter this code")
+                  row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
+                    text account.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
+                      letter-spacing="0.18em" user-select="all" testId="signin-code"
+                    button press=copyCode testId="signin-copy" display="flex" align-items="center" gap=6
+                      padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
+                      font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                      :hover
+                        background-color="surface.soft"
+                      image "symbol:copy" width=13 height=13 aria-hidden=true
+                      text "Copy"
+                row gap=10 align-items="center" padding-top=2
+                  progress aria-label="Waiting for approval"
+                  text "Waiting for you to approve…" font-style="italic" color="ink.muted"
+                button press=cancelSignIn disabled=pending(signInCancelled) testId="signin-cancel" align-self="flex-start"
+                  padding="4px 0" border="none" background-color="transparent" color="ink.muted"
+                  :hover
+                    color="ink.strong"
+                  text "Cancel" class=Label color="inherit"
+            else if account.status == "starting" or account.status == "checking" or account.status == ""
+              row gap=10 align-items="center" padding="24px 0" testId="signin-starting"
+                progress aria-label="Loading"
+                text (account.status == "starting" ? "Asking ChatGPT for a code…" : "Connecting…")
+                  font-style="italic" color="ink.muted"
+            else
+              column gap=24
+                column border-top="1px solid line.subtle"
+                  Feature(number="01", title="Chat is home", message="Ask for anything. Your imp has a computer of its own.")
+                  Feature(number="02", title="Apps that stay", message="It builds tools for you, keeps them, and can use them for you.")
+                  Feature(number="03", title="Yours", message="Runs on your server, behind your Tailscale login.")
+                column gap=12
+                  if account.status == "failed"
+                    row gap=8 align-items="flex-start" padding="10px 14px" background-color="danger.soft"
+                      border-left="2px solid -exact-system-red"
+                      image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+                      text account.error font-size="0.9375rem" flex=1 min-width=0 testId="signin-error"
+                  button press=signIn disabled=pending(signInStarted) testId="signin" display="flex" align-items="center"
+                    justify-content="space-between" gap=10 padding="15px 18px" border="none" color="ink.on-fill"
+                    background-color="AccentColor" font-family="family.mono" font-size="0.8125rem" font-weight=500
+                    letter-spacing="0.1em" text-transform="uppercase" transition="opacity 120ms ease"
+                    :hover
+                      opacity=0.9
+                    text "Continue with ChatGPT"
+                    text "→" aria-hidden=true
+                  text "Uses your ChatGPT Plus or Pro plan. Nothing is billed separately." font-size="0.875rem"
+                    font-style="italic" color="ink.muted"
+
+// A word set in the display serif with its first letter in the script, the catalogue's drop capital.
+component Initialled
+  props
+    word: string
+    size: string
+    heading: number
+  view
+    text role="heading" aria-level=heading font-family="family.display" font-size=size line-height=1.05
+      letter-spacing="-0.01em"
+      text word.slice(0, 1) font-family="family.script" font-size="1.18em" line-height=0.8
+      text word.slice(1)
+
+// One of onboarding's three promises, numbered like a catalogue entry.
+component Feature
+  props
+    number: string
+    title: string
+    message: string
+  view
+    row gap=16 align-items="baseline" padding="14px 0" border-bottom="1px solid line.subtle"
+      text number class=Label min-width="1.75rem"
+      column gap=2 flex=1 min-width=0
+        text title font-family="family.display" font-size="1.375rem" line-height=1.15
+        text message color="ink.muted" font-size="0.9375rem" line-height=1.45
+
+// A numbered step of the device-code sign-in.
+component Step
+  props
+    number: string
+    title: string
+  view
+    row gap=12 align-items="baseline"
+      text number class=Label
+      text title font-family="family.display" font-size="1.25rem"
+
+// The conversation's rows. The chat tab shows it full width; the panel beside an app shows it `compact`.
+component Transcript
+  props
+    prefix: string
+    compact: bool
+    messages: ChatMessage[]
+    lastId: string
+    still: bool
+  view
+    list id=`${prefix}transcript` appearance="none" virtualized=true scroll-start="end" scrollFollowEnd=true flex=1
+      min-height=0 testId=`${prefix}transcript`
+      for m in messages key=m.id
+        row justify-content="center" padding=(compact ? "0 18px" : "0 20px")
+          column width="100%" max-width="46rem"
+            animation=(still or m.id != lastId ? "none" : "rise 220ms ease-out both")
+            if m.role == "user"
+              row justify-content="flex-end" padding=(compact ? "16px 0 6px" : "20px 0 8px")
+                text m.text padding="10px 14px" max-width="85%" overflow-wrap="break-word"
+                  white-space="pre-wrap" background-color="surface.soft" font-size=(compact ? "0.9375rem" : "1rem") line-height=1.5
+                  testId=`${prefix}message-${m.id}`
+            else if m.role == "activity"
+              row gap=10 align-items="center" padding="5px 0" testId=`${prefix}message-${m.id}`
+                color=(m.failed ? "-exact-system-red" : "ink.muted")
+                image m.icon width=13 height=13 aria-hidden=true
+                text m.title class=Label color=(m.failed ? "-exact-system-red" : "ink.strong") white-space="nowrap"
+                if m.detail != ""
+                  text m.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" flex=1 min-width=0
+                    white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+            else if m.role == "thinking"
+              row gap=6 align-items="center" padding="14px 0" aria-label="Your imp is working"
+                testId=`${prefix}thinking`
+                row width=6 height=6 background-color="ink.faint" aria-hidden=true
+                  animation=(still ? "none" : "pulse 1.1s ease-in-out 0ms infinite")
+                row width=6 height=6 background-color="ink.faint" aria-hidden=true
+                  animation=(still ? "none" : "pulse 1.1s ease-in-out 160ms infinite")
+                row width=6 height=6 background-color="ink.faint" aria-hidden=true
+                  animation=(still ? "none" : "pulse 1.1s ease-in-out 320ms infinite")
+            else if m.role == "error"
+              row gap=10 align-items="flex-start" padding="10px 14px" margin="8px 0"
+                background-color="danger.soft" border-left="2px solid -exact-system-red" testId=`${prefix}message-${m.id}`
+                image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+                text m.text font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="break-word"
+            else
+              text m.text markup="markdown" padding="10px 0 14px" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.6
+                overflow-wrap="break-word" testId=`${prefix}message-${m.id}`
+
+// The square field the person writes in, with Send (or Stop while the assistant works and the field is empty).
+component Composer
+  props
+    prefix: string
+    placeholder: string
+    compact: bool
+    draft: string
+    busy: bool
+    sending: bool
+    stopping: bool
+    error: string
+    edit: action
+    post: action
+    stop: action
+  view
+    row justify-content="center" padding=(compact ? "10px 14px 14px" : "10px 16px 14px")
+      column width="100%" max-width="46rem" gap=8
+        if error != ""
+          text error color="-exact-system-red" font-size="0.8125rem" testId=`${prefix}send-error`
+        row align-items="flex-end" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+          background-color="surface.page"
+          textarea id=`${prefix}composer` value=draft input=edit rows=1 field-sizing="content" max-height=180
+            placeholder=placeholder aria-label="Message" testId=`${prefix}composer` flex=1 min-width=0
+            padding="9px 0" border="none" background-color="transparent" outline="none" resize="none"
+            font-family="family.text" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.5 color="ink.strong"
+          if busy and draft.trim() == ""
+            button press=stop disabled=stopping aria-label="Stop" testId=`${prefix}stop` width=38 height=38
+              min-width=38 padding=0 border="none" background-color="ink.strong" color="surface.page"
+              display="flex" align-items="center" justify-content="center"
+              image "symbol:stop-fill" width=13 height=13
+          else
+            button press=post(prefix) disabled=(draft.trim() == "" or sending) retainFocus=true aria-label="Send"
+              testId=`${prefix}send` width=38 height=38 min-width=38 padding=0 border="none"
+              background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
+              justify-content="center" transition="background-color 120ms ease"
+              :disabled
+                background-color="surface.soft"
+                color="ink.faint"
+              image "symbol:send" width=16 height=16
+        if not compact
+          text "Asks before anything it can't undo" class=Label color="ink.faint" text-align="center"
+            font-size="0.625rem"

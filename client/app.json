@@ -1,0 +1,87 @@
+{
+  "$schema": "../../../tools/exact/scripts/app.schema.json",
+  "name": "Imp",
+  "short_name": "Imp",
+  "description": "Your own imp: an assistant that runs errands in your apps and builds new ones for you.",
+  "id": "dev.imp.app",
+  "start_url": "/",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "assets/icons/app/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/app/favicon-64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/app/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/app/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icons/app/icon-mono-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "monochrome"
+    }
+  ],
+  "color_scheme_dark": {
+    "icons": [
+      {
+        "src": "assets/icons/app/icon-dark-1024.png",
+        "sizes": "1024x1024",
+        "type": "image/png",
+        "purpose": "any"
+      }
+    ]
+  },
+  "app": {
+    "id": "dev.imp.app",
+    "name": "Imp"
+  },
+  "host": {
+    "web": {}
+  },
+  "deploy": {
+    "store": {
+      "web": "0"
+    }
+  },
+  "env": [
+    "API_BASE_URL"
+  ],
+  "commands": {
+    "server": [
+      "node",
+      "../host/scripts/test-host.ts"
+    ]
+  },
+  "server": {
+    "database": false
+  }
+}

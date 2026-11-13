@@ -1,0 +1,7 @@
+{
+  "id": "todos",
+  "name": "Todos",
+  "symbol": "symbol:checkmark",
+  "cover": "assets/art/todos.jpg",
+  "description": "A list of things to do. The agent can read and change it."
+}

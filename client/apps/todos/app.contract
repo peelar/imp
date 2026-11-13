@@ -1,0 +1,84 @@
+// The Todos app's screen. Its data lives in the shell's root (Contract lets only the root declare resources and
+// mutations), so the screen takes the list and the actions as props.
+
+shape Todo
+  id: string
+  title: string
+  done: bool
+
+fn leftText(n: number): string = `${n} ${n == 1 ? "todo" : "todos"} left`
+fn percent(done: number, all: number): string = all == 0 ? "0%" : `${done * 100 / all}%`
+fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
+
+// A square check: an empty box while open, filled in ink once done.
+component Check
+  props
+    todo: Todo
+    toggle: action
+  view
+    button role="checkbox" aria-checked=todo.done aria-label=todo.title press=toggle(todo.id, not todo.done)
+      testId=`todo-done-${todo.id}` width=20 height=20 min-width=20 padding=0
+      display="flex" align-items="center" justify-content="center"
+      border=(todo.done ? "1px solid ink.strong" : "1px solid line.strong")
+      background-color=(todo.done ? "ink.strong" : "transparent") color="surface.page"
+      transition="background-color 160ms ease, border-color 160ms ease"
+      :hover
+        border-color="ink.strong"
+      if todo.done
+        image "symbol:checkmark" width=12 height=12 aria-hidden=true
+
+component TodosScreen
+  props
+    todos: Todo[]
+    draft: string
+    edit: action
+    add: action
+    toggle: action
+  view
+    scroll id="todos-list" flex=1 min-height=0
+      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=28 box-sizing="border-box" width="100%"
+        column gap=12
+          row align-items="baseline" justify-content="space-between" gap=10
+            text leftText(todos.filter(t => not t.done).length) font-family="family.display" font-size="2.25rem"
+              line-height=1.05 testId="todos-left"
+            text `${numbered(todos.filter(t => t.done).length)} done` font-family="family.mono" font-size="0.6875rem"
+              letter-spacing="0.12em" text-transform="uppercase" color="ink.muted"
+          row height=2 background-color="line.subtle" overflow="hidden" aria-hidden=true
+            row height=2 width=percent(todos.filter(t => t.done).length, todos.length) background-color="AccentColor"
+              -exact-layout-transition="300ms ease"
+        row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+          input value=draft input=edit submit=add placeholder="Add a todo" aria-label="New todo"
+            flex=1 min-width=0 testId="todo-draft" border="none" background-color="transparent" outline="none"
+            padding="8px 0" font-family="family.text" font-size="1.0625rem" color="ink.strong"
+          button press=add disabled=(draft.trim() == "") testId="todo-add" padding="9px 14px" border="none"
+            background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.75rem"
+            font-weight=500 letter-spacing="0.1em" text-transform="uppercase"
+            :disabled
+              background-color="surface.soft"
+              color="ink.faint"
+            text "Add"
+        if todos.filter(t => not t.done).length > 0
+          column testId="todos-open"
+            row padding-bottom=10 border-bottom="1px solid ink.strong"
+              text "Open" font-family="family.mono" font-size="0.6875rem" font-weight=500 letter-spacing="0.12em"
+                text-transform="uppercase" role="heading" aria-level=2
+            for t in todos.filter(x => not x.done) key=t.id
+              row align-items="center" gap=14 padding="13px 0" border-bottom="1px solid line.subtle"
+                Check(todo=t, toggle=toggle)
+                text t.title flex=1 min-width=0 overflow-wrap="break-word" font-size="1.0625rem" testId=`todo-${t.id}`
+        if todos.filter(t => t.done).length > 0
+          column
+            row padding-bottom=10 border-bottom="1px solid ink.strong"
+              text "Completed" font-family="family.mono" font-size="0.6875rem" font-weight=500 letter-spacing="0.12em"
+                text-transform="uppercase" role="heading" aria-level=2
+            for t in todos.filter(x => x.done) key=t.id
+              row align-items="center" gap=14 padding="13px 0" border-bottom="1px solid line.subtle"
+                Check(todo=t, toggle=toggle)
+                text t.title flex=1 min-width=0 overflow-wrap="break-word" color="ink.muted" font-size="1.0625rem"
+                  text-decoration-line="line-through" testId=`todo-${t.id}`
+        if todos.length == 0
+          column gap=14 align-items="center" padding-top=16 testId="todos-empty"
+            image "assets/art/todos.jpg" alt="An engraving of a hand ticking a checklist" width=128 height=128
+              object-fit="cover" border="1px solid line.subtle" box-sizing="border-box"
+            text "Nothing to do" font-family="family.display" font-size="1.625rem" role="heading" aria-level=2
+            text "Add a todo above, or ask the assistant in Chat." color="ink.muted" font-style="italic" text-align="center"

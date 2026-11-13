@@ -1,0 +1,57 @@
+// The tests share one host (scripts/test-host.ts), so they run in order: the first signs in, the rest are signed in.
+
+test "onboarding signs in with ChatGPT through a device code"
+  clock data
+  expect tree has "onboarding"
+  expect tree missing "composer"
+  tap "signin"
+  clock until state account.status == "waiting" within 5000
+  expect text "signin-code" == "TEST-1234"
+  clock until state account.status == "signedIn" within 5000
+  expect tree missing "onboarding"
+  expect tree has "composer"
+  tap "tab-settings"
+  expect text "account-email" == "tester@example.com"
+  expect text "account-plan" == "Plus"
+
+test "a todo added in the Todos app is listed and counted"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-todos"
+  type "todo-draft" "Pack camera"
+  tap "todo-add"
+  clock until state todos.0.title == "Pack camera" within 5000
+  expect text "todo-1" == "Pack camera"
+  expect text "todos-left" == "1 todo left"
+  expect text "todo-draft" == ""
+
+test "the assistant adds a todo that the open Todos app shows at once"
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "Please add todo: Book train to Kraków"
+  tap "tab-todos"
+  tap "tab-chat"
+  tap "send"
+  expect text "composer" == ""
+  clock until state todos.1.title == "Book train to Kraków" within 10000
+  clock until state chat.busy == false within 10000
+  expect tree missing "message-live"
+  tap "tab-todos"
+  expect text "todo-2" == "Book train to Kraków"
+
+test "on a wide window the chat sits beside an open app, and what it is asked there lands in the app"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-todos"
+  expect tree has "chat-panel"
+  type "side-composer" "Add todo: Call the vet"
+  tap "side-send"
+  clock until state todos.2.title == "Call the vet" within 10000
+  clock until state chat.busy == false within 10000
+  expect text "todo-3" == "Call the vet"
+  clock until state chat.messages.3.text == "Add todo: Call the vet" within 1000
+  tap "chat-hide"
+  expect tree missing "chat-panel"
+  tap "dock-toggle"
+  expect tree has "chat-panel"
+  tap "chat-expand"
+  expect tree missing "chat-panel"
+  expect tree has "composer"
