@@ -1,5 +1,3 @@
-<p align="center"><img src="assets/imp.jpg" width="360" alt="Imp, a blue-and-white porcelain imp with googly eyes, one finger raised"></p>
-
 # Imp
 
 Your own imp: a self-hosted assistant that runs errands in your apps and builds new ones for you.

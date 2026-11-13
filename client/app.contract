@@ -268,10 +268,10 @@ component App
                             text "Ask for anything. I can use your apps, work on a computer of my own, and build new apps for you."
                               color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
                           column gap=8
-                            image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines, and a small egg-shaped imp handing them a page"
+                            image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
                               width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover" border="1px solid line.subtle"
                               box-sizing="border-box"
-                            text "Fig. 1 — The workshop. Your imp hands over a new app." font-style="italic" font-size="0.875rem"
+                            text "Fig. 1 — The workshop, where your apps are made." font-style="italic" font-size="0.875rem"
                               color="ink.muted"
                           column
                             row align-items="baseline" justify-content="space-between" padding-bottom=10
@@ -462,11 +462,9 @@ component App
                 Initialled(word="Imp", size="2.5rem", heading=1)
                 row flex=1
                 text "Vol. 1" class=Label
-              column gap=6
-                image "assets/art/imp.jpg" alt="A blue-and-white porcelain imp: an egg-shaped body with googly eyes, small horns and a spade-tipped tail, one finger raised, a quill in the other hand"
-                  width="100%" height="auto" aspect-ratio="4 / 3" max-height="20rem" object-fit="cover"
-                  border="1px solid line.subtle" box-sizing="border-box"
-                text "Fig. 1 — Your imp. Looks fragile, is surprisingly handy." font-style="italic" font-size="0.875rem" color="ink.muted"
+              image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
+                width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover"
+                border="1px solid line.subtle" box-sizing="border-box"
               text "Meet your imp. It runs errands in your apps, builds new ones for you, and keeps them."
                 font-family="family.display" font-size="1.625rem" line-height=1.2
             if account.status == "waiting"
