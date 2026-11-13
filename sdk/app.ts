@@ -1,8 +1,12 @@
 // What an app's server.ts exports, as `export default { ... } satisfies AppServer`. The code runs in a worker of its
 // own on the agent's machine, with no packages to import; the database it uses lives on the host.
 //
-// Names: the shell's Contract calls a source or mutation `<appId><Name>` (the todos app's `list` is `todosList()`),
-// and the agent sees each tool under its own name, which starts with `<appId>_`.
+// An app declares each thing it can do once, as an operation, and both its screen and the agent use it:
+//
+// - The shell's Contract calls an operation `<appId><Name>`, with its arguments in the order of `params`: the todos
+//   app's `setDone` is `todosSetDone(id, done)`. A read streams live to the screen and answers again after every write.
+// - The agent finds operations with `find_app_actions` and runs them with `run_app_action`, by name and with named
+//   arguments. Every operation is the agent's unless it says `agent: false`.
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type SqlValue = null | number | string;
@@ -22,19 +26,21 @@ export type Param =
 	| { type: "string" | "number" | "integer" | "boolean"; description?: string; optional?: boolean }
 	| { type: "enum"; values: readonly string[]; description?: string; optional?: boolean };
 
-export interface AppTool {
+export interface AppOperation {
+	/** A read answers without changing anything; a write changes the app's data. */
+	readonly kind: "read" | "write";
+	/** What the operation does, for the agent: it searches these. */
 	readonly description: string;
+	/** The arguments, in the order the screen passes them. The host checks every call against them. */
 	readonly params: Readonly<Record<string, Param>>;
+	/** `false` keeps the operation from the agent; the screen can still call it. */
+	readonly agent?: false;
 	run(args: Record<string, Json>, app: AppContext): Json | Promise<Json>;
 }
 
 export interface AppServer {
 	/** Migrations, in order. The host applies the ones a database has not had yet, before the first call. */
 	readonly schema?: readonly string[];
-	/** What the app's views read. The shell streams each one live, and pushes a new answer after every write. */
-	readonly sources?: Readonly<Record<string, (args: Json[], app: AppContext) => Json | Promise<Json>>>;
-	/** What the app's views change. Each answers a `Reply`: `{ ok, error }`. */
-	readonly mutations?: Readonly<Record<string, (args: Json[], app: AppContext) => Json | Promise<Json>>>;
-	/** What the agent calls to operate the app. */
-	readonly tools?: Readonly<Record<string, AppTool>>;
+	/** Everything the app does, by camelCase name, such as `setDone`. */
+	readonly operations?: Readonly<Record<string, AppOperation>>;
 }

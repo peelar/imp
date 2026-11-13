@@ -4,18 +4,19 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { extname, join, normalize, sep } from "node:path";
+import { extname, join, normalize, resolve, sep } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai/models";
 import { createRegistry, defineExtension, Harness, section } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
-import { appGateway, readApps } from "./apps.ts";
+import { appGateway } from "./apps.ts";
 import { homeChat, TOPIC as CHAT, withAppContext } from "./chat.ts";
 import { type LiveSource, serveLive, Topics } from "./live.ts";
 import type { Machine, MachineProvider } from "./machine.ts";
 import { chatgptAccount, TOPIC as ACCOUNT } from "./signin.ts";
+import { APPS_TOPIC, BUILD_TOPIC, storedApps, studio } from "./studio.ts";
 
 const context = BACKGROUND_CONTEXT;
 const MACHINE_KEY = "owner:local";
@@ -27,8 +28,10 @@ export interface HostOptions {
 	readonly model: { readonly provider: string; readonly modelId: string };
 	readonly machines: (secret: string) => MachineProvider;
 	readonly dataDir: string;
-	/** The app folders (the client's apps/). */
+	/** The app folders (the client's apps/), inside the shell's source. */
 	readonly appsDir: string;
+	/** The Exact checkout the host builds the shell with. Default: the client's (../../../tools/exact from it). */
+	readonly exact?: string;
 	/** The built web client, served at /. Absent: the host serves only the API. */
 	readonly clientDir?: string;
 	readonly port: number;
@@ -94,8 +97,9 @@ export async function startHost(options: HostOptions) {
 		}),
 	);
 
+	const stored = storedApps(DATA, options.appsDir, (message) => console.error(message));
 	const gateway = appGateway({
-		apps: readApps(options.appsDir),
+		apps: stored.live,
 		dataDir: DATA,
 		topics,
 		registry,
@@ -109,6 +113,21 @@ export async function startHost(options: HostOptions) {
 	const account = chatgptAccount(options.models, topics);
 	const env = ({ cwd }: { readonly cwd?: string }) =>
 		new RemoteExecutionEnv({ connection, id: `machine:${MACHINE_KEY}`, cwd: cwd ?? workspace });
+	let files: RemoteExecutionEnv | undefined;
+	const clientSource = resolve(options.appsDir, "..");
+	const apps = studio({
+		dataDir: DATA,
+		repoAppsDir: options.appsDir,
+		clientDir: clientSource,
+		exact: options.exact ?? process.env.EXACT ?? resolve(clientSource, "../../../tools/exact"),
+		gateway,
+		topics,
+		registry,
+		files: () => (files ??= env({})),
+		workspace,
+		context,
+		drafts: stored.drafts,
+	});
 	const harness = await Harness.open(
 		await openNodeSqliteStorage(join(DATA, "harness.sqlite")),
 		{ models: options.models, registry, env },
@@ -124,9 +143,11 @@ export async function startHost(options: HostOptions) {
 	topics.on(CHAT, () => {
 		void chat.busy().then((busy) => busy && touchMachine());
 	});
-	// Load every app now, so their tools are there for the agent's first turn. A machine that is down is retried by
-	// the first call that needs it.
-	gateway.start().catch((error) => console.error(`apps: ${error instanceof Error ? error.message : error}`));
+	// Load every app now. A machine that is down is retried by the first call that needs it.
+	gateway
+		.start()
+		.then(() => apps.start())
+		.catch((error) => console.error(`apps: ${error instanceof Error ? error.message : error}`));
 
 	const ok = { ok: true, error: "" };
 	const refused = (error: string) => ({ ok: false, error });
@@ -135,10 +156,11 @@ export async function startHost(options: HostOptions) {
 	function live(source: string, args: unknown[]): LiveSource | undefined {
 		if (source === "account") return { topics: [ACCOUNT], load: async () => account.state() };
 		if (source === "chat") return { topics: [CHAT], load: () => chat.state() };
-		if (source === "apps") return { topics: [], load: async () => gateway.apps() };
+		if (source === "apps") return { topics: [APPS_TOPIC], load: async () => apps.state() };
+		if (source === "build") return { topics: [BUILD_TOPIC], load: async () => ({ id: apps.buildId() }) };
 		if (source === "version") return { topics: [], load: async () => ({ version: options.version ?? "dev" }) };
 		const route = gateway.route(source);
-		if (route) return { topics: [`app:${route.app}`], load: () => gateway.call(route.app, "source", route.name, args) };
+		if (route) return { topics: [`app:${route.app}`], load: () => gateway.fromShell(route.app, "read", route.name, args) };
 		return undefined;
 	}
 
@@ -166,11 +188,23 @@ export async function startHost(options: HostOptions) {
 			case "chatStop":
 				await home.abort(context);
 				return ok;
+			case "appsSave":
+			case "appsDiscard":
+			case "appsUndo": {
+				const id = String(args[0] ?? "");
+				const run = source === "appsSave" ? apps.save : source === "appsDiscard" ? apps.discard : apps.undo;
+				try {
+					await run(id);
+					return ok;
+				} catch (error) {
+					return refused(error instanceof Error ? error.message : String(error));
+				}
+			}
 		}
 		const route = gateway.route(source);
 		if (!route) return undefined;
 		try {
-			return await gateway.call(route.app, "mutation", route.name, args);
+			return await gateway.fromShell(route.app, "write", route.name, args);
 		} catch (error) {
 			return refused(error instanceof Error ? error.message : String(error));
 		}
@@ -213,7 +247,9 @@ export async function startHost(options: HostOptions) {
 			}
 
 			if (url.pathname.startsWith("/api/")) return send(res, 404, { error: "not found" });
-			if (options.clientDir && req.method === "GET") return serveClient(options.clientDir, url.pathname, res, options.version ?? "dev");
+			// The newest shell the host built for its apps, else the one it shipped with.
+			const clientDir = apps.clientDir() ?? options.clientDir;
+			if (clientDir && req.method === "GET") return serveClient(clientDir, url.pathname, res, options.version ?? "dev");
 			send(res, 404, { error: "not found" });
 		} catch (error) {
 			console.error(error);
@@ -289,6 +325,7 @@ const TYPES: Record<string, string> = {
 	".json": "application/json",
 	".wasm": "application/wasm",
 	".png": "image/png",
+	".jpg": "image/jpeg",
 	".svg": "image/svg+xml",
 	".ico": "image/x-icon",
 	".webmanifest": "application/manifest+json",

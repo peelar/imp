@@ -15,9 +15,21 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   local adapter for development.
 - **`client/`** is the app, written in [Exact](https://github.com/expo/exact)'s Contract language. It runs on the web
   today and keeps iOS and macOS in reach.
-- **`client/apps/<id>/`** holds each app: `app.json`, its screen (`app.contract`) and its server code (`server.ts`),
-  which runs in a worker on the agent's computer.
+- **`client/apps/<id>/`** holds each app: `app.json`, its screen (`app.contract`, a `component Screen` whose props
+  name the app's operations) and its server code (`server.ts`, which declares those operations and runs in a worker
+  on the agent's computer). The agent finds and runs any app's operations through two tools.
 - **`sdk/`** is the typed surface an app's server code is written against.
+
+## Apps the imp builds
+
+Ask for an app and the imp writes its folder on its own computer, then calls `preview_app`. The host takes only that
+folder, tries the server code on a copy of the app's data, writes the shell's wiring for the app's screen
+(`host/src/shell.ts`) and rebuilds the web client, which takes a few seconds. The app's tab then shows the new
+version as a preview, on a copy of the data, with Save and Discard; open pages reload into it by themselves. Only
+Save touches the real data, and the version before it can be undone for 48 hours. The host keeps the apps it holds
+and their history in `DATA_DIR` (`host/studio/GUIDE.md` is what the imp reads about the format).
+
+After changing an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.
 
 There is no login page. Put the host behind [Tailscale](https://tailscale.com) (`tailscale serve`), which decides who
 gets in; `OWNER_LOGIN` narrows it to one person.
@@ -49,7 +61,9 @@ and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and pub
 
 ## Running it from a checkout
 
-You need Node 24+, Bun, and a checkout of Exact next to this repository (or set `EXACT` to its path).
+You need Node 24+, Bun, a checkout of Exact next to this repository (or set `EXACT` to its path), and the Rust
+toolchains its web build pins (`bun exact.mjs setup --check` in `client/` names what is missing): the host rebuilds
+the web client whenever the imp previews an app.
 
 ```sh
 cd host && npm install

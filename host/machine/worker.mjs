@@ -30,20 +30,21 @@ const errorText = (error) => (error instanceof Error ? error.message : String(er
 try {
 	const module = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 	const definition = module.default ?? {};
-	const sources = definition.sources ?? {};
-	const mutations = definition.mutations ?? {};
-	const tools = definition.tools ?? {};
+	const operations = definition.operations ?? {};
+	for (const [name, operation] of Object.entries(operations)) {
+		if (typeof operation?.run !== "function") throw new Error(`the operation ${name} has no run function`);
+	}
+	// The host checks the rest of the manifest: it holds the rules for names, kinds and params.
 	const manifest = {
 		schema: definition.schema ?? [],
-		sources: Object.keys(sources),
-		mutations: Object.keys(mutations),
-		tools: Object.entries(tools).map(([name, tool]) => ({
+		operations: Object.entries(operations).map(([name, operation]) => ({
 			name,
-			description: String(tool.description ?? ""),
-			params: tool.params ?? {},
+			kind: operation.kind,
+			description: operation.description,
+			params: operation.params,
+			agent: operation.agent !== false,
 		})),
 	};
-	const kinds = { source: sources, mutation: mutations, tool: tools };
 
 	parentPort.on("message", async (message) => {
 		if (message.t === "dbResult") {
@@ -55,10 +56,9 @@ try {
 		}
 		if (message.t !== "call") return;
 		try {
-			const entry = kinds[message.kind]?.[message.name];
-			if (!entry) throw new Error(`${appId} has no ${message.kind} named ${message.name}`);
-			const run = message.kind === "tool" ? entry.run : entry;
-			const value = await run(message.args, app);
+			const operation = Object.hasOwn(operations, message.name) ? operations[message.name] : undefined;
+			if (!operation) throw new Error(`${appId} has no operation named ${message.name}`);
+			const value = await operation.run(message.args, app);
 			parentPort.postMessage({ t: "result", id: message.id, ok: true, value: value ?? null });
 		} catch (error) {
 			parentPort.postMessage({ t: "result", id: message.id, ok: false, error: errorText(error) });

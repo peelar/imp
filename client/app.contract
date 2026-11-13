@@ -3,7 +3,12 @@
 // app's resources and mutations live here, in the root, because Contract allows them only there; its screen is
 // imported from apps/<id>/app.contract. Colours and type are app.tamber's; the look is "Catalogue": white paper,
 // black ink, engraved art, square corners, mono labels and one cobalt action.
-use TodosScreen, Todo from "./apps/todos/app.contract"
+//
+// The host writes each app's part between the `// <apps:…>` markers from the props of the app's `component Screen`
+// (host/src/shell.ts); `node host/scripts/shell.ts` writes them for the apps in apps/. Do not edit between them.
+// <apps:use>
+use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
+// </apps:use>
 
 font "Instrument Serif" = "assets/fonts/InstrumentSerif-Regular.ttf"
 font "Pinyon Script" = "assets/fonts/PinyonScript-Regular.ttf"
@@ -16,7 +21,9 @@ font "IBM Plex Mono"
 
 routes nav
   tab chat "/"
+  // <apps:tabs>
   tab todos "/todos"
+  // </apps:tabs>
   tab settings "/settings"
 
 // Where the host answers: the page's own origin on the web, API_BASE_URL in a native build.
@@ -49,12 +56,21 @@ shape ChatState
   busy: bool
 
 // An installed app. `cover` is its engraving in the client's assets ("" for none), `symbol` its fallback icon.
+// `draft` is true while the app shows a preview of a new version; `undo` says what undoing its last save does: ""
+// (nothing to undo), "keep" (the data stays), "data" (the data goes back to before that save) or "remove" (the save
+// made the app, so undoing removes it).
 shape AppTile
   id: string
   name: string
   description: string
   symbol: string
   cover: string
+  draft: bool
+  undo: string
+
+// The web build the host serves now. A page from an older build relaunches to load it.
+shape Build
+  id: string
 
 shape Reply
   ok: bool
@@ -88,7 +104,10 @@ keyframes pulse
   50% opacity=1
   100% opacity=0.25
 
-fn tabTitle(name: string, wide: bool): string = name == "chat" ? (wide ? "Chat" : "Imp") : name == "todos" ? "Todos" : "Settings"
+// <apps:version>
+fn builtVersion(): string = "repo"
+// </apps:version>
+fn tabTitle(name: string, wide: bool, apps: AppTile[]): string = name == "chat" ? (wide ? "Chat" : "Imp") : tabLabel(name, apps)
 fn capitalized(s: string): string = s == "" ? "" : `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
 fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUpperCase()
 fn localPart(email: string): string = email.includes("@") ? email.slice(0, email.indexOf("@")) : email
@@ -102,11 +121,14 @@ fn tabSymbol(name: string, apps: AppTile[]): string =
   name == "chat" ? "symbol:messages" : name == "settings" ? "symbol:settings" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:layers" }
 fn tabCover(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.cover, case none => "" }
+fn hasDraft(name: string, apps: AppTile[]): bool =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.draft, case none => false }
+fn undoKind(name: string, apps: AppTile[]): string =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.undo, case none => "" }
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
 
 component App
   state draft = ""
-  state todoDraft = ""
   state scheme = "system" persist
   state now = 0
   // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
@@ -121,14 +143,15 @@ component App
   resource account = account() when host.origin != "" as shape Account else empty()
   resource chat = chat() when signedIn as shape ChatState else empty()
   resource apps = apps() when signedIn as shape AppTile[] else empty()
-  resource todos = todosList() when signedIn as shape Todo[] else empty()
+  resource build = build() when signedIn as shape Build else empty()
   mutation signInStarted as shape Reply
   mutation signInCancelled as shape Reply
   mutation signedOut as shape Reply
   mutation sent as shape Reply then toEnd
   mutation stopped as shape Reply
-  mutation todoAdded as shape Reply then afterTodoAdd
-  mutation todoSaved as shape Reply queue
+  mutation appSaved as shape Reply
+  mutation appDiscarded as shape Reply
+  mutation appUndone as shape Reply
   derive still = media.prefersReducedMotion
   // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
   derive wide = media.width >= 960
@@ -142,13 +165,14 @@ component App
   derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
   derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
   derive sendError = match sent { case some(r) => r.error, case none => "" }
-  derive todoAddError = match todoAdded { case some(r) => r.error, case none => "" }
   // A live stream that ended (the host restarted, the network dropped) is opened again.
   derive hostLost = match failure(host) { case some(f) => true, case none => false }
   derive accountLost = match failure(account) { case some(f) => true, case none => false }
   derive chatLost = match failure(chat) { case some(f) => true, case none => false }
   derive appsLost = match failure(apps) { case some(f) => true, case none => false }
-  derive todosLost = match failure(todos) { case some(f) => true, case none => false }
+  derive buildLost = match failure(build) { case some(f) => true, case none => false }
+  // The host serves a newer build (an app was added, previewed, saved or undone): relaunch into it.
+  derive stale = build.id != "" and build.id != builtVersion()
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
 
@@ -172,8 +196,14 @@ component App
       refresh chat
     if appsLost
       refresh apps
-    if todosLost
-      refresh todos
+    if buildLost
+      refresh build
+    if stale
+      relaunch()
+    // <apps:refresh>
+    if todosReadListLost
+      refresh todosReadList
+    // </apps:refresh>
   action pick(name: string)
     nav = select(nav, name)
   action follow(url: string)
@@ -216,22 +246,28 @@ component App
       scrollIntoView("transcript", lastId, block="end")
   action toggleDock
     chatDocked = not chatDocked
-  action editTodo(v: string)
-    todoDraft = v
-  action addTodo
-    if todoDraft.trim() != ""
-      send todoAdded = todosAdd(todoDraft.trim())
-  action afterTodoAdd
-    if todoAddError == ""
-      todoDraft = ""
   action editHost(v: string)
     hostDraft = v
   action connect
     if hostDraft.trim() != ""
       hostAddress = hostDraft.trim().includes("://") ? hostDraft.trim() : `https://${hostDraft.trim()}`
       refresh account
-  action toggleTodo(id: string, done: bool)
-    send todoSaved = todosSetDone(id, done)
+  action saveApp(id: string)
+    send appSaved = appsSave(id)
+  action discardApp(id: string)
+    send appDiscarded = appsDiscard(id)
+  action undoApp(id: string)
+    send appUndone = appsUndo(id)
+  // <apps:members>
+  resource todosReadList = todosList() when signedIn as shape TodosTodo[] else empty()
+  derive todosReadListLost = match failure(todosReadList) { case some(f) => true, case none => false }
+  mutation todosWroteAdd as shape Reply queue
+  action todosDoAdd(arg1: string)
+    send todosWroteAdd = todosAdd(arg1)
+  mutation todosWroteSetDone as shape Reply queue
+  action todosDoSetDone(arg1: string, arg2: bool)
+    send todosWroteSetDone = todosSetDone(arg1, arg2)
+  // </apps:members>
 
   view
     main navigationKey=`${top(nav).id}` navigate=follow testId="app" width="100%" height="100%"
@@ -244,7 +280,7 @@ component App
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
-                column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "todos" ? "todos-list" : "settings-list")
+                column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : `${e.name}-screen`)
                   position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
                   padding-bottom=(wide ? "4.75rem" : "calc(3.5rem + env(safe-area-inset-bottom))")
                   // Under the top bar the page's header is its title, with no rule of its own.
@@ -253,7 +289,7 @@ component App
                     row width="100%" max-width="46rem" align-items="center" gap=12 padding=(wide ? "22px 0 0" : "12px 0 11px")
                       if e.name == "chat" and not wide
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=tabTitle(e.name, wide), size="1.5rem", heading=1)
+                      Initialled(word=tabTitle(e.name, wide, apps), size="1.5rem", heading=1)
                       row flex=1
                       if e.name == "chat" and chat.busy
                         row gap=8 align-items="center" testId="busy"
@@ -337,9 +373,7 @@ component App
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
                     Composer(prefix="", placeholder="Ask your imp", compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=sendError, edit=edit, post=post, stop=stop)
-                  else if e.name == "todos"
-                    TodosScreen(todos=todos, draft=todoDraft, edit=editTodo, add=addTodo, toggle=toggleTodo)
-                  else
+                  else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=32 box-sizing="border-box" width="100%"
                         column
@@ -381,6 +415,11 @@ component App
                         text "Cancel"
                       button press=signOut commandfor="confirm-signout" command="close" destructive=true testId="signout-confirm"
                         text "Sign Out"
+                  // <apps:screens>
+                  if e.name == "todos"
+                    AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp)
+                      TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone)
+                  // </apps:screens>
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
         if docked
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
@@ -555,6 +594,45 @@ component App
                     font-style="italic" color="ink.muted"
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
+// An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
+// preview of a new version, the bar says so and offers Save and Discard; after a save it offers to undo it.
+component AppPage
+  props
+    id: string
+    draft: bool
+    undo: string
+    save: action
+    discard: action
+    undoSave: action
+  slot
+  view
+    column flex=1 min-height=0
+      if draft
+        row testId="preview-bar" align-items="center" gap=12 padding="10px 20px" background-color="AccentColor"
+          color="ink.on-fill" flex-wrap="wrap"
+          text "Preview" class=Label color="ink.on-fill"
+          text "A new version, on a copy of your data. Nothing you do here is kept." flex=1 min-width="12rem"
+            font-size="0.9375rem"
+          button press=discard(id) testId="preview-discard" padding="7px 12px" border="1px solid ink.on-fill"
+            background-color="transparent" color="ink.on-fill"
+            text "Discard" class=Label color="inherit"
+          button press=save(id) testId="preview-save" padding="7px 12px" border="1px solid ink.on-fill"
+            background-color="ink.on-fill" color="AccentColor"
+            text "Save" class=Label color="inherit"
+      else if undo != ""
+        row justify-content="flex-end" padding="8px 20px 0"
+          button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
+            border="1px solid line.strong" background-color="transparent" color="ink.strong"
+            text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
+        dialog id=`undo-${id}` role="alertdialog" aria-label="Undo the last save?"
+          text (undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays.")
+          button commandfor=`undo-${id}` command="close" testId="undo-cancel"
+            text "Cancel"
+          button press=undoSave(id) commandfor=`undo-${id}` command="close" destructive=true testId="undo-confirm"
+            text "Undo"
+      scroll id=`${id}-screen` flex=1 min-height=0
+        children
+
 component Initialled
   props
     word: string

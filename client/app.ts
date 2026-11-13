@@ -42,8 +42,14 @@ const mutations: Record<MutationSource, true> = {
   accountSignOut: true,
   chatSend: true,
   chatStop: true,
+  appsSave: true,
+  appsDiscard: true,
+  appsUndo: true,
+  // Each app's writes its screen calls, which the host writes from the apps (host/src/shell.ts).
+  // <apps:mutations>
   todosAdd: true,
   todosSetDone: true,
+  // </apps:mutations>
 };
 
 const isMutation = (source: string): source is MutationSource => Object.hasOwn(mutations, source);

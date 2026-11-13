@@ -1,6 +1,7 @@
 // The host the client's Exact tests start (app.json "commands.server"): the real host with a scripted model in place
 // of ChatGPT, a sign-in that approves itself a moment after it shows its code, and the local machine adapter, so the
-// apps run in real workers. When the user asks to add "todo: <title>", the model calls todos_add, then says "Done."
+// apps run in real workers. When the user asks to add "todo: <title>", the model runs the todos app's add action, then
+// says "Done."
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ const respond: FauxResponseFactory = (context) => {
 	if (last?.role === "toolResult") return fauxAssistantMessage("Done.");
 	const text = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
 	const todo = text.match(/todo: ([^"\\]+)/);
-	if (todo) return fauxAssistantMessage(fauxToolCall("todos_add", { title: todo[1]!.trim() }), { stopReason: "toolUse" });
+	if (todo) return fauxAssistantMessage(fauxToolCall("run_app_action", { app: "todos", action: "add", args: { title: todo[1]!.trim() } }), { stopReason: "toolUse" });
 	return fauxAssistantMessage("Hello from the test model.");
 };
 

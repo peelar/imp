@@ -19,7 +19,7 @@ test "a todo added in the Todos app is listed and counted"
   tap "tab-todos"
   type "todo-draft" "Pack camera"
   tap "todo-add"
-  clock until state todos.0.title == "Pack camera" within 5000
+  clock until state todosReadList.0.title == "Pack camera" within 5000
   expect text "todo-1" == "Pack camera"
   expect text "todos-left" == "1 todo left"
   expect text "todo-draft" == ""
@@ -31,7 +31,7 @@ test "the assistant adds a todo that the open Todos app shows at once"
   tap "tab-chat"
   tap "send"
   expect text "composer" == ""
-  clock until state todos.1.title == "Book train to Kraków" within 10000
+  clock until state todosReadList.1.title == "Book train to Kraków" within 10000
   clock until state chat.busy == false within 10000
   expect tree missing "message-live"
   tap "tab-todos"
@@ -44,10 +44,12 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   expect tree has "chat-panel"
   type "side-composer" "Add todo: Call the vet"
   tap "side-send"
-  clock until state todos.2.title == "Call the vet" within 10000
+  clock until state todosReadList.2.title == "Call the vet" within 10000
   clock until state chat.busy == false within 10000
   expect text "todo-3" == "Call the vet"
   clock until state chat.messages.3.text == "Add todo: Call the vet" within 1000
+  expect state chat.messages.4.title == "Todos · Add"
+  expect state chat.messages.4.detail == "Call the vet"
   tap "chat-hide"
   expect tree missing "chat-panel"
   tap "dock-toggle"

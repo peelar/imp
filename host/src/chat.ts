@@ -46,8 +46,9 @@ const oneLine = (value: unknown, max = 90) => {
 	return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 };
 
+/** "find_app_actions" or "setDone" as "Find app actions" or "Set done". */
 const humanize = (name: string) => {
-	const words = name.replace(/_/g, " ").trim();
+	const words = name.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2").trim().toLowerCase();
 	return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
@@ -71,13 +72,23 @@ export function describeTool(name: string, args: Record<string, unknown>, apps: 
 			return { title: "Wrote a file", detail: oneLine(args.path), icon: "symbol:compose" };
 		case "edit":
 			return { title: "Edited a file", detail: oneLine(args.path), icon: "symbol:pencil" };
-	}
-	const app = apps.find((a) => name.startsWith(`${a.id}_`));
-	if (app) {
-		// An app's tool: "Todos · Add" and its first text argument, such as the todo's title.
-		const action = humanize(name.slice(app.id.length + 1));
-		const subject = Object.values(args).find((value) => typeof value === "string" && !/^\d+$/.test(value));
-		return { title: `${app.name} · ${action}`, detail: subject === undefined ? "" : oneLine(subject), icon: app.symbol };
+		case "app_code":
+			return { title: "Opened an app's code", detail: oneLine(args.app), icon: "symbol:document" };
+		case "preview_app":
+			return { title: "Built a preview", detail: oneLine(args.app), icon: "symbol:sparkles" };
+		case "find_app_actions":
+			return { title: "Looked up app actions", detail: oneLine(args.query), icon: "symbol:search" };
+		case "run_app_action": {
+			// An app's action: "Todos · Add" and its first text argument, such as the todo's title.
+			const app = apps.find((a) => a.id === args.app);
+			const values = typeof args.args === "object" && args.args !== null ? Object.values(args.args) : [];
+			const subject = values.find((value) => typeof value === "string" && !/^\d+$/.test(value));
+			return {
+				title: `${app?.name ?? String(args.app)} · ${humanize(String(args.action ?? ""))}`,
+				detail: subject === undefined ? "" : oneLine(subject),
+				icon: app?.symbol ?? "symbol:layers",
+			};
+		}
 	}
 	return { title: humanize(name), detail: "", icon: "symbol:sparkles" };
 }

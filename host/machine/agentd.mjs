@@ -167,7 +167,7 @@ function call(message) {
 		return;
 	}
 	entry.pending.set(message.id, reply);
-	entry.worker.postMessage({ t: "call", id: message.id, kind: message.kind, name: message.name, args: message.args });
+	entry.worker.postMessage({ t: "call", id: message.id, name: message.name, args: message.args });
 }
 
 server.listen(port, process.env.AGENTD_HOST ?? "0.0.0.0", () => console.log(`agentd listening on ${port}`));
