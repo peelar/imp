@@ -1,11 +1,22 @@
 // The E2B adapter. A machine is one E2B sandbox, found by its `machineKey` metadata. It pauses itself when idle,
-// keeping memory and disk, and wakes on the next request to one of its URLs.
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+// keeping memory and disk with no expiry, and wakes on the next request to one of its URLs. The setup is baked into
+// one template per setup version and size, so a new machine starts set up; an existing machine runs a newer setup in
+// place, because its disk is the user's. E2B cannot resize a sandbox, so a machine is found by its key and size: another
+// size is another sandbox, and the one of the old size stays paused with its files.
 import { Sandbox, Template } from "e2b";
 import type { ImageSpec, Machine, MachineProvider, MachineSpec } from "./machine.ts";
-import { AGENTD_PORT, agentdEndpoints, agentdEnv, agentdToken, healthFor, runtime, type Runtime } from "./machine-runtime.ts";
+import {
+	AGENTD_PORT,
+	agentdEndpoints,
+	agentdEnv,
+	agentdToken,
+	healthFor,
+	runtime,
+	runtimePattern,
+	SETUP_MARKER,
+	setupScript,
+	type Runtime,
+} from "./machine-runtime.ts";
 
 const HOME = "/home/user";
 const RUNTIME_DIR = `${HOME}/.imp`;
@@ -19,9 +30,12 @@ export interface E2BProviderOptions {
 export function e2bProvider(options: E2BProviderOptions): MachineProvider {
 	const api = options.apiKey === undefined ? {} : { apiKey: options.apiKey };
 	let files: Promise<Runtime> | undefined;
+	/** Template name -> the setup it was built from (for machines created from an older template) and its size. */
+	const prepared = new Map<string, { setup: ReturnType<typeof setupScript>; size: string }>();
 
-	async function find(key: string) {
-		const pages = Sandbox.list({ ...api, query: { metadata: { machineKey: key }, state: ["running", "paused"] } });
+	async function find(key: string, size?: string) {
+		const metadata: Record<string, string> = size === undefined ? { machineKey: key } : { machineKey: key, machineSize: size };
+		const pages = Sandbox.list({ ...api, query: { metadata, state: ["running", "paused"] } });
 		const items = pages.hasNext ? await pages.nextItems() : [];
 		return items[0];
 	}
@@ -31,23 +45,38 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
 		workspace: () => `${HOME}/workspace`,
 
 		async prepareImage(image: ImageSpec) {
-			const dockerfile = await readFile(join(image.context, image.dockerfile), "utf8");
-			const name = `imp-machine-${createHash("sha256").update(dockerfile).digest("hex").slice(0, 12)}`;
-			if (!(await Template.exists(name, api))) await Template.build(Template().fromDockerfile(dockerfile), name, api);
+			const setup = setupScript(image.setup);
+			const { cpus, memoryMB } = image.size;
+			const size = `${cpus}c-${memoryMB}m`;
+			const name = `imp-machine-${setup.digest}-${size}`;
+			if (!(await Template.exists(name, api))) {
+				const script = Buffer.from(setup.script).toString("base64");
+				const template = Template().fromBaseImage().runCmd(`echo ${script} | base64 -d | bash`, { user: "root" });
+				await Template.build(template, name, { ...api, cpuCount: cpus, memoryMB });
+			}
+			prepared.set(name, { setup, size });
 			return name;
 		},
 
 		async ensure(spec: MachineSpec) {
-			const existing = await find(spec.key);
+			const image = prepared.get(spec.image);
+			if (!image) throw new Error(`prepareImage did not prepare ${spec.image}`);
+			const { setup, size } = image;
+			const existing = await find(spec.key, size);
 			const sandbox = existing
 				? await Sandbox.connect(existing.sandboxId, { ...api, timeoutMs: spec.idleSuspendMs })
 				: await Sandbox.create(spec.image, {
 						...api,
-						metadata: { machineKey: spec.key },
+						metadata: { machineKey: spec.key, machineSize: size },
 						timeoutMs: spec.idleSuspendMs,
 						lifecycle: { onTimeout: "pause", autoResume: true },
 						network: { allowPublicTraffic: false },
 					});
+			const marker = await sandbox.commands.run(`cat ${SETUP_MARKER} 2>/dev/null || true`);
+			if (marker.stdout.trim() !== setup.digest) {
+				await sandbox.files.write("/tmp/imp-setup.sh", setup.script);
+				await sandbox.commands.run("bash /tmp/imp-setup.sh && rm /tmp/imp-setup.sh", { user: "root", timeoutMs: 30 * 60_000 });
+			}
 			const token = agentdToken(options.secret, sandbox.sandboxId);
 			await startAgentd(sandbox, token, await (files ??= runtime({ platform: "linux", arch: "x64" })));
 			return e2bMachine(spec, sandbox, token);
@@ -57,6 +86,8 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
 			const existing = await find(key);
 			if (existing) await Sandbox.kill(existing.sandboxId, api);
 		},
+
+		close() {},
 	};
 }
 
@@ -73,6 +104,9 @@ function e2bMachine(spec: MachineSpec, sandbox: Sandbox, token: string): Machine
 		},
 		async appSocket() {
 			return endpoints.appSocket;
+		},
+		async screen() {
+			return endpoints.screen;
 		},
 		async expose(port: number) {
 			return { url: `https://${sandbox.getHost(port)}`, headers };
@@ -95,16 +129,15 @@ async function startAgentd(sandbox: Sandbox, token: string, { files, digest }: R
 	if (answer !== "") {
 		// Another runtime holds the port (an older version, or one started with another token). Everything run from the
 		// runtime directory is ours, so stop all of it, pi-env daemons included, and wait for the port to free up.
-		const ours = `${RUNTIME_DIR.slice(0, -1)}[${RUNTIME_DIR.slice(-1)}]/`;
 		await sandbox.commands.run(
-			`pkill -f "${ours}" || true; for i in $(seq 50); do curl -s -o /dev/null http://127.0.0.1:${AGENTD_PORT}/ || exit 0; sleep 0.1; done; exit 1`,
+			`pkill -f "${runtimePattern(RUNTIME_DIR)}" || true; for i in $(seq 50); do curl -s -o /dev/null http://127.0.0.1:${AGENTD_PORT}/ || exit 0; sleep 0.1; done; exit 1`,
 		);
 	}
 
 	await sandbox.files.write(files.map((file) => ({ path: `${RUNTIME_DIR}/${file.path}`, data: toArrayBuffer(file.data) })));
 	const executables = files.filter((file) => file.executable).map((file) => `${RUNTIME_DIR}/${file.path}`);
 	await sandbox.commands.run(`chmod +x ${executables.join(" ")} && mkdir -p ${HOME}/workspace`);
-	await sandbox.commands.run(`node ${RUNTIME_DIR}/agentd.mjs >> ${RUNTIME_DIR}/agentd.log 2>&1`, {
+	await sandbox.commands.run(`/usr/local/bin/node ${RUNTIME_DIR}/agentd.mjs >> ${RUNTIME_DIR}/agentd.log 2>&1`, {
 		background: true,
 		envs: agentdEnv({ token, digest, runtimeDir: RUNTIME_DIR, home: HOME }),
 	});

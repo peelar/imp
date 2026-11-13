@@ -57,3 +57,13 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   tap "chat-expand"
   expect tree missing "chat-panel"
   expect tree has "composer"
+
+test "settings show the computer the agent works on"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  clock until state computer.status == "ready" within 10000
+  expect text "computer-name" == "This computer (development)"
+  expect text "computer-status" == "Ready"
+  expect tree missing "computer-size-2c-4096m"
+  expect tree missing "computer-command"
+  expect tree has "computer-open-screen"

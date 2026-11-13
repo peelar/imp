@@ -39,6 +39,9 @@ shape Account
   error: string
   email: string
   plan: string
+  // The agent's computer rides on the account's stream: a browser opens at most six connections to a host over
+  // HTTP/1.1, and a seventh request (a mutation) would wait for one of the shell's streams to end.
+  computer: Computer
 
 // A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
 shape ChatMessage
@@ -71,6 +74,32 @@ shape AppTile
 // The web build the host serves now. A page from an older build relaunches to load it.
 shape Build
   id: string
+
+// The agent's computer. `kind` is "cloud" (Imp cloud, an E2B sandbox of `size`), "own" (`device` on the tailnet),
+// "dev" (fixed by a development host) or "none"; `status` is "none", "starting", "ready" or "failed" (with `error`).
+shape ComputerSize
+  id: string
+  label: string
+
+// A Linux computer on the tailnet, with why it cannot be the agent's yet ("" when it can).
+shape ComputerDevice
+  id: string
+  name: string
+  problem: string
+
+shape Computer
+  kind: string
+  status: string
+  error: string
+  name: string
+  size: string
+  device: string
+  cloudAvailable: bool
+  sizes: ComputerSize[]
+  devices: ComputerDevice[]
+  tailnetError: string
+  command: string
+  policy: string
 
 shape Reply
   ok: bool
@@ -126,6 +155,8 @@ fn hasDraft(name: string, apps: AppTile[]): bool =
 fn undoKind(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.undo, case none => "" }
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
+fn computerStatus(status: string): string =
+  status == "ready" ? "Ready" : status == "starting" ? "Starting…" : status == "failed" ? "Not reachable" : "Not chosen yet"
 
 component App
   state draft = ""
@@ -152,6 +183,10 @@ component App
   mutation appSaved as shape Reply
   mutation appDiscarded as shape Reply
   mutation appUndone as shape Reply
+  mutation computerSwitched as shape Reply
+  mutation computerRefreshed as shape Reply
+  mutation computerRetried as shape Reply
+  mutation computerKeySaved as shape Reply
   derive still = media.prefersReducedMotion
   // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
   derive wide = media.width >= 960
@@ -175,6 +210,9 @@ component App
   derive stale = build.id != "" and build.id != builtVersion()
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
+  derive computer = account.computer
+  derive switchError = match computerSwitched { case some(r) => r.error, case none => "" }
+  derive keyError = match computerKeySaved { case some(r) => r.error, case none => "" }
 
   task appearance mount
     after(1, applyScheme)
@@ -268,6 +306,24 @@ component App
   action todosDoSetDone(arg1: string, arg2: bool)
     send todosWroteSetDone = todosSetDone(arg1, arg2)
   // </apps:members>
+  action useCloud(size: string)
+    send computerSwitched = computerUseCloud(size)
+  action useOwn(device: string)
+    if not (computer.kind == "own" and computer.device == device)
+      send computerSwitched = computerUseOwn(device)
+  action refreshDevices
+    send computerRefreshed = computerRefresh()
+  action setCloudKey(key: string)
+    send computerKeySaved = computerSetCloudKey(key)
+  action retryComputer
+    send computerRetried = computerRetry()
+  // The computer's screen, which the host serves: on the web a new tab, in the apps the default browser.
+  action openScreen
+    openURL(`${host.origin}/computer`)
+  action copyComputerCommand
+    copyText(computer.command)
+  action copyComputerPolicy
+    copyText(computer.policy)
 
   view
     main navigationKey=`${top(nav).id}` navigate=follow testId="app" width="100%" height="100%"
@@ -315,6 +371,18 @@ component App
                             Initialled(word=salutation, size="2.5rem", heading=2)
                             text "Ask for anything. I can use your apps, work on a computer of my own, and build new apps for you."
                               color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+                          if computer.status == "none"
+                            button press=pick("settings") testId="home-no-computer" display="flex" align-items="center" gap=12
+                              padding="14px 16px" border="1px solid ink.strong" background-color="transparent" color="ink.strong"
+                              text-align="start"
+                              :hover
+                                background-color="surface.soft"
+                              image "symbol:icon.computer" width=18 height=18 aria-hidden=true
+                              column flex=1 min-width=0 gap=2
+                                text "Give your imp a computer" font-family="family.display" font-size="1.25rem" line-height=1.15
+                                text "Imp cloud, or a Linux computer of yours on Tailscale. Pick one in Settings."
+                                  font-size="0.9375rem" color="ink.muted"
+                              text "→" font-family="family.mono" color="ink.muted" aria-hidden=true
                           column gap=8
                             image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
                               width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover" border="1px solid line.subtle"
@@ -344,6 +412,22 @@ component App
                                   text a.name font-family="family.display" font-size="1.375rem" line-height=1.1
                                   text a.description font-size="0.9375rem" color="ink.muted" line-clamp=1
                                 text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+                            // The imp's computer, as an app: its screen opens in a tab, to watch the imp work or take over.
+                            if computer.status != "none"
+                              button press=openScreen display="flex" align-items="center" gap=14 padding="14px 0"
+                                background-color="transparent" border="none" border-bottom="1px solid line.subtle"
+                                text-align="start" color="ink.strong" testId="app-computer"
+                                transition="background-color 120ms ease"
+                                :hover
+                                  background-color="surface.soft"
+                                row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                                  border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                                  image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=18 height=18
+                                column gap=2 flex=1 min-width=0
+                                  text "Computer" font-family="family.display" font-size="1.375rem" line-height=1.1
+                                  text `${computer.name}. Watch your imp work, or take over.` font-size="0.9375rem"
+                                    color="ink.muted" line-clamp=1
+                                text "↗" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
                             button press=startApp display="flex" align-items="center" gap=14 padding="14px 0"
                               background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                               text-align="start" color="ink.strong" testId="app-new"
@@ -390,6 +474,10 @@ component App
                                 text capitalized(account.plan) class=Label testId="account-plan"
                           text "Your imp runs on this plan. Nothing is billed separately." font-size="0.9375rem"
                             color="ink.muted" padding-top=10
+                        ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
+                          switchError=(keyError != "" ? keyError : switchError), setCloudKey=setCloudKey,
+                          refreshing=pending(computerRefreshed), useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
+                          retry=retryComputer, openScreen=openScreen, copyCommand=copyComputerCommand, copyPolicy=copyComputerPolicy)
                         column
                           row padding-bottom=10 border-bottom="1px solid ink.strong"
                             text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
@@ -656,6 +744,163 @@ component Feature
       column gap=2 flex=1 min-width=0
         text title font-family="family.display" font-size="1.375rem" line-height=1.15
         text message color="ink.muted" font-size="0.9375rem" line-height=1.45
+
+// Where the agent works: the machine now, Imp cloud's sizes, and the computers on the person's tailnet with the two
+// things to do once so one of them can be chosen.
+component ComputerSettings
+  props
+    computer: Computer
+    switching: bool
+    switchError: string
+    refreshing: bool
+    useCloud: action
+    setCloudKey: action
+    useOwn: action
+    refresh: action
+    retry: action
+    openScreen: action
+    copyCommand: action
+    copyPolicy: action
+  state settingUp = false
+  state keyDraft = ""
+  derive usable = computer.devices.filter(d => d.problem == "").length
+  action toggleSetup
+    settingUp = not settingUp
+  action editKey(v: string)
+    keyDraft = v
+  view
+    column
+      row padding-bottom=10 border-bottom="1px solid ink.strong"
+        text "Computer" class=Label color="ink.strong" role="heading" aria-level=2
+      row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
+        row width="2.75rem" height="2.75rem" min-width="2.75rem" align-items="center" justify-content="center"
+          border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+          image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=20 height=20
+        column flex=1 min-width=0 gap=4 align-items="flex-start"
+          text (computer.name == "" ? "No computer yet" : computer.name) font-family="family.display" font-size="1.375rem"
+            line-height=1.15 overflow-wrap="anywhere" testId="computer-name"
+          row gap=8 align-items="center"
+            row width=6 height=6 aria-hidden=true
+              background-color=(computer.status == "ready" ? "-exact-system-green" : computer.status == "failed" ? "-exact-system-red" : "ink.faint")
+            text computerStatus(computer.status) class=Label testId="computer-status"
+        if computer.status == "failed"
+          button press=retry testId="computer-retry" padding="8px 12px" border="1px solid line.strong"
+            background-color="transparent" color="ink.strong" font-family="family.mono" font-size="0.75rem"
+            letter-spacing="0.1em" text-transform="uppercase"
+            :hover
+              background-color="surface.soft"
+            text "Retry"
+        if computer.status == "ready"
+          button press=openScreen testId="computer-open-screen" display="flex" align-items="center" gap=8 padding="8px 12px"
+            border="1px solid line.strong" background-color="transparent" color="ink.strong" font-family="family.mono"
+            font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+            :hover
+              background-color="surface.soft"
+            text "Open screen"
+            text "↗" aria-hidden=true
+      if computer.status == "failed" and computer.error != ""
+        row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
+          border-left="2px solid -exact-system-red"
+          image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+          text computer.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="computer-error"
+      if computer.kind == "dev"
+        text "This host fixes the computer for development, so there is nothing to choose." font-size="0.9375rem"
+          color="ink.muted" padding-top=10
+      else
+        text "Your imp works on one computer at a time. The one you leave keeps its files, so switching back picks up where it was."
+          font-size="0.9375rem" color="ink.muted" padding-top=10 line-height=1.45
+        if switchError != "" and not switching
+          text switchError color="-exact-system-red" font-size="0.9375rem" padding-top=10 testId="computer-switch-error"
+        column gap=10 padding-top=22
+          text "Imp cloud" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3
+          text (computer.cloudAvailable ? "A computer in E2B's cloud. It sleeps when idle and keeps its files." : "A computer in E2B's cloud. Paste your E2B API key from e2b.dev/dashboard; the free plan is enough.")
+            font-size="0.9375rem" color="ink.muted" line-height=1.45
+          if not computer.cloudAvailable
+            row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+              input type="password" value=keyDraft input=editKey submit=setCloudKey(keyDraft.trim()) placeholder="e2b_…"
+                aria-label="E2B API key" testId="computer-cloud-key" flex=1 min-width=0 padding="8px 0" border="none"
+                background-color="transparent" outline="none" font-family="family.mono" font-size="0.875rem" color="ink.strong"
+              button press=setCloudKey(keyDraft.trim()) disabled=(keyDraft.trim() == "" or switching) testId="computer-cloud-key-save"
+                padding="9px 14px" border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
+                font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                :disabled
+                  background-color="surface.soft"
+                  color="ink.faint"
+                text "Save"
+          row role="radiogroup" aria-label="Imp cloud size"
+            for z, i in computer.sizes key=z.id
+              button role="radio" aria-checked=(computer.kind == "cloud" and computer.size == z.id) press=useCloud(z.id)
+                disabled=(not computer.cloudAvailable or switching) flex=1 testId=`computer-size-${z.id}`
+                padding="10px 4px" border="1px solid line.strong" margin-left=(i == 0 ? "0px" : "-1px")
+                background-color=(computer.kind == "cloud" and computer.size == z.id ? "ink.strong" : "transparent")
+                color=(computer.kind == "cloud" and computer.size == z.id ? "surface.page" : "ink.strong")
+                font-family="family.mono" font-size="0.6875rem" letter-spacing="0.04em" text-transform="uppercase"
+                :disabled
+                  color="ink.faint"
+                text z.label
+        column gap=10 padding-top=26
+          row align-items="center" gap=10
+            text "Your computer" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3 flex=1
+            button press=refresh disabled=refreshing aria-label="Look for computers again" testId="computer-refresh"
+              appearance="none" width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
+              border="none" background-color="transparent" color="ink.muted"
+              :hover
+                background-color="surface.soft"
+              image "symbol:refresh" width=15 height=15
+          text "Any Linux computer on your tailnet: a home lab box, a VM, a spare laptop. Tailscale signs your imp in; no keys or passwords."
+            font-size="0.9375rem" color="ink.muted" line-height=1.45
+          if computer.tailnetError != ""
+            text computer.tailnetError font-size="0.9375rem" color="-exact-system-red" testId="computer-tailnet-error"
+          column border-top="1px solid line.subtle"
+            for d in computer.devices key=d.id
+              button press=useOwn(d.id) disabled=(d.problem != "" or switching)
+                aria-pressed=(computer.kind == "own" and computer.device == d.id) testId=`computer-device-${d.name}`
+                display="flex" align-items="center" gap=12 padding="12px 0" background-color="transparent" border="none"
+                border-bottom="1px solid line.subtle" text-align="start" color="ink.strong"
+                :hover
+                  background-color="surface.soft"
+                image "symbol:icon.computer" width=16 height=16 aria-hidden=true
+                  color=(d.problem == "" ? "ink.strong" : "ink.faint")
+                column flex=1 min-width=0 gap=2
+                  text d.name font-size="1.0625rem" color=(d.problem == "" ? "ink.strong" : "ink.muted")
+                  if d.problem != ""
+                    text d.problem font-size="0.875rem" color="ink.muted" font-style="italic"
+                text (computer.kind == "own" and computer.device == d.id ? "In use" : d.problem == "" ? "Use" : "")
+                  class=Label color=(computer.kind == "own" and computer.device == d.id ? "ink.strong" : "AccentColor")
+            if computer.devices.length == 0 and computer.tailnetError == ""
+              text "No Linux computers on your tailnet yet." font-style="italic" color="ink.muted" padding="12px 0"
+                border-bottom="1px solid line.subtle"
+          if usable > 0
+            button press=toggleSetup aria-expanded=settingUp testId="computer-add" align-self="flex-start" padding="6px 0"
+              border="none" background-color="transparent" color="ink.muted"
+              :hover
+                color="ink.strong"
+              text (settingUp ? "Hide setup" : "Add a computer") class=Label color="inherit"
+          if usable == 0 or settingUp
+            column gap=10 padding-top=10
+              Step(number="01", title="On the computer, run once")
+              CodeBlock(code=computer.command, copy=copyCommand, testId="computer-command")
+              Step(number="02", title="Add to your tailnet policy once")
+              CodeBlock(code=computer.policy, copy=copyPolicy, testId="computer-policy")
+
+// Text to copy into a terminal or a file, set in mono, with Copy.
+component CodeBlock
+  props
+    code: string
+    copy: action
+    testId: string
+  view
+    column border="1px solid line.strong" background-color="surface.soft"
+      text code font-family="family.mono" font-size="0.75rem" line-height=1.55 white-space="pre-wrap"
+        overflow-wrap="anywhere" padding="12px 14px" user-select="all" testId=testId
+      row justify-content="flex-end" border-top="1px solid line.subtle"
+        button press=copy testId=`${testId}-copy` display="flex" align-items="center" gap=6 padding="7px 12px"
+          border="none" background-color="transparent" color="ink.strong" font-family="family.mono" font-size="0.6875rem"
+          letter-spacing="0.1em" text-transform="uppercase"
+          :hover
+            background-color="surface.page"
+          image "symbol:copy" width=12 height=12 aria-hidden=true
+          text "Copy"
 
 // A numbered step of the device-code sign-in.
 component Step

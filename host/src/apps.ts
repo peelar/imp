@@ -209,7 +209,7 @@ export function appGateway(options: GatewayOptions) {
 			ws.on("close", () => onClose(ws));
 			ws.on("error", (error) => log(`app socket: ${error.message}`));
 			socket = ws;
-			// Nothing on the machine has to survive: load every app on every connection. agentd skips an unchanged one.
+			// The machine's processes may not survive: load every app on every connection. agentd skips an unchanged one.
 			for (const [slot, app] of slots) sendLoad(ws, slot, app);
 			return ws;
 		})().finally(() => {
@@ -528,6 +528,10 @@ export function appGateway(options: GatewayOptions) {
 		/** Loads every app, so a failure shows in the log at start rather than at the first call. */
 		async start() {
 			await Promise.all([...slots.keys()].map((slot) => ready(slot)));
+		},
+		/** The agent moved to another machine: drop the socket, so the next call loads every app there. */
+		disconnect() {
+			socket?.close();
 		},
 		close() {
 			socket?.close();

@@ -1,3 +1,5 @@
+<img src="client/assets/icons/app/icon-512.png" alt="The imp: a woodcut face with horns" width="112">
+
 # Imp
 
 Your own imp: a self-hosted assistant that runs errands in your apps and builds new ones for you.
@@ -11,8 +13,11 @@ an app that stays: a screen you keep using, which the imp can also operate for y
 
 - **`host/`** is the server. It runs the agent on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable),
   signs in to ChatGPT (your Plus or Pro plan is the model), keeps each app's data in SQLite, and serves the client.
-  The agent's computer sits behind a small adapter contract; [E2B](https://e2b.dev) is the one shipped today, plus a
-  local adapter for development.
+  The agent's computer is durable (its home directory survives suspends, reboots and host restarts), and you pick it
+  in Settings: Imp cloud (an [E2B](https://e2b.dev) sandbox, on its free plan) or a Linux computer of yours on your
+  tailnet, which the host reaches over Tailscale SSH. Both sit behind one adapter contract (`host/src/machine.ts`),
+  and wherever it runs, the host decides what is installed: `host/machine/setup.sh`. The computer has a desktop with
+  Chrome on it; open **Computer** in the app to watch your imp work there, or take over (`host/src/screen.ts`).
 - **`client/`** is the app, written in [Exact](https://github.com/expo/exact)'s Contract language. It runs on the web
   today and keeps iOS and macOS in reach.
 - **`client/apps/<id>/`** holds each app: `app.json`, its screen (`app.contract`, a `component Screen` whose props
@@ -42,8 +47,10 @@ On the machine that will run your Imp (Linux with systemd, or macOS), with Node 
 curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
 ```
 
-It installs the latest release in `~/.imp` as a service, then prints the rest: your settings in `~/.imp/env`,
-`tailscale serve --bg 8787`, and signing in. Then, on your Mac:
+It installs the latest release in `~/.imp` as a service, serves it on your tailnet (`tailscale serve`), and prints one
+link. Open it, sign in with ChatGPT, and give your imp a computer in Settings: paste an E2B key for Imp cloud, or pick
+a Linux computer on your tailnet (Settings shows the one command to run on it and the policy rule to add). Then, if you
+want the Mac app:
 
 ```sh
 curl -fsSL https://<your host>.ts.net/install-mac.sh | sh
@@ -68,11 +75,12 @@ the web client whenever the imp previews an app.
 ```sh
 cd host && npm install
 cd ../client && API_BASE_URL= bun exact.mjs web-build --out dist
-cd ../host && E2B_API_KEY=... node src/server.ts   # http://localhost:8787
+cd ../host && node src/server.ts   # http://localhost:8787
 ```
 
-The host reads `PORT`, `DATA_DIR`, `MACHINE` (`e2b` or `local`), `MODEL` and `OWNER_LOGIN`; `host/src/server.ts`
-describes each. Open the app, continue with ChatGPT, and enter the code it shows.
+Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local` instead
+fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the rest.
+`node scripts/smoke-machine.ts` checks a machine adapter on its own.
 
 Tests run the client against a host with a fake model: `cd client && bun exact.mjs test web`.
 

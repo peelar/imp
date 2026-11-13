@@ -12,6 +12,7 @@
     "@earendil-works/pi-durable": "1.5.2",
     "@earendil-works/pi-env": "1.5.2",
     "@earendil-works/pi-schema": "1.5.2",
+    "@novnc/novnc": "1.7.0",
     "e2b": "2.63.0",
     "ws": "^8.21.0"
   },

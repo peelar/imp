@@ -29,3 +29,5 @@ icons
   icon.panel = icon(sf "sidebar.right", svg "icons/panel-right.svg")
   icon.expand = icon(sf "arrow.up.left.and.arrow.down.right", svg "icons/expand.svg")
   icon.imp = icon(sf "face.smiling", svg "icons/imp.svg")
+  icon.cloud = icon(sf "cloud", svg "icons/cloud.svg")
+  icon.computer = icon(sf "desktopcomputer", svg "icons/computer.svg")

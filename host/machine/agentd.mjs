@@ -5,12 +5,14 @@
 //           the one it would start.
 // /pi-env   carries a pi-env daemon's stdin and stdout over a WebSocket. Frames to the host start with one byte: 1 for
 //           stdout, 2 for stderr. Frames from the host are the daemon's stdin.
+// /screen   the computer's screen: a VNC (RFB) stream over a WebSocket, bridged to x11vnc's socket (see screen.sh).
 // /apps     the app daemon: the host loads each app's server code, and agentd runs it in a worker of its own, so a
 //           new version replaces the old worker and terminating it frees everything. One host connection at a time;
 //           workers keep running when it drops, and the host loads every app again when it reconnects.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -32,18 +34,21 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 }
 
 server.on("upgrade", (req, socket, head) => {
 	const url = new URL(req.url ?? "/", "http://agentd");
-	if (url.searchParams.get("token") !== token || (url.pathname !== "/pi-env" && url.pathname !== "/apps")) {
+	if (url.searchParams.get("token") !== token || !["/pi-env", "/apps", "/screen"].includes(url.pathname)) {
 		socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
 		return;
 	}
 	wss.handleUpgrade(req, socket, head, (ws) => {
 		if (url.pathname === "/pi-env") servePiEnv(ws, JSON.parse(url.searchParams.get("args") ?? "[]"));
+		else if (url.pathname === "/screen") serveScreen(ws);
 		else serveApps(ws);
 	});
 });
 
 function servePiEnv(ws, args) {
-	const child = spawn(daemon, args, { stdio: ["pipe", "pipe", "pipe"], cwd: home });
+	// With the screen up, the agent's programs open their windows on it.
+	const env = screenUp ? { ...process.env, DISPLAY: SCREEN_DISPLAY } : process.env;
+	const child = spawn(daemon, args, { stdio: ["pipe", "pipe", "pipe"], cwd: home, env });
 	const send = (kind, chunk) => {
 		if (ws.readyState === ws.OPEN) ws.send(Buffer.concat([Buffer.from([kind]), chunk]));
 	};
@@ -52,6 +57,49 @@ function servePiEnv(ws, args) {
 	child.on("exit", (code) => ws.close(1000, String(code ?? "")));
 	ws.on("message", (data) => child.stdin.write(data));
 	ws.on("close", () => child.kill("SIGTERM"));
+}
+
+// ---- The screen ----
+
+const SCREEN_DISPLAY = ":99";
+const SCREEN_SOCKET = join(home, ".cache", "imp", "screen.sock");
+let screenUp = false;
+let screenStarting;
+
+/** Starts whatever of the screen is not running; true when it is up. Concurrent calls share one run. */
+function startScreen() {
+	screenStarting ??= new Promise((resolve) => {
+		const child = spawn("/bin/sh", [join(here, "screen.sh")], {
+			stdio: ["ignore", "inherit", "inherit"],
+			env: { ...process.env, SCREEN_DISPLAY, SCREEN_SOCKET },
+		});
+		child.on("error", () => resolve(false));
+		child.on("exit", (code) => resolve(code === 0));
+	}).then((up) => {
+		screenUp = up;
+		screenStarting = undefined;
+		return up;
+	});
+	return screenStarting;
+}
+
+function serveScreen(ws) {
+	let vnc;
+	const queued = [];
+	ws.on("message", (data) => (vnc ? vnc.write(data) : queued.push(data)));
+	ws.on("close", () => vnc?.destroy());
+	// Started again on every connection, in case part of it stopped since.
+	startScreen().then((up) => {
+		if (ws.readyState !== ws.OPEN) return;
+		if (!up) return ws.close(1011, "The screen did not start on this computer.");
+		vnc = connect(SCREEN_SOCKET);
+		vnc.on("connect", () => {
+			for (const data of queued.splice(0)) vnc.write(data);
+		});
+		vnc.on("data", (chunk) => ws.readyState === ws.OPEN && ws.send(chunk));
+		vnc.on("error", () => ws.close(1011, "The screen stopped."));
+		vnc.on("close", () => ws.close(1000));
+	});
 }
 
 // ---- The app daemon ----
@@ -171,3 +219,5 @@ function call(message) {
 }
 
 server.listen(port, process.env.AGENTD_HOST ?? "0.0.0.0", () => console.log(`agentd listening on ${port}`));
+// The screen starts with the machine, so the agent's programs have a display before anyone opens it.
+void startScreen().then((up) => console.log(up ? `screen on ${SCREEN_DISPLAY}` : "no screen"));

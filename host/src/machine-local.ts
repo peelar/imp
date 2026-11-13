@@ -74,6 +74,7 @@ export function localProvider(options: LocalProviderOptions): MachineProvider {
 				key: spec.key,
 				daemonCommand: async () => endpoints.daemonCommand,
 				appSocket: async () => endpoints.appSocket,
+				screen: async () => endpoints.screen,
 				expose: async (port) => ({ url: `http://127.0.0.1:${port}`, headers: {} }),
 				keepAlive: async () => {},
 				suspend: async () => {},
@@ -85,6 +86,11 @@ export function localProvider(options: LocalProviderOptions): MachineProvider {
 			running.get(key)?.child.kill();
 			running.delete(key);
 			await rm(dirFor(key), { recursive: true, force: true });
+		},
+
+		close() {
+			for (const { child } of running.values()) child.kill();
+			running.clear();
 		},
 	};
 }

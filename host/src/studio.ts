@@ -75,9 +75,9 @@ export interface StudioOptions {
 	readonly gateway: AppGateway;
 	readonly topics: Topics;
 	readonly registry: Registry;
-	/** The agent's files, and where it works on them. */
+	/** The agent's files, and where it works on them: the current computer's, which the owner may switch. */
 	readonly files: () => RemoteExecutionEnv;
-	readonly workspace: string;
+	readonly workspace: () => string;
 	readonly context: Context;
 	readonly drafts: readonly AppInfo[];
 	readonly log?: (message: string) => void;
@@ -187,7 +187,7 @@ export function studio(options: StudioOptions) {
 	async function fromWorkspace(id: string): Promise<AppFiles> {
 		const files: Record<string, string> = {};
 		for (const name of APP_FILES) {
-			const path = `${options.workspace}/apps/${id}/${name}`;
+			const path = `${options.workspace()}/apps/${id}/${name}`;
 			const read = await options.files().readTextFile(path, context);
 			if (!read.ok) throw new Error(`Could not read apps/${id}/${name} in your workspace: ${read.error.message}`);
 			files[name] = read.value;
@@ -216,7 +216,7 @@ export function studio(options: StudioOptions) {
 		const draft = gateway.version(draftSlot(id));
 		const live = gateway.version(id);
 		const files = draft?.files ?? live?.files ?? starter(id);
-		const base = `${options.workspace}/apps`;
+		const base = `${options.workspace()}/apps`;
 		for (const name of APP_FILES) await writeWorkspace(`${base}/${id}/${name}`, files[name]);
 		await writeWorkspace(`${base}/GUIDE.md`, readFileSync(join(STUDIO_FILES, "GUIDE.md"), "utf8"));
 		await writeWorkspace(`${base}/sdk.ts`, readFileSync(SDK, "utf8"));
@@ -357,7 +357,7 @@ export function studio(options: StudioOptions) {
 				section(
 					"studio",
 					() =>
-						`You build apps for the user, and change them, when they ask. An app is a folder of three files you write in ${options.workspace}/apps/<id>/: call app_code first (it writes the app's current code, or a starter, and apps/GUIDE.md, which explains the rest), edit, then call preview_app. The user tries the preview in the app's tab and saves it; you never can. Keep improving it with them until they do.`,
+						`You build apps for the user, and change them, when they ask. An app is a folder of three files you write in ${options.workspace()}/apps/<id>/: call app_code first (it writes the app's current code, or a starter, and apps/GUIDE.md, which explains the rest), edit, then call preview_app. The user tries the preview in the app's tab and saves it; you never can. Keep improving it with them until they do.`,
 				),
 			],
 			tools: [

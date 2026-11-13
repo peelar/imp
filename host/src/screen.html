@@ -1,0 +1,146 @@
+<!doctype html>
+<!-- The computer's screen: noVNC over the host's /api/computer/screen, with the computer's name and status from the
+     live `computer` source. Served by screen.ts at /computer. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Computer · Imp</title>
+<link rel="icon" href="/assets/icons/app/icon-512.png">
+<style>
+	@font-face { font-family: "Instrument Serif"; src: url("/assets/fonts/InstrumentSerif-Regular.ttf"); }
+	@font-face { font-family: "IBM Plex Mono"; src: url("/assets/fonts/IBMPlexMono-Medium.ttf"); font-weight: 500; }
+	:root {
+		--ink: light-dark(#111111, #f2f2f0);
+		--muted: light-dark(#6b6b6b, #9b9b97);
+		--page: light-dark(#ffffff, #0d0d0d);
+		--line: light-dark(#c9c9c5, #3d3d3a);
+		--soft: light-dark(#f4f4f2, #1a1a19);
+		--green: #34c759;
+		--red: #ff3b30;
+		--mono: "IBM Plex Mono", ui-monospace, monospace;
+	}
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; background: var(--page); color: var(--ink); }
+	body { display: flex; flex-direction: column; font: 15px/1.45 Georgia, serif; }
+	header {
+		display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+		padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--ink);
+	}
+	h1 { margin: 0; font: 400 1.5rem/1.1 "Instrument Serif", Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+	.label { font: 500 0.6875rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+	.status { display: flex; align-items: center; gap: 8px; }
+	.dot { width: 6px; height: 6px; background: var(--muted); }
+	.dot.on { background: var(--green); }
+	.dot.off { background: var(--red); }
+	.spacer { flex: 1; }
+	button {
+		padding: 8px 12px; border: 1px solid var(--line); background: transparent; color: var(--ink);
+		font: 500 0.75rem var(--mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+	}
+	button:hover { background: var(--soft); }
+	main { position: relative; flex: 1; min-height: 0; background: #1b1b1a; }
+	#screen { position: absolute; inset: 0; }
+	#overlay {
+		position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+		gap: 10px; padding: 24px; text-align: center; color: #f2f2f0; background: #1b1b1a;
+	}
+	#overlay[hidden] { display: none; }
+	#message { font: 400 1.75rem/1.2 "Instrument Serif", Georgia, serif; max-width: 30rem; }
+	#detail { color: #9b9b97; max-width: 34rem; overflow-wrap: anywhere; }
+	@media (max-width: 560px) { #fullscreen { display: none; } h1 { font-size: 1.25rem; } }
+</style>
+</head>
+<body>
+<header>
+	<h1 id="name">Computer</h1>
+	<div class="status"><div class="dot" id="dot"></div><span class="label" id="state">Connecting…</span></div>
+	<div class="spacer"></div>
+	<button id="reconnect" hidden>Reconnect</button>
+	<button id="fullscreen">Full screen</button>
+</header>
+<main>
+	<div id="screen"></div>
+	<div id="overlay"><div id="message">Connecting to your imp's computer…</div><div id="detail"></div></div>
+</main>
+<script type="module">
+	import RFB from "/computer/novnc/core/rfb.js";
+
+	const $ = (id) => document.getElementById(id);
+	const socket = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/computer/screen`;
+	let rfb;
+	let connected = false;
+	let computer = { status: "", name: "", error: "" };
+	let attempts = 0;
+	let timer;
+
+	function show(message, detail = "") {
+		$("overlay").hidden = false;
+		$("message").textContent = message;
+		$("detail").textContent = detail;
+	}
+
+	function render() {
+		$("name").textContent = computer.name || "Computer";
+		document.title = `${computer.name || "Computer"} · Imp`;
+		const [dot, state] = connected
+			? ["on", "Connected"]
+			: computer.status === "failed" ? ["off", "Not reachable"]
+			: computer.status === "none" ? ["", "No computer"]
+			: computer.status === "ready" ? ["", "Connecting…"]
+			: ["", "Starting…"];
+		$("dot").className = `dot ${dot}`;
+		$("state").textContent = state;
+		$("reconnect").hidden = connected || computer.status === "none";
+		if (connected) return;
+		if (computer.status === "none") show("Your imp has no computer yet.", "Choose one in Imp's Settings.");
+		else if (computer.status === "failed") show(`Could not reach ${computer.name || "the computer"}.`, computer.error);
+		else if (computer.status === "starting") show(`Starting ${computer.name || "the computer"}…`, "A computer that slept wakes up in a few seconds.");
+	}
+
+	function connect() {
+		clearTimeout(timer);
+		if (rfb) return;
+		show(`Connecting to ${computer.name || "your imp's computer"}…`);
+		rfb = new RFB($("screen"), socket);
+		rfb.scaleViewport = true;
+		rfb.background = "#1b1b1a";
+		rfb.addEventListener("connect", () => {
+			connected = true;
+			attempts = 0;
+			$("overlay").hidden = true;
+			rfb.focus();
+			render();
+		});
+		rfb.addEventListener("disconnect", () => {
+			rfb = undefined;
+			connected = false;
+			attempts++;
+			render();
+			if (computer.status !== "ready") return;
+			// The machine may still be setting its screen up, or have moved; try again, less often each time.
+			const wait = Math.min(30, 2 ** Math.min(attempts, 5));
+			show("The screen is not available right now.", `Trying again in ${wait} seconds.`);
+			timer = setTimeout(connect, wait * 1000);
+		});
+	}
+
+	// The host streams the computer's state; connect whenever it is ready.
+	const live = new EventSource("/api/live/computer");
+	live.onmessage = (event) => {
+		computer = JSON.parse(event.data);
+		render();
+		if (computer.status === "ready" && !rfb) connect();
+	};
+
+	$("reconnect").onclick = () => {
+		attempts = 0;
+		rfb?.disconnect();
+		rfb = undefined;
+		connect();
+	};
+	$("fullscreen").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+</script>
+</body>
+</html>

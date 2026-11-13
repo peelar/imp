@@ -4,8 +4,10 @@
 #   curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
 #
 # Everything lives in IMP_HOME (default ~/.imp): releases/<tag> holds each unpacked release, `current` links the one
-# that runs, data/ is the host's data and `env` its settings. The host then keeps itself at the latest release
-# (host/src/update.ts); IMP_AUTO_UPDATE=0 in `env` stops that. Running this again updates and restarts it.
+# that runs, data/ is the host's data and `env` holds the few settings the app does not have. It serves the host on
+# your tailnet with `tailscale serve`, and prints the one link to open: everything else, such as the agent's computer,
+# is set up in the app. The host then keeps itself at the latest release (host/src/update.ts); IMP_AUTO_UPDATE=0 in
+# `env` stops that. Running this again updates and restarts it.
 set -eu
 
 REPO="${IMP_REPO:-peelar/imp}"
@@ -39,10 +41,8 @@ ln -sfn "releases/$tag" "$IMP_HOME/current"
 
 if [ ! -f "$IMP_HOME/env" ]; then
 	cat > "$IMP_HOME/env" <<'EOF'
-# The Imp host's settings, read at every start (host/src/server.ts describes each).
-# The agent's computer: "e2b" needs E2B_API_KEY; "local" runs it on this machine, with no isolation.
-E2B_API_KEY=
-# MACHINE=local
+# The Imp host's few settings outside the app, read at every start (host/src/server.ts describes each). Everything
+# else, such as the agent's computer, is set up in the app.
 # The port `tailscale serve` forwards to.
 PORT=8787
 # The one Tailscale login allowed in, such as you@github; unset lets everyone on the tailnet in.
@@ -118,15 +118,48 @@ EOF
 esac
 
 port=$(sed -n 's/^PORT=//p' "$IMP_HOME/env" | tail -1)
-cat <<EOF
+port=${port:-8787}
 
-Imp $tag is running on 127.0.0.1:${port:-8787} and keeps itself up to date.
-  Settings: $IMP_HOME/env (then run this again, or restart the service)
-  Logs:     $logs
+# Serves the host on the tailnet over HTTPS, unless something else is already served there. Sets `url`, or `note` with
+# what is in the way.
+serve_on_tailnet() {
+	url="" note=""
+	ts=$(command -v tailscale || true)
+	[ -n "$ts" ] || [ ! -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] || ts=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+	if [ -z "$ts" ]; then
+		note="Install Tailscale on this machine and sign in (https://tailscale.com/download), then run this again."
+		return
+	fi
+	dns=$("$ts" status --json 2>/dev/null | "$NODE" -e '
+		let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+			const status = JSON.parse(s || "{}");
+			if (status.BackendState === "Running") console.log(String(status.Self?.DNSName ?? "").replace(/[.]$/, ""));
+		});') || true
+	if [ -z "$dns" ]; then
+		note="Sign in to Tailscale on this machine (tailscale up), then run this again."
+		return
+	fi
+	served=$("$ts" serve status --json 2>/dev/null || echo '{}')
+	if printf %s "$served" | grep -q "127.0.0.1:$port\""; then
+		url="https://$dns"
+	elif printf %s "$served" | grep -q '"Web"'; then
+		note="Tailscale already serves something else on this machine. Serve Imp on another port: $ts serve --bg --https=8443 $port"
+	elif "$ts" serve --bg "$port" >/dev/null 2>&1; then
+		url="https://$dns"
+	else
+		note="Tailscale would not let this user serve Imp. Allow it once, then run this again: sudo $ts set --operator=$(id -un)"
+	fi
+}
+serve_on_tailnet
 
-Next:
-  1. Put your E2B key in $IMP_HOME/env (or MACHINE=local).
-  2. Serve it on your tailnet: tailscale serve --bg ${port:-8787}
-  3. Open https://<this machine>.<tailnet>.ts.net and sign in with ChatGPT.
-  4. On your Mac: curl -fsSL https://<this machine>.<tailnet>.ts.net/install-mac.sh | sh
-EOF
+echo
+echo "Imp $tag is running and keeps itself up to date."
+echo
+if [ -n "$url" ]; then
+	echo "  Open $url to sign in and set up your imp."
+	echo
+	echo "  The Mac app, if you want it: curl -fsSL $url/install-mac.sh | sh"
+else
+	echo "  One thing left: $note"
+fi
+echo "  Logs: $logs"
