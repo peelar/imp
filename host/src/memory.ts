@@ -13,37 +13,37 @@ import type { Extension } from "@earendil-works/pi-durable";
 export const TOPIC = "memory";
 
 export interface MemoryProvider {
-	/** What Settings calls the system, such as "Knowledge graph". */
-	readonly name: string;
-	/** Where it keeps what it knows, in words for the person, such as the file's path. */
-	readonly location: string;
-	/**
-	 * The agent's side, selected in every conversation: tools that remember, recall, and forget, a prompt section with
-	 * what it already knows, and any hooks it needs (such as extracting memories after each run).
-	 */
-	readonly extension: Extension;
-	/** Everything remembered, as the person reads it. */
-	inspect(): Promise<MemoryEntry[]>;
-	/** The person forgets an entry, or one of its facts. */
-	forget(entry: string, fact?: string): Promise<void>;
+  /** What Settings calls the system, such as "Knowledge graph". */
+  readonly name: string;
+  /** Where it keeps what it knows, in words for the person, such as the file's path. */
+  readonly location: string;
+  /**
+   * The agent's side, selected in every conversation: tools that remember, recall, and forget, a prompt section with
+   * what it already knows, and any hooks it needs (such as extracting memories after each run).
+   */
+  readonly extension: Extension;
+  /** Everything remembered, as the person reads it. */
+  inspect(): Promise<MemoryEntry[]>;
+  /** The person forgets an entry, or one of its facts. */
+  forget(entry: string, fact?: string): Promise<void>;
 }
 
 export interface MemoryEntry {
-	/** Stable within the system; forget() takes it. */
-	readonly id: string;
-	readonly title: string;
-	/** What sort of thing it is ("person", "project", "preference"); "" when the system has no kinds. */
-	readonly kind: string;
-	readonly facts: readonly string[];
-	/** How it relates to other entries, in words, such as "works at → Acme". */
-	readonly links: readonly string[];
+  /** Stable within the system; forget() takes it. */
+  readonly id: string;
+  readonly title: string;
+  /** What sort of thing it is ("person", "project", "preference"); "" when the system has no kinds. */
+  readonly kind: string;
+  readonly facts: readonly string[];
+  /** How it relates to other entries, in words, such as "works at → Acme". */
+  readonly links: readonly string[];
 }
 
 export interface MemoryOptions {
-	/** The host's data directory. */
-	readonly dataDir: string;
-	/** Tells open views that memory changed. */
-	readonly changed: () => void;
+  /** The host's data directory. */
+  readonly dataDir: string;
+  /** Tells open views that memory changed. */
+  readonly changed: () => void;
 }
 
 /** Builds a memory system; startHost() calls it once. */

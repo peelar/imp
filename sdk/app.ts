@@ -8,39 +8,65 @@
 // - The agent finds operations with `find_app_actions` and runs them with `run_app_action`, by name and with named
 //   arguments. Every operation is the agent's unless it says `agent: false`.
 
-export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export type Json =
+  | null
+  | boolean
+  | number
+  | string
+  | Json[]
+  | { [key: string]: Json };
 export type SqlValue = null | number | string;
 
 export interface AppContext {
-	readonly id: string;
-	readonly db: {
-		all<T = Record<string, SqlValue>>(sql: string, ...params: SqlValue[]): Promise<T[]>;
-		get<T = Record<string, SqlValue>>(sql: string, ...params: SqlValue[]): Promise<T | null>;
-		run(sql: string, ...params: SqlValue[]): Promise<{ changes: number; lastInsertRowid: number }>;
-		/** Runs the statements in one transaction: all of them or none. */
-		batch(statements: readonly { sql: string; params?: SqlValue[] }[]): Promise<{ changes: number; lastInsertRowid: number }[]>;
-	};
+  readonly id: string;
+  readonly db: {
+    all<T = Record<string, SqlValue>>(
+      sql: string,
+      ...params: SqlValue[]
+    ): Promise<T[]>;
+    get<T = Record<string, SqlValue>>(
+      sql: string,
+      ...params: SqlValue[]
+    ): Promise<T | null>;
+    run(
+      sql: string,
+      ...params: SqlValue[]
+    ): Promise<{ changes: number; lastInsertRowid: number }>;
+    /** Runs the statements in one transaction: all of them or none. */
+    batch(
+      statements: readonly { sql: string; params?: SqlValue[] }[]
+    ): Promise<{ changes: number; lastInsertRowid: number }[]>;
+  };
 }
 
 export type Param =
-	| { type: "string" | "number" | "integer" | "boolean"; description?: string; optional?: boolean }
-	| { type: "enum"; values: readonly string[]; description?: string; optional?: boolean };
+  | {
+      type: "string" | "number" | "integer" | "boolean";
+      description?: string;
+      optional?: boolean;
+    }
+  | {
+      type: "enum";
+      values: readonly string[];
+      description?: string;
+      optional?: boolean;
+    };
 
 export interface AppOperation {
-	/** A read answers without changing anything; a write changes the app's data. */
-	readonly kind: "read" | "write";
-	/** What the operation does, for the agent: it searches these. */
-	readonly description: string;
-	/** The arguments, in the order the screen passes them. The host checks every call against them. */
-	readonly params: Readonly<Record<string, Param>>;
-	/** `false` keeps the operation from the agent; the screen can still call it. */
-	readonly agent?: false;
-	run(args: Record<string, Json>, app: AppContext): Json | Promise<Json>;
+  /** A read answers without changing anything; a write changes the app's data. */
+  readonly kind: "read" | "write";
+  /** What the operation does, for the agent: it searches these. */
+  readonly description: string;
+  /** The arguments, in the order the screen passes them. The host checks every call against them. */
+  readonly params: Readonly<Record<string, Param>>;
+  /** `false` keeps the operation from the agent; the screen can still call it. */
+  readonly agent?: false;
+  run(args: Record<string, Json>, app: AppContext): Json | Promise<Json>;
 }
 
 export interface AppServer {
-	/** Migrations, in order. The host applies the ones a database has not had yet, before the first call. */
-	readonly schema?: readonly string[];
-	/** Everything the app does, by camelCase name, such as `setDone`. */
-	readonly operations?: Readonly<Record<string, AppOperation>>;
+  /** Migrations, in order. The host applies the ones a database has not had yet, before the first call. */
+  readonly schema?: readonly string[];
+  /** Everything the app does, by camelCase name, such as `setDone`. */
+  readonly operations?: Readonly<Record<string, AppOperation>>;
 }

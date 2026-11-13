@@ -13,66 +13,61 @@
 //    secret's hosts go through `egress()` to the host, which puts the secret on them (egress.ts).
 
 export interface MachineProvider {
-	readonly name: string;
-	/** Where the agent works on machine `key`: its read, write, edit, and bash tools start here. */
-	workspace(key: string): string;
-	/** Prepare our machine image in this provider's format, such as a template. Idempotent per image. */
-	prepareImage(image: ImageSpec, signal?: AbortSignal): Promise<string>;
-	/** Create the machine for `spec.key`, or resume and return the existing one, with the machine runtime running. */
-	ensure(spec: MachineSpec, signal?: AbortSignal): Promise<Machine>;
-	destroy(key: string, signal?: AbortSignal): Promise<void>;
-	/** The host stops using this provider: close what it holds open, such as tunnels. Machines keep their state. */
-	close(): void;
+  readonly name: string;
+  /** Where the agent works on machine `key`: its read, write, edit, and bash tools start here. */
+  workspace(key: string): string;
+  /** Prepare our machine image in this provider's format, such as a template. Idempotent per image. */
+  prepareImage(image: ImageSpec, signal?: AbortSignal): Promise<string>;
+  /** Create the machine for `spec.key`, or resume and return the existing one, with the machine runtime running. */
+  ensure(spec: MachineSpec, signal?: AbortSignal): Promise<Machine>;
+  destroy(key: string, signal?: AbortSignal): Promise<void>;
+  /** The host stops using this provider: close what it holds open, such as tunnels. Machines keep their state. */
+  close(): void;
 }
 
 export interface ImageSpec {
-	/** The setup script: runs as root on Debian or Ubuntu, and is safe to run again on a machine that ran an older one. */
-	readonly setup: string;
-	/** What the machine gets, where the provider lets the host choose. A computer you bring is the size it is. */
-	readonly size: MachineSize;
+  /** The setup script: runs as root on Debian or Ubuntu, and is safe to run again on a machine that ran an older one. */
+  readonly setup: string;
+  /** What the machine gets, where the provider lets the host choose. A computer you bring is the size it is. */
+  readonly size: MachineSize;
 }
 
 export interface MachineSize {
-	readonly cpus: number;
-	readonly memoryMB: number;
+  readonly cpus: number;
+  readonly memoryMB: number;
 }
 
 export interface MachineSpec {
-	/** Stable and chosen by the host, such as "owner:adrian". */
-	readonly key: string;
-	/** What `prepareImage` returned. */
-	readonly image: string;
-	/** Suspend after this long without `keepAlive()`, where the provider can suspend. */
-	readonly idleSuspendMs: number;
+  /** Stable and chosen by the host, such as "owner:adrian". */
+  readonly key: string;
+  /** What `prepareImage` returned. */
+  readonly image: string;
+  /** Suspend after this long without `keepAlive()`, where the provider can suspend. */
+  readonly idleSuspendMs: number;
 }
 
 export interface Machine {
-	readonly key: string;
-	/**
-	 * A local command whose stdin and stdout reach a pi-env daemon on the machine. pi-env's `Connection` runs it with
-	 * `serve --token <hex>` appended, on its first request and again after a lost connection.
-	 */
-	daemonCommand(signal?: AbortSignal): Promise<readonly string[]>;
-	/** The machine runtime's app socket (agentd's `/apps`): a WebSocket URL and the headers it needs. */
-	appSocket(signal?: AbortSignal): Promise<Endpoint>;
-	/**
-	 * The machine's screen, a desktop the agent's programs open their windows on: a WebSocket carrying VNC (RFB), and
-	 * the headers it needs. It closes with a reason when the machine has no screen.
-	 */
-	screen(signal?: AbortSignal): Promise<Endpoint>;
-	/**
-	 * The machine's egress proxy: the control socket the host opens to it (agentd's `/egress`), and what a command on
-	 * the machine needs in its environment for its HTTPS requests to go through it.
-	 */
-	egress(signal?: AbortSignal): Promise<{ socket: Endpoint; env: Readonly<Record<string, string>> }>;
-	/** An endpoint the host can reach that forwards to `port` on the machine, with the headers it needs. */
-	expose(port: number, signal?: AbortSignal): Promise<Endpoint>;
-	/** The host is using the machine: postpone the idle suspend by another `idleSuspendMs`. */
-	keepAlive(signal?: AbortSignal): Promise<void>;
-	suspend(signal?: AbortSignal): Promise<void>;
+  readonly key: string;
+  /**
+   * A local command whose stdin and stdout reach a pi-env daemon on the machine. pi-env's `Connection` runs it with
+   * `serve --token <hex>` appended, on its first request and again after a lost connection.
+   */
+  daemonCommand(signal?: AbortSignal): Promise<readonly string[]>;
+  /** The machine runtime's app socket (agentd's `/apps`): a WebSocket URL and the headers it needs. */
+  appSocket(signal?: AbortSignal): Promise<Endpoint>;
+  /**
+   * The machine's screen, a desktop the agent's programs open their windows on: a WebSocket carrying VNC (RFB), and
+   * the headers it needs. It closes with a reason when the machine has no screen.
+   */
+  screen(signal?: AbortSignal): Promise<Endpoint>;
+  /** An endpoint the host can reach that forwards to `port` on the machine, with the headers it needs. */
+  expose(port: number, signal?: AbortSignal): Promise<Endpoint>;
+  /** The host is using the machine: postpone the idle suspend by another `idleSuspendMs`. */
+  keepAlive(signal?: AbortSignal): Promise<void>;
+  suspend(signal?: AbortSignal): Promise<void>;
 }
 
 export interface Endpoint {
-	readonly url: string;
-	readonly headers: Readonly<Record<string, string>>;
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
 }

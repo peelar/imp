@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["host/node_modules/@types"]
+  },
+  "include": [
+    "host/src",
+    "host/machine",
+    "host/scripts",
+    "host/test",
+    "sdk",
+    "client/apps/*/server.ts",
+    "scripts/*.ts",
+    "*.config.ts"
+  ]
+}

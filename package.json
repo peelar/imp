@@ -1,0 +1,14 @@
+{
+  "name": "imp",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@oxlint/plugins": "^1.93.0",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.93.0",
+    "oxlint-tsgolint": "^7.0.2007",
+    "typescript": "^5.9.3",
+    "ultracite": "^8.2.0"
+  }
+}

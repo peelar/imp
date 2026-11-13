@@ -22,45 +22,52 @@ import { runningVersion, startUpdater } from "./update.ts";
 const root = join(import.meta.dirname, "..", "..");
 const dataDir = process.env.DATA_DIR ?? join(import.meta.dirname, "..", "data");
 if (process.env.MACHINE && process.env.MACHINE !== "local") {
-	throw new Error("MACHINE is only for development: set it to local, or leave it out and pick the computer in Settings");
+  throw new Error(
+    "MACHINE is only for development: set it to local, or leave it out and pick the computer in Settings"
+  );
 }
 const machines =
-	process.env.MACHINE === "local" ? (secret: string) => localProvider({ secret, dir: join(dataDir, "machines") }) : undefined;
+  process.env.MACHINE === "local"
+    ? (secret: string) =>
+        localProvider({ secret, dir: join(dataDir, "machines") })
+    : undefined;
 
 const { mkdirSync } = await import("node:fs");
 mkdirSync(dataDir, { recursive: true });
-const models = createModels({ credentials: openCredentialStore(join(dataDir, "credentials.sqlite")) });
+const models = createModels({
+  credentials: openCredentialStore(join(dataDir, "credentials.sqlite")),
+});
 models.setProvider(openaiCodexProvider());
 
 const version = runningVersion(root);
 const repo = process.env.IMP_REPO ?? "peelar/imp";
 const host = await startHost({
-	models,
-	model: { provider: CHATGPT, modelId: process.env.MODEL ?? "gpt-6.1-sol" },
-	machines,
-	dataDir,
-	appsDir: join(root, "client", "apps"),
-	clientDir: join(root, "client", "dist"),
-	port: Number(process.env.PORT ?? 8787),
-	owner: process.env.OWNER_LOGIN,
-	version,
-	repo,
-	macInstaller: join(root, "scripts", "install-mac.sh"),
+  models,
+  model: { provider: CHATGPT, modelId: process.env.MODEL ?? "gpt-6.1-sol" },
+  machines,
+  dataDir,
+  appsDir: join(root, "client", "apps"),
+  clientDir: join(root, "client", "dist"),
+  port: Number(process.env.PORT ?? 8787),
+  owner: process.env.OWNER_LOGIN,
+  version,
+  repo,
+  macInstaller: join(root, "scripts", "install-mac.sh"),
 });
 
 // Only an installed release updates itself: a checkout is the developer's to move.
 const home = process.env.IMP_HOME;
 if (home && version !== "dev" && process.env.IMP_AUTO_UPDATE !== "0") {
-	startUpdater({
-		home,
-		repo,
-		version,
-		intervalMs: 60 * 60_000,
-		idle: () => host.idle(),
-		async restart() {
-			await host.close();
-			// The service manager (systemd or launchd, from install-host.sh) starts the new release.
-			process.exit(0);
-		},
-	});
+  startUpdater({
+    home,
+    repo,
+    version,
+    intervalMs: 60 * 60_000,
+    idle: () => host.idle(),
+    async restart() {
+      await host.close();
+      // The service manager (systemd or launchd, from install-host.sh) starts the new release.
+      process.exit(0);
+    },
+  });
 }
