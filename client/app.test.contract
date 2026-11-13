@@ -67,3 +67,25 @@ test "settings show the computer the agent works on"
   expect tree missing "computer-size-2c-4096m"
   expect tree missing "computer-command"
   expect tree has "computer-open-screen"
+
+test "what the imp is asked to remember shows in Settings, reaches its prompt, and can be forgotten"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  expect tree has "memory-empty"
+  tap "tab-chat"
+  type "composer" "Please remember: Lives in Kraków"
+  tap "send"
+  clock until state memory.entries.0.facts.0 == "Lives in Kraków" within 10000
+  clock until state chat.busy == false within 10000
+  type "composer" "What do you know about me?"
+  tap "send"
+  clock until state chat.messages.10.text == "I know: Lives in Kraków" within 10000
+  tap "tab-settings"
+  expect text "memory-title-0" == "You"
+  expect text "memory-fact-0-0" == "Lives in Kraków"
+  tap "memory-forget-0-0"
+  clock until state memory.entries.0.facts.length == 0 within 5000
+  expect tree missing "memory-fact-0-0"
+  tap "memory-forget-0"
+  clock until state memory.entries.length == 0 within 5000
+  expect tree has "memory-empty"

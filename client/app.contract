@@ -39,9 +39,11 @@ shape Account
   error: string
   email: string
   plan: string
-  // The agent's computer rides on the account's stream: a browser opens at most six connections to a host over
-  // HTTP/1.1, and a seventh request (a mutation) would wait for one of the shell's streams to end.
+  // The agent's computer and what the imp remembers ride on the account's stream: a browser opens at most six
+  // connections to a host over HTTP/1.1, and a seventh request (a mutation) would wait for one of the shell's streams
+  // to end.
   computer: Computer
+  memory: Memory
 
 // A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
 shape ChatMessage
@@ -100,6 +102,20 @@ shape Computer
   tailnetError: string
   command: string
   policy: string
+
+// What the imp remembers, one entry per person or thing, as Settings lists it. `kind` is "" for the imp and its person.
+shape MemoryEntry
+  id: string
+  title: string
+  kind: string
+  facts: string[]
+  links: string[]
+
+// The memory system (`name`), where it keeps what it knows, and everything it knows.
+shape Memory
+  name: string
+  location: string
+  entries: MemoryEntry[]
 
 shape Reply
   ok: bool
@@ -187,6 +203,7 @@ component App
   mutation computerRefreshed as shape Reply
   mutation computerRetried as shape Reply
   mutation computerKeySaved as shape Reply
+  mutation forgotten as shape Reply queue
   derive still = media.prefersReducedMotion
   // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
   derive wide = media.width >= 960
@@ -211,6 +228,7 @@ component App
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
   derive computer = account.computer
+  derive memory = account.memory
   derive switchError = match computerSwitched { case some(r) => r.error, case none => "" }
   derive keyError = match computerKeySaved { case some(r) => r.error, case none => "" }
 
@@ -324,6 +342,8 @@ component App
     copyText(computer.command)
   action copyComputerPolicy
     copyText(computer.policy)
+  action forget(entry: string, fact: string)
+    send forgotten = memoryForget(entry, fact)
 
   view
     main navigationKey=`${top(nav).id}` navigate=follow testId="app" width="100%" height="100%"
@@ -478,6 +498,7 @@ component App
                           switchError=(keyError != "" ? keyError : switchError), setCloudKey=setCloudKey,
                           refreshing=pending(computerRefreshed), useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
                           retry=retryComputer, openScreen=openScreen, copyCommand=copyComputerCommand, copyPolicy=copyComputerPolicy)
+                        MemorySettings(memory=memory, forget=forget)
                         column
                           row padding-bottom=10 border-bottom="1px solid ink.strong"
                             text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
@@ -680,6 +701,50 @@ component App
                     text "→" aria-hidden=true
                   text "Uses your ChatGPT Plus or Pro plan. Nothing is billed separately." font-size="0.875rem"
                     font-style="italic" color="ink.muted"
+
+// What the imp remembers, in Settings: who it is, who its person is, and everything else it learned, each fact with
+// a way to forget it.
+component MemorySettings
+  props
+    memory: Memory
+    forget: action
+  view
+    column testId="memory"
+      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+        text "Memory" class=Label color="ink.strong" role="heading" aria-level=2
+        text `No. ${numbered(memory.entries.length)}` class=Label
+      if memory.entries.length == 0
+        text "Nothing yet. Your imp remembers what it learns as you talk: your name, the people and things in your life, how you like things done."
+          font-size="0.9375rem" color="ink.muted" line-height=1.45 padding="14px 0" border-bottom="1px solid line.subtle"
+          testId="memory-empty"
+      for m, j in memory.entries key=m.id
+        column gap=6 padding="14px 0" border-bottom="1px solid line.subtle" testId=`memory-${j}`
+          row align-items="baseline" gap=10
+            text m.title font-family="family.display" font-size="1.375rem" line-height=1.15 flex=1 min-width=0
+              overflow-wrap="anywhere" testId=`memory-title-${j}`
+            if m.kind != ""
+              text m.kind class=Label
+            button press=forget(m.id, "") aria-label=`Forget everything about ${m.title}` testId=`memory-forget-${j}`
+              appearance="none" padding="4px 0" border="none" background-color="transparent" color="ink.muted"
+              :hover
+                color="-exact-system-red"
+              text "Forget" class=Label color="inherit"
+          for f, i in m.facts key=f
+            row align-items="baseline" gap=10
+              text "—" color="ink.faint" aria-hidden=true
+              text f flex=1 min-width=0 font-size="0.9375rem" line-height=1.45 overflow-wrap="break-word"
+                testId=`memory-fact-${j}-${i}`
+              button press=forget(m.id, f) aria-label=`Forget: ${f}` testId=`memory-forget-${j}-${i}` appearance="none"
+                width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
+                border="none" background-color="transparent" color="ink.faint"
+                :hover
+                  color="-exact-system-red"
+                image "symbol:close" width=11 height=11
+          for l in m.links key=l
+            text l font-family="family.mono" font-size="0.75rem" color="ink.muted" padding-left=20
+      if memory.name != ""
+        text `${memory.name}, kept on your host at ${memory.location}.` font-size="0.8125rem" font-style="italic"
+          color="ink.faint" padding-top=10 overflow-wrap="anywhere"
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
 // An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a

@@ -42,6 +42,7 @@ const mutations: Record<MutationSource, true> = {
   accountSignOut: true,
   chatSend: true,
   chatStop: true,
+  memoryForget: true,
   computerUseCloud: true,
   computerUseOwn: true,
   computerRefresh: true,

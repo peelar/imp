@@ -24,6 +24,12 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   name the app's operations) and its server code (`server.ts`, which declares those operations and runs in a worker
   on the agent's computer). The agent finds and runs any app's operations through two tools.
 - **`sdk/`** is the typed surface an app's server code is written against.
+- **Memory.** The imp remembers what it learns about you, and about itself (a name you give it, how it should
+  speak), across conversations, and Settings lists all of it with a way to forget each fact. The default is the Model
+  Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory)
+  used as a library: a knowledge graph in one JSONL file, `memory.jsonl` in the data directory, that you can also open
+  in an editor. Another memory system implements `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()`
+  as `memory`.
 
 ## Apps the imp builds
 

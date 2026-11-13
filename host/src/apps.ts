@@ -33,7 +33,7 @@ import type { Topics } from "./live.ts";
 import type { Machine } from "./machine.ts";
 
 /** Names the shell's own sources use, so no app may take them as its id. */
-const RESERVED = new Set(["chat", "account", "shell", "apps", "machine", "build", "settings"]);
+const RESERVED = new Set(["chat", "account", "shell", "apps", "machine", "build", "settings", "memory"]);
 const CALL_TIMEOUT_MS = 60_000;
 /** How many actions one search returns at most. */
 const FOUND = 20;

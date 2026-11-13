@@ -16,6 +16,8 @@ import { homeChat, TOPIC as CHAT, withAppContext } from "./chat.ts";
 import { type LiveSource, serveLive, Topics } from "./live.ts";
 import { openComputer, TOPIC as COMPUTER } from "./computer.ts";
 import type { MachineProvider } from "./machine.ts";
+import { TOPIC as MEMORY, type MemorySystem } from "./memory.ts";
+import { graphMemory } from "./memory-graph.ts";
 import { screenSockets, serveScreenPage } from "./screen.ts";
 import { chatgptAccount, TOPIC as ACCOUNT } from "./signin.ts";
 import { APPS_TOPIC, BUILD_TOPIC, storedApps, studio } from "./studio.ts";
@@ -41,6 +43,8 @@ export interface HostOptions {
 	readonly port: number;
 	/** The Tailscale login allowed in, such as "adrian@github". Absent: everyone on the tailnet. */
 	readonly owner?: string;
+	/** What the imp remembers about its person, and how (memory.ts). Default: the knowledge graph in memory-graph.ts. */
+	readonly memory?: MemorySystem;
 	/** The running release's tag ("dev" in a checkout). Open pages reload when the host they reconnect to has another. */
 	readonly version?: string;
 	/** The GitHub repository releases come from, which the Mac installer downloads Imp.app from. */
@@ -85,6 +89,9 @@ export async function startHost(options: HostOptions) {
 			],
 		}),
 	);
+	// After the preamble, so the prompt says who the imp is before what it remembers.
+	const memory = (options.memory ?? graphMemory)({ dataDir: DATA, changed: () => topics.changed(MEMORY) });
+	registry.install(memory.extension);
 
 	const stored = storedApps(DATA, options.appsDir, (message) => console.error(message));
 	const gateway = appGateway({
@@ -149,8 +156,18 @@ export async function startHost(options: HostOptions) {
 
 	/** What the shell reads. Each is streamed live; app sources are routed to their app. */
 	function live(source: string, args: unknown[]): LiveSource | undefined {
-		// The shell's streams are few (see Account in client/app.contract), so the computer's state comes with the account.
-		if (source === "account") return { topics: [ACCOUNT, COMPUTER], load: async () => ({ ...account.state(), computer: await computer.load() }) };
+		// The shell's streams are few (see Account in client/app.contract), so the computer's state and what the imp
+		// remembers come with the account.
+		if (source === "account") {
+			return {
+				topics: [ACCOUNT, COMPUTER, MEMORY],
+				load: async () => ({
+					...account.state(),
+					computer: await computer.load(),
+					memory: { name: memory.name, location: memory.location, entries: await memory.inspect() },
+				}),
+			};
+		}
 		if (source === "chat") return { topics: [CHAT], load: () => chat.state() };
 		if (source === "apps") return { topics: [APPS_TOPIC], load: async () => apps.state() };
 		if (source === "build") return { topics: [BUILD_TOPIC], load: async () => ({ id: apps.buildId() }) };
@@ -182,6 +199,10 @@ export async function startHost(options: HostOptions) {
 				await home.submit({ type: "input", content: withAppContext(text, open), whenBusy: "steer" }, context);
 				return ok;
 			}
+			case "memoryForget":
+				// An entry, and one of its facts ("" forgets the whole entry).
+				await memory.forget(String(args[0] ?? ""), args[1] ? String(args[1]) : undefined);
+				return ok;
 			case "chatStop":
 				await home.abort(context);
 				return ok;

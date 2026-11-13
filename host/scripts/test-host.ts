@@ -17,6 +17,14 @@ const respond: FauxResponseFactory = (context) => {
 	const text = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
 	const todo = text.match(/todo: ([^"\\]+)/);
 	if (todo) return fauxAssistantMessage(fauxToolCall("run_app_action", { app: "todos", action: "add", args: { title: todo[1]!.trim() } }), { stopReason: "toolUse" });
+	const fact = text.match(/remember: ([^"\\]+)/);
+	if (fact) return fauxAssistantMessage(fauxToolCall("remember", { about: "user", facts: [fact[1]!.trim()] }), { stopReason: "toolUse" });
+	// "What do you know about me?" answers with what the memory section put in the system prompt, latest version last.
+	if (/know about me/.test(text)) {
+		const sections = context.messages.flatMap((m) => (m.role === "system" && m.sections?.memory ? [m.sections.memory] : []));
+		const known = sections.at(-1)?.match(/about the person:\n([^]*?)(?:\n\n|\n<\/memory>|$)/)?.[1]?.trim();
+		return fauxAssistantMessage(known ? `I know: ${known.replace(/^- /gm, "").replace(/\n/g, "; ")}` : "Nothing yet.");
+	}
 	return fauxAssistantMessage("Hello from the test model.");
 };
 
