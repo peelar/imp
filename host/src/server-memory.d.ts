@@ -1,20 +1,20 @@
 // Types for the part of @modelcontextprotocol/server-memory the default memory uses (the package ships JavaScript
 // only). The knowledge graph file holds one JSON object per line: entities, then relations.
 declare module "@modelcontextprotocol/server-memory/dist/index.js" {
-  export interface Entity {
+  export type Entity = {
     name: string;
     entityType: string;
     observations: string[];
-  }
-  export interface Relation {
+  };
+  export type Relation = {
     from: string;
     to: string;
     relationType: string;
-  }
-  export interface KnowledgeGraph {
+  };
+  export type KnowledgeGraph = {
     entities: Entity[];
     relations: Relation[];
-  }
+  };
   /** Every mutation reads the file, changes it, and replaces it atomically, one at a time, under a lock file. */
   export class KnowledgeGraphManager {
     constructor(memoryFilePath: string);

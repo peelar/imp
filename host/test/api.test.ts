@@ -13,7 +13,7 @@ const isRow = (value: unknown): value is Row =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const freePort = async () =>
-  new Promise<number>((resolve, reject) => {
+  await new Promise<number>((resolve, reject) => {
     const server = createServer();
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -74,9 +74,11 @@ async function until<T>(
   timeoutMs = 10_000
 ): Promise<T> {
   const controller = new AbortController();
+
   const timer = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
+
   let last: unknown;
 
   try {
@@ -102,7 +104,7 @@ async function until<T>(
   );
 }
 
-const first = async (source: string) => until(source, (answer) => answer);
+const first = async (source: string) => await until(source, (answer) => answer);
 
 async function call(
   source: string,
@@ -125,8 +127,9 @@ const todoTitles = (answer: unknown) => rows(answer).map((todo) => todo.title);
 /** The account once it has this status, without the computer that rides on the same stream. */
 const withStatus = (status: string) => (answer: unknown) => {
   if (!isRow(answer) || answer.status !== status) {
-    return undefined;
+    return;
   }
+
   const { computer: _computer, ...account } = answer;
 
   return account;
@@ -136,8 +139,9 @@ const withStatus = (status: string) => (answer: unknown) => {
 const settledChat =
   (accept: (messages: Row[]) => boolean) => (answer: unknown) => {
     if (!isRow(answer) || answer.busy !== false) {
-      return undefined;
+      return;
     }
+
     const messages = rows(answer.messages);
 
     return accept(messages) ? messages : undefined;
@@ -148,7 +152,7 @@ before(async () => {
 
   // Keep reading after the host listens: the machine runtime shares this pipe and stops when nobody reads it.
   host.stdout.on("data", (chunk: Buffer) => {
-    if (chunk.toString("utf8").includes("host on http://")) {
+    if (chunk.toString("utf-8").includes("host on http://")) {
       listening.resolve(undefined);
     }
   });

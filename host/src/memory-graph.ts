@@ -30,8 +30,10 @@ import type { MemoryEntry, MemorySystem } from "./memory.ts";
 
 /** The person the imp works for. */
 export const USER = "user";
+
 /** The imp itself. */
 export const SELF = "imp";
+
 /** How many other entities the prompt names; the agent recalls the rest. */
 const NAMED = 60;
 
@@ -52,45 +54,57 @@ Keep each fact short and on its own. Use a name the graph already has when you m
 type Run = { first: EntryId; last: EntryId };
 
 /** The changes reflection asks for; whatever else the model answers is ignored. */
-interface Reflection {
+type Reflection = {
   remember: { about: string; kind?: string; facts: string[] }[];
   relate: { from: string; relation: string; to: string }[];
   forget: { about: string; fact: string }[];
-}
+};
 
 /** The model's answer as changes: the first JSON object in it, with every field checked. */
 function readReflection(answer: string): Reflection {
   const none: Reflection = { remember: [], relate: [], forget: [] };
   const json = answer.slice(answer.indexOf("{"), answer.lastIndexOf("}") + 1);
   let value: unknown;
+
   try {
     value = JSON.parse(json);
   } catch {
     return none;
   }
-  if (typeof value !== "object" || value === null) return none;
+
+  if (typeof value !== "object" || value === null) {
+    return none;
+  }
+
   const record = value as Record<string, unknown>;
+
   const list = (key: string) =>
     Array.isArray(record[key]) ? (record[key] as unknown[]) : [];
+
   const words = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
   const item = (v: unknown) =>
     typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
+
   return {
     remember: list("remember").flatMap((v) => {
       const { about, kind, facts } = item(v);
       const kept = Array.isArray(facts) ? facts.map(words).filter(Boolean) : [];
+
       return words(about) && kept.length
         ? [{ about: words(about), kind: words(kind), facts: kept }]
         : [];
     }),
     relate: list("relate").flatMap((v) => {
       const { from, relation, to } = item(v);
+
       return words(from) && words(relation) && words(to)
         ? [{ from: words(from), relation: words(relation), to: words(to) }]
         : [];
     }),
     forget: list("forget").flatMap((v) => {
       const { about, fact } = item(v);
+
       return words(about) && words(fact)
         ? [{ about: words(about), fact: words(fact) }]
         : [];
@@ -99,6 +113,7 @@ function readReflection(answer: string): Reflection {
 }
 
 type Part = { type: string; text?: string };
+
 const messageText = (content: unknown): string =>
   typeof content === "string"
     ? content
@@ -125,6 +140,7 @@ const bullets = (facts: readonly string[]) =>
 export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
   const file = join(dataDir, "memory.jsonl");
   const graph = new KnowledgeGraphManager(file);
+
   const find = (all: KnowledgeGraph, name: string) =>
     all.entities.find((entity) => entity.name === name);
 
@@ -133,30 +149,34 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
     const all = await graph.readGraph();
     const self = find(all, SELF)?.observations ?? [];
     const user = find(all, USER)?.observations ?? [];
+
     const others = all.entities.filter(
       (entity) => entity.name !== SELF && entity.name !== USER
     );
+
     const parts = [GUIDANCE];
     parts.push(
       self.length
         ? `What you remember about yourself:\n${bullets(self)}`
-        : "You remember nothing about yourself yet."
-    );
-    parts.push(
+        : "You remember nothing about yourself yet.",
       user.length
         ? `What you remember about the person:\n${bullets(user)}`
         : "You remember nothing about the person yet."
     );
+
     if (others.length) {
       const names = others
         .slice(0, NAMED)
         .map((entity) => `${entity.name} (${entity.entityType})`);
+
       const more =
         others.length > NAMED ? `, and ${others.length - NAMED} more` : "";
+
       parts.push(
         `You also remember (recall them for what you know): ${names.join(", ")}${more}.`
       );
     }
+
     return parts.join("\n\n");
   }
 
@@ -182,6 +202,7 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
       const name = about.trim();
       const added = await rememberFacts(name, kind, facts);
       changed();
+
       return text(
         added
           ? `Remembered ${added} new fact${added === 1 ? "" : "s"} about ${name}.`
@@ -200,24 +221,31 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
     await graph.createEntities([
       { name, entityType: kind?.trim() || fallback, observations: [] },
     ]);
+
     const [result] = await graph.addObservations([
       {
         entityName: name,
         contents: facts.map((fact) => fact.trim()).filter(Boolean),
       },
     ]);
+
     return result?.addedObservations.length ?? 0;
   }
 
   /** The graph as reflection reads it: every entry with its facts and relations. */
   async function graphText(): Promise<string> {
     const all = await graph.readGraph();
-    if (!all.entities.length) return "The graph is empty.";
+
+    if (!all.entities.length) {
+      return "The graph is empty.";
+    }
+
     return all.entities
       .map((entity) => {
         const links = all.relations
           .filter((r) => r.from === entity.name)
           .map((r) => `- ${r.relationType} → ${r.to}`);
+
         return [
           `${entity.name} (${entity.entityType})`,
           ...entity.observations.map((fact) => `- ${fact}`),
@@ -238,28 +266,43 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
       maxEntryId: input.last,
       order: "ascending",
     } as const;
+
     const lines: string[] = [];
     let cursor: Parameters<typeof runtime.entries>[2];
+
     do {
       const page = await runtime.entries(range, 200, cursor, context);
+
       for (const entry of page.items) {
         const message = entry.model?.[0] as
           | { role?: string; content?: unknown }
           | undefined;
+
         const said = messageText(message?.content);
-        if (!said) continue;
-        if (entry.kind === "pi.user") lines.push(`Person: ${said}`);
-        else if (entry.kind === "pi.assistant") lines.push(`Imp: ${said}`);
+
+        if (!said) {
+          continue;
+        }
+
+        if (entry.kind === "pi.user") {
+          lines.push(`Person: ${said}`);
+        } else if (entry.kind === "pi.assistant") {
+          lines.push(`Imp: ${said}`);
+        }
       }
+
       cursor = page.next;
     } while (cursor !== undefined);
+
     const all = lines.join("\n\n");
+
     return all.length > RUN_CHARS ? all.slice(-RUN_CHARS) : all;
   }
 
   /** Applies what reflection found; whether anything changed. */
   async function apply(found: Reflection): Promise<boolean> {
     let changes = 0;
+
     for (const { about, fact } of found.forget) {
       changes += (
         await graph.deleteObservations([
@@ -267,8 +310,11 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
         ])
       ).deletedCount;
     }
-    for (const { about, kind, facts } of found.remember)
+
+    for (const { about, kind, facts } of found.remember) {
       changes += await rememberFacts(about, kind, facts);
+    }
+
     for (const { from, relation, to } of found.relate) {
       // A relation to something never remembered is dropped: the graph refuses it.
       changes += (
@@ -277,6 +323,7 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
           .catch(() => [])
       ).length;
     }
+
     return changes > 0;
   }
 
@@ -293,8 +340,10 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
         try {
           const said = await exchange(runtime, task.input, context);
           const ref = (await runtime.agent(context)).model;
+
           const model =
             ref && runtime.models.getModel(ref.provider, ref.modelId);
+
           if (said && model) {
             const answer = await runtime.models.completeSimple(
               model,
@@ -310,17 +359,26 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
               },
               { signal: runtime.signal }
             );
-            if (answer.errorMessage) throw new Error(answer.errorMessage);
-            if (await apply(readReflection(messageText(answer.content))))
+
+            if (answer.errorMessage) {
+              throw new Error(answer.errorMessage);
+            }
+
+            if (await apply(readReflection(messageText(answer.content)))) {
               changed();
+            }
           }
         } catch (error) {
-          if (runtime.signal.aborted) throw error;
+          if (runtime.signal.aborted) {
+            throw error;
+          }
+
           // Memory is a nicety: a failed reflection forgets this run, it never fails anything else.
           console.error(
             `memory: reflecting on a run failed: ${error instanceof Error ? error.message : error}`
           );
         }
+
         await runtime.commit(
           () => ({
             status: "terminal",
@@ -330,8 +388,8 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
         );
       },
     },
-    abort: (_task, runtime, context) =>
-      runtime.commit(
+    abort: async (_task, runtime, context) =>
+      await runtime.commit(
         () => ({ status: "terminal", outcome: { status: "aborted" } }),
         context
       ),
@@ -343,20 +401,21 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
     version: 1,
     initial: () => ({ phase: "start" }),
     phases: {
-      start: (task, runtime, context) =>
-        runtime.commit(async (tx) => {
+      start: async (task, runtime, context) =>
+        await runtime.commit(async (tx) => {
           await tx.createTask(Reflect, task.input, {
             ownership: { kind: "conversation" },
             background: true,
           });
+
           return {
             status: "terminal",
             outcome: { status: "completed", result: null },
           };
         }, context),
     },
-    abort: (_task, runtime, context) =>
-      runtime.commit(
+    abort: async (_task, runtime, context) =>
+      await runtime.commit(
         () => ({ status: "terminal", outcome: { status: "aborted" } }),
         context
       ),
@@ -384,6 +443,7 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
         { from: from.trim(), to: to.trim(), relationType: relation.trim() },
       ]);
       changed();
+
       return text(`Remembered: ${from} ${relation} ${to}.`);
     },
   });
@@ -399,6 +459,7 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
     }),
     execute: async ({ query }) => {
       const found = await graph.searchNodes(query.trim(), { limit: 20 });
+
       return text(
         found.entities.length ? found : `Nothing in memory matches "${query}".`
       );
@@ -415,16 +476,20 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
     }),
     execute: async ({ about, fact }) => {
       await forgetEntry(about.trim(), fact);
+
       return text(fact ? `Forgot that about ${about}.` : `Forgot ${about}.`);
     },
   });
 
   async function forgetEntry(name: string, fact: string | undefined) {
-    if (fact)
+    if (fact) {
       await graph.deleteObservations([
         { entityName: name, observations: [fact] },
       ]);
-    else await graph.deleteEntities([name]);
+    } else {
+      await graph.deleteEntities([name]);
+    }
+
     changed();
   }
 
@@ -436,13 +501,14 @@ export const graphMemory: MemorySystem = ({ dataDir, changed }) => {
     location: file,
     extension: defineExtension({
       name: "memory",
-      sections: [section("memory", () => prompt())],
+      sections: [section("memory", async () => await prompt())],
       tools: [remember, relate, recall, forget],
       tasks: [StartReflect, Reflect],
       hooks: [reflectAfterRuns],
     }),
     async inspect(): Promise<MemoryEntry[]> {
       const all = await graph.readGraph();
+
       return [...all.entities]
         .sort((a, b) => order(a) - order(b))
         .map((entity) => ({

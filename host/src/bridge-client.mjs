@@ -5,22 +5,33 @@ import WebSocket from "ws";
 
 const [bridgeUrl, headersJson, ...args] = process.argv.slice(2);
 const url = new URL(bridgeUrl);
+
 url.searchParams.set("args", JSON.stringify(args));
 
 const ws = new WebSocket(url, { headers: JSON.parse(headersJson) });
 const pending = [];
+
 ws.on("open", () => {
-  for (const chunk of pending.splice(0)) ws.send(chunk);
+  for (const chunk of pending.splice(0)) {
+    ws.send(chunk);
+  }
 });
+
 process.stdin.on("data", (chunk) =>
   ws.readyState === WebSocket.OPEN ? ws.send(chunk) : pending.push(chunk)
 );
-process.stdin.on("end", () => ws.close());
+
+process.stdin.on("end", () => {
+  ws.close();
+});
+
 ws.on("message", (data) => {
   const bytes = Buffer.from(data);
   (bytes[0] === 2 ? process.stderr : process.stdout).write(bytes.subarray(1));
 });
+
 ws.on("close", () => process.exit(0));
+
 ws.on("error", (error) => {
   process.stderr.write(`bridge: ${error.message}\n`);
   process.exit(1);

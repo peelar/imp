@@ -17,6 +17,7 @@ export default {
           title: string;
           done: number;
         }>("SELECT id, title, done FROM todos ORDER BY id");
+
         return rows.map((row) => ({
           id: String(row.id),
           title: row.title,
@@ -30,8 +31,13 @@ export default {
       params: { title: { type: "string" } },
       run: async ({ title }, app) => {
         const text = String(title).trim();
-        if (!text) return { ok: false, error: "A todo needs a title." };
+
+        if (!text) {
+          return { ok: false, error: "A todo needs a title." };
+        }
+
         await app.db.run("INSERT INTO todos (title) VALUES (?)", text);
+
         return { ok: true, error: "" };
       },
     },
@@ -45,6 +51,7 @@ export default {
           done ? 1 : 0,
           Number(id)
         );
+
         return changes > 0
           ? { ok: true, error: "" }
           : { ok: false, error: `No todo with id ${id}.` };
@@ -59,6 +66,7 @@ export default {
           "DELETE FROM todos WHERE id = ?",
           Number(id)
         );
+
         return changes > 0
           ? { ok: true, error: "" }
           : { ok: false, error: `No todo with id ${id}.` };

@@ -20,18 +20,25 @@ const respond: FauxResponseFactory = (context) => {
   const last = context.messages.at(-1) as
     | { role: string; content: unknown }
     | undefined;
-  if (last?.role === "toolResult") return fauxAssistantMessage("Done.");
+
+  if (last?.role === "toolResult") {
+    return fauxAssistantMessage("Done.");
+  }
+
   const text =
     typeof last?.content === "string"
       ? last.content
       : JSON.stringify(last?.content ?? "");
+
   // Memory's reflection after a run: "I live in <place>" anywhere in the exchange is a fact about the person.
   const first = context.messages[0];
+
   if (
     first?.role === "system" &&
     JSON.stringify(first.content).includes("long-term memory of Imp")
   ) {
-    const place = text.match(/I live in (\p{L}+)/u)?.[1];
+    const place = /I live in (\p{L}+)/u.exec(text)?.[1];
+
     return fauxAssistantMessage(
       JSON.stringify({
         remember: place
@@ -40,37 +47,47 @@ const respond: FauxResponseFactory = (context) => {
       })
     );
   }
-  const todo = text.match(/todo: ([^"\\]+)/);
-  if (todo)
+
+  const todo = /todo: ([^"\\]+)/.exec(text);
+
+  if (todo) {
     return fauxAssistantMessage(
       fauxToolCall("run_app_action", {
         app: "todos",
         action: "add",
-        args: { title: todo[1]!.trim() },
+        args: { title: todo[1].trim() },
       }),
       { stopReason: "toolUse" }
     );
-  const fact = text.match(/remember: ([^"\\]+)/);
-  if (fact)
+  }
+
+  const fact = /remember: ([^"\\]+)/.exec(text);
+
+  if (fact) {
     return fauxAssistantMessage(
-      fauxToolCall("remember", { about: "user", facts: [fact[1]!.trim()] }),
+      fauxToolCall("remember", { about: "user", facts: [fact[1].trim()] }),
       { stopReason: "toolUse" }
     );
+  }
+
   // "What do you know about me?" answers with what the memory section put in the system prompt, latest version last.
-  if (/know about me/.test(text)) {
+  if (text.includes("know about me")) {
     const sections = context.messages.flatMap((m) =>
       m.role === "system" && m.sections?.memory ? [m.sections.memory] : []
     );
+
     const known = sections
       .at(-1)
       ?.match(/about the person:\n([^]*?)(?:\n\n|\n<\/memory>|$)/)?.[1]
       ?.trim();
+
     return fauxAssistantMessage(
       known
-        ? `I know: ${known.replace(/^- /gm, "").replace(/\n/g, "; ")}`
+        ? `I know: ${known.replaceAll(/^- /gm, "").replaceAll("\n", "; ")}`
         : "Nothing yet."
     );
   }
+
   return fauxAssistantMessage("Hello from the test model.");
 };
 
@@ -79,6 +96,7 @@ const faux = fauxProvider({
   models: [{ id: "faux-1" }],
   tokensPerSecond: 200,
 });
+
 faux.setResponses(Array.from({ length: 500 }, () => respond));
 
 // A ChatGPT sign-in shaped like the real device code flow: it asks for the method, shows a code, then succeeds.
@@ -86,17 +104,20 @@ const claims = {
   email: "tester@example.com",
   "https://api.openai.com/auth": { chatgpt_plan_type: "plus" },
 };
+
 const access = [
   "e30",
   Buffer.from(JSON.stringify(claims)).toString("base64url"),
   "sig",
 ].join(".");
+
 const credential = () => ({
   type: "oauth" as const,
   access,
   refresh: "refresh",
   expires: Date.now() + 3_600_000,
 });
+
 const auth: Provider["auth"] = {
   oauth: {
     name: "ChatGPT (test)",
@@ -116,24 +137,30 @@ const auth: Provider["auth"] = {
           resolve,
           Number(process.env.TEST_SIGNIN_MS ?? 1500)
         );
+
         interaction.signal.addEventListener(
           "abort",
           () => (clearTimeout(timer), reject(new Error("Login cancelled")))
         );
       });
+
       return credential();
     },
     refresh: async () => credential(),
     toAuth: async (stored) => ({ apiKey: stored.access }),
   },
 };
+
 const chatgpt = new Proxy(faux.provider, {
   get: (target, key) => (key === "auth" ? auth : Reflect.get(target, key)),
 });
 
 const models = createModels();
+
 models.setProvider(chatgpt);
+
 const dataDir = mkdtempSync(join(tmpdir(), "imp-test-"));
+
 await startHost({
   models,
   model: { provider: CHATGPT, modelId: "faux-1" },

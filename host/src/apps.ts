@@ -55,23 +55,28 @@ const RESERVED = new Set([
   "settings",
   "memory",
 ]);
+
 const CALL_TIMEOUT_MS = 60_000;
+
 /** How many actions one search returns at most. */
 const FOUND = 20;
+
 /** Operation and parameter names: camelCase, so the shell's `todosSetDone` names the todos app's `setDone`. */
 const NAME = /^[a-z][A-Za-z0-9]*$/;
+
 /** App ids: lowercase letters and digits, so `todosSetDone` splits into the app and its operation. */
 export const APP_ID = /^[a-z][a-z0-9]*$/;
 
 /** The files of an app's folder. */
-export interface AppFiles {
+export type AppFiles = {
   readonly "app.json": string;
   readonly "app.contract": string;
   readonly "server.ts": string;
-}
+};
+
 export const APP_FILES = ["app.json", "app.contract", "server.ts"] as const;
 
-export interface AppInfo {
+export type AppInfo = {
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -83,7 +88,7 @@ export interface AppInfo {
   /** server.ts without its types: what the worker runs. */
   readonly code: string;
   readonly hash: string;
-}
+};
 
 type Param =
   | {
@@ -99,28 +104,28 @@ type Param =
     };
 
 /** An operation as the worker reports it; checked on load (see `checkManifest`). */
-export interface Operation {
+export type Operation = {
   name: string;
   kind: "read" | "write";
   description: string;
   params: Record<string, Param>;
   /** Whether the agent may find and run it. */
   agent: boolean;
-}
+};
 
-export interface Manifest {
+export type Manifest = {
   schema: string[];
   operations: Operation[];
-}
+};
 
 /** A loaded version of an app: its manifest, and each operation with the check for its arguments. */
-interface Loaded {
+type Loaded = {
   readonly manifest: Manifest;
   readonly operations: ReadonlyMap<
     string,
     { readonly operation: Operation; readonly args: Validator }
   >;
-}
+};
 
 type FromMachine =
   | { t: "loaded"; app: string; hash: string; manifest: Manifest }
@@ -138,6 +143,7 @@ type FromMachine =
 
 /** Where an app's draft runs. */
 export const draftSlot = (id: string) => `${id}~draft`;
+
 /** Where a version is tried before it becomes the draft. */
 export const checkSlot = (id: string) => `${id}~check`;
 
@@ -150,27 +156,35 @@ export function appInfo(files: AppFiles, id: string): AppInfo {
     symbol?: unknown;
     cover?: unknown;
   };
+
   try {
     meta = JSON.parse(files["app.json"]);
   } catch (error) {
     throw new Error(
-      `apps/${id}/app.json is not JSON: ${error instanceof Error ? error.message : error}`
+      `apps/${id}/app.json is not JSON: ${error instanceof Error ? error.message : error}`,
+      { cause: error }
     );
   }
+
   if (meta.id !== id || !APP_ID.test(id) || RESERVED.has(id)) {
     throw new Error(
       `apps/${id}/app.json's id must be "${id}", the folder's name: lowercase letters and digits, and not ${[...RESERVED].join(", ")}.`
     );
   }
+
   let code: string;
+
   try {
     code = stripTypeScriptTypes(files["server.ts"], { mode: "strip" });
   } catch (error) {
     throw new Error(
-      `apps/${id}/server.ts does not parse: ${error instanceof Error ? error.message : error}`
+      `apps/${id}/server.ts does not parse: ${error instanceof Error ? error.message : error}`,
+      { cause: error }
     );
   }
+
   const text = (value: unknown) => (typeof value === "string" ? value : "");
+
   return {
     id,
     name: text(meta.name) || id,
@@ -188,18 +202,21 @@ export function appInfo(files: AppFiles, id: string): AppInfo {
 /** The files of the app folder at `folder`. */
 export const readAppFiles = (folder: string): AppFiles =>
   Object.fromEntries(
-    APP_FILES.map((name) => [name, readFileSync(join(folder, name), "utf8")])
+    APP_FILES.map((name) => [name, readFileSync(join(folder, name), "utf-8")])
   ) as unknown as AppFiles;
 
 /** Reads every app folder under `dir`. */
 export function readApps(dir: string): AppInfo[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir)) {
+    return [];
+  }
+
   return readdirSync(dir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => appInfo(readAppFiles(join(dir, entry.name)), entry.name));
 }
 
-export interface GatewayOptions {
+export type GatewayOptions = {
   /** The live apps to start with. */
   readonly apps: readonly AppInfo[];
   readonly dataDir: string;
@@ -207,35 +224,52 @@ export interface GatewayOptions {
   readonly registry: Registry;
   readonly machine: () => Promise<Machine>;
   readonly log?: (message: string) => void;
-}
+};
 
 export function appGateway(options: GatewayOptions) {
-  const log = options.log ?? ((message) => console.log(message));
+  const log =
+    options.log ??
+    ((message) => {
+      console.log(message);
+    });
+
   /** Slot -> the version that runs there. */
   const slots = new Map<string, AppInfo>(
     options.apps.map((app) => [app.id, app])
   );
+
   const dataDir = join(options.dataDir, "apps");
   mkdirSync(dataDir, { recursive: true });
   const dataPath = (slot: string) => join(dataDir, `${slot}.sqlite`);
   const databases = new Map<string, DatabaseSync>();
+
   const database = (slot: string) => {
     let db = databases.get(slot);
-    if (!db) databases.set(slot, (db = new DatabaseSync(dataPath(slot))));
+
+    if (!db) {
+      databases.set(slot, (db = new DatabaseSync(dataPath(slot))));
+    }
+
     return db;
   };
+
   const closeData = (slot: string) => {
     databases.get(slot)?.close();
     databases.delete(slot);
   };
+
   const removeData = (slot: string) => {
     closeData(slot);
-    for (const suffix of ["", "-wal", "-shm", "-journal"])
+
+    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
       rmSync(`${dataPath(slot)}${suffix}`, { force: true });
+    }
   };
+
   /** The live and draft slots: the ones the shell and the agent reach (a check slot is the host's own). */
   const live = () =>
     [...slots].filter(([slot, app]) => slot === app.id).map(([, app]) => app);
+
   const reachable = (id: string) => slots.has(id) || slots.has(draftSlot(id));
 
   let socket: WebSocket | undefined;
@@ -244,10 +278,12 @@ export function appGateway(options: GatewayOptions) {
   const loaded = new Map<string, Loaded>();
   /** Per slot: why its current version failed to load on this connection. */
   const failures = new Map<string, Error>();
+
   const loadWaiters = new Map<
     string,
     { resolve: (l: Loaded) => void; reject: (e: Error) => void }[]
   >();
+
   const calls = new Map<
     string,
     {
@@ -257,31 +293,45 @@ export function appGateway(options: GatewayOptions) {
     }
   >();
 
-  const sendLoad = (ws: WebSocket, slot: string, app: AppInfo) =>
+  const sendLoad = (ws: WebSocket, slot: string, app: AppInfo) => {
     ws.send(
       JSON.stringify({ t: "load", app: slot, hash: app.hash, code: app.code })
     );
+  };
 
-  function connect(): Promise<WebSocket> {
-    if (socket?.readyState === WebSocket.OPEN) return Promise.resolve(socket);
-    return (connecting ??= (async () => {
+  async function connect(): Promise<WebSocket> {
+    if (socket?.readyState === WebSocket.OPEN) {
+      return socket;
+    }
+
+    return await (connecting ??= (async () => {
       const endpoint = await (await options.machine()).appSocket();
+
       const ws = new WebSocket(endpoint.url, {
         headers: { ...endpoint.headers },
         maxPayload: 64 * 1024 * 1024,
       });
+
       await new Promise<void>((resolve, reject) => {
         ws.once("open", resolve);
         ws.once("error", reject);
       });
-      ws.on("message", (data) =>
-        onMessage(ws, JSON.parse(String(data)) as FromMachine)
-      );
-      ws.on("close", () => onClose(ws));
-      ws.on("error", (error) => log(`app socket: ${error.message}`));
+      ws.on("message", (data) => {
+        onMessage(ws, JSON.parse(String(data)) as FromMachine);
+      });
+      ws.on("close", () => {
+        onClose(ws);
+      });
+      ws.on("error", (error) => {
+        log(`app socket: ${error.message}`);
+      });
       socket = ws;
+
       // The machine's processes may not survive: load every app on every connection. agentd skips an unchanged one.
-      for (const [slot, app] of slots) sendLoad(ws, slot, app);
+      for (const [slot, app] of slots) {
+        sendLoad(ws, slot, app);
+      }
+
       return ws;
     })().finally(() => {
       connecting = undefined;
@@ -289,20 +339,29 @@ export function appGateway(options: GatewayOptions) {
   }
 
   function onClose(ws: WebSocket) {
-    if (socket !== ws) return;
+    if (socket !== ws) {
+      return;
+    }
+
     socket = undefined;
     loaded.clear();
     failures.clear();
+
     const lost = new Error(
       "The connection to the agent's machine was lost; try again."
     );
+
     for (const [id, call] of calls) {
       clearTimeout(call.timer);
       call.reject(lost);
       calls.delete(id);
     }
+
     for (const [slot, waiters] of loadWaiters) {
-      for (const waiter of waiters) waiter.reject(lost);
+      for (const waiter of waiters) {
+        waiter.reject(lost);
+      }
+
       loadWaiters.delete(slot);
     }
   }
@@ -310,24 +369,36 @@ export function appGateway(options: GatewayOptions) {
   function onMessage(ws: WebSocket, message: FromMachine) {
     if (message.t === "loaded") {
       const app = slots.get(message.app);
-      if (!app || app.hash !== message.hash) return;
+
+      if (!app || app.hash !== message.hash) {
+        return;
+      }
+
       let version: Loaded;
+
       try {
         version = checkManifest(app.id, message.manifest);
         migrate(message.app, app.id, message.manifest.schema);
       } catch (error) {
-        return settleLoad(
+        settleLoad(
           message.app,
           error instanceof Error ? error : new Error(String(error))
         );
+
+        return;
       }
+
       loaded.set(message.app, version);
       settleLoad(message.app, version);
       // A new version may answer differently: refresh the app's open views.
       options.topics.changed(`app:${app.id}`);
     } else if (message.t === "loadFailed") {
       const app = slots.get(message.app);
-      if (!app || app.hash !== message.hash) return;
+
+      if (!app || app.hash !== message.hash) {
+        return;
+      }
+
       log(`app ${message.app} failed to load: ${message.error}`);
       settleLoad(
         message.app,
@@ -337,13 +408,22 @@ export function appGateway(options: GatewayOptions) {
       );
     } else if (message.t === "result") {
       const call = calls.get(message.id);
-      if (!call) return;
+
+      if (!call) {
+        return;
+      }
+
       calls.delete(message.id);
       clearTimeout(call.timer);
-      if (message.ok) call.resolve(message.value ?? null);
-      else call.reject(new Error(message.error ?? "The app failed."));
+
+      if (message.ok) {
+        call.resolve(message.value ?? null);
+      } else {
+        call.reject(new Error(message.error ?? "The app failed."));
+      }
     } else if (message.t === "db") {
       let reply: object;
+
       try {
         reply = {
           t: "dbResult",
@@ -359,42 +439,60 @@ export function appGateway(options: GatewayOptions) {
           error: error instanceof Error ? error.message : String(error),
         };
       }
+
       ws.send(JSON.stringify(reply));
     }
   }
 
   function settleLoad(slot: string, result: Loaded | Error) {
-    if (result instanceof Error) failures.set(slot, result);
-    else failures.delete(slot);
-    for (const waiter of loadWaiters.get(slot) ?? []) {
-      if (result instanceof Error) waiter.reject(result);
-      else waiter.resolve(result);
+    if (result instanceof Error) {
+      failures.set(slot, result);
+    } else {
+      failures.delete(slot);
     }
+
+    for (const waiter of loadWaiters.get(slot) ?? []) {
+      if (result instanceof Error) {
+        waiter.reject(result);
+      } else {
+        waiter.resolve(result);
+      }
+    }
+
     loadWaiters.delete(slot);
   }
 
   function runDb(slot: string, message: Extract<FromMachine, { t: "db" }>) {
     const app = slots.get(slot);
-    if (!app) throw new Error(`no app ${slot}`);
+
+    if (!app) {
+      throw new Error(`no app ${slot}`);
+    }
+
     const db = database(slot);
     const before = totalChanges(db);
+
     const run = (sql: string, params: SQLInputValue[] = []) => {
       const result = db.prepare(sql).run(...params);
+
       return {
         changes: Number(result.changes),
         lastInsertRowid: Number(result.lastInsertRowid),
       };
     };
+
     let value: unknown;
-    if (message.op === "all")
+
+    if (message.op === "all") {
       value = db.prepare(message.sql ?? "").all(...(message.params ?? []));
-    else if (message.op === "get")
+    } else if (message.op === "get") {
       value =
         db.prepare(message.sql ?? "").get(...(message.params ?? [])) ?? null;
-    else if (message.op === "run")
+    } else if (message.op === "run") {
       value = run(message.sql ?? "", message.params);
-    else {
+    } else {
       db.exec("BEGIN");
+
       try {
         value = (message.statements ?? []).map((statement) =>
           run(statement.sql, statement.params)
@@ -405,7 +503,11 @@ export function appGateway(options: GatewayOptions) {
         throw error;
       }
     }
-    if (totalChanges(db) !== before) options.topics.changed(`app:${app.id}`);
+
+    if (totalChanges(db) !== before) {
+      options.topics.changed(`app:${app.id}`);
+    }
+
     return value;
   }
 
@@ -413,21 +515,31 @@ export function appGateway(options: GatewayOptions) {
   function migrate(slot: string, id: string, schema: readonly string[]) {
     const db = database(slot);
     const version = schemaVersion(slot);
+
     if (version > schema.length) {
       throw new Error(
         `The ${id} app's data has ${version} migrations, but this version of the app has only ${schema.length}. Keep every migration and add new ones at the end.`
       );
     }
-    if (version === schema.length) return;
+
+    if (version === schema.length) {
+      return;
+    }
+
     db.exec("BEGIN");
+
     try {
-      for (const sql of schema.slice(version)) db.exec(sql);
+      for (const sql of schema.slice(version)) {
+        db.exec(sql);
+      }
+
       db.exec(`PRAGMA user_version = ${schema.length}`);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
       throw new Error(
-        `The ${id} app's migrations failed: ${error instanceof Error ? error.message : error}`
+        `The ${id} app's migrations failed: ${error instanceof Error ? error.message : error}`,
+        { cause: error }
       );
     }
   }
@@ -446,7 +558,11 @@ export function appGateway(options: GatewayOptions) {
   ): Promise<{ ws: WebSocket; version: Loaded }> {
     const ws = await connect();
     const failure = failures.get(slot);
-    if (failure) throw failure;
+
+    if (failure) {
+      throw failure;
+    }
+
     const version =
       loaded.get(slot) ??
       (await new Promise<Loaded>((resolve, reject) => {
@@ -454,6 +570,7 @@ export function appGateway(options: GatewayOptions) {
         waiters.push({ resolve, reject });
         loadWaiters.set(slot, waiters);
       }));
+
     return { ws, version };
   }
 
@@ -465,31 +582,44 @@ export function appGateway(options: GatewayOptions) {
     who: { kind?: Operation["kind"]; agent?: boolean } = {}
   ) {
     const app = slots.get(slot);
-    if (!app)
+
+    if (!app) {
       throw new Error(`There is no ${slot.replace("~draft", " draft")} app.`);
-    const id = app.id;
+    }
+
+    const { id } = app;
     const { ws, version } = await ready(slot);
     const entry = version.operations.get(name);
-    if (!entry)
+
+    if (!entry) {
       throw new Error(`The ${id} app has no operation named ${name}.`);
+    }
+
     if (who.kind && entry.operation.kind !== who.kind) {
       throw new Error(
         `The ${id} app's ${name} is a ${entry.operation.kind}, not a ${who.kind}.`
       );
     }
-    if (who.agent && !entry.operation.agent)
+
+    if (who.agent && !entry.operation.agent) {
       throw new Error(`The ${id} app keeps ${name} from the agent.`);
+    }
+
     const errors = entry.args.errors(args);
+
     if (errors.length > 0) {
       const why = errors
         .map((e) => `${e.path || "args"}: ${e.message}`)
         .join("; ");
+
       throw new Error(
         `The ${id} app's ${name} was called with arguments it does not take: ${why}.`
       );
     }
+
     const callId = randomUUID();
-    return new Promise<unknown>((resolve, reject) => {
+
+    return await new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         calls.delete(callId);
         reject(
@@ -498,6 +628,7 @@ export function appGateway(options: GatewayOptions) {
           )
         );
       }, CALL_TIMEOUT_MS);
+
       calls.set(callId, { resolve, reject, timer });
       ws.send(JSON.stringify({ t: "call", id: callId, app: slot, name, args }));
     });
@@ -516,23 +647,37 @@ export function appGateway(options: GatewayOptions) {
     positional: readonly unknown[]
   ) {
     const slot = slots.has(draftSlot(id)) ? draftSlot(id) : id;
-    if (!slots.has(slot)) throw new Error(`There is no ${id} app.`);
+
+    if (!slots.has(slot)) {
+      throw new Error(`There is no ${id} app.`);
+    }
+
     const operation = (await ready(slot)).version.operations.get(
       name
     )?.operation;
+
     const params = Object.keys(operation?.params ?? {});
+
     if (operation && positional.length > params.length) {
       throw new Error(
         `The ${id} app's ${name} takes ${params.length} argument${params.length === 1 ? "" : "s"}, not ${positional.length}.`
       );
     }
+
     const args: Record<string, unknown> = {};
     positional.forEach((value, i) => {
-      if (value !== undefined) args[params[i]!] = value;
+      if (value !== undefined) {
+        args[params[i]] = value;
+      }
     });
     const value = await run(slot, name, args, { kind });
-    if (kind === "read") return value;
+
+    if (kind === "read") {
+      return value;
+    }
+
     const reply = value as { ok?: unknown; error?: unknown } | null;
+
     return typeof reply?.ok === "boolean"
       ? {
           ok: reply.ok,
@@ -545,14 +690,16 @@ export function appGateway(options: GatewayOptions) {
   function route(source: string): { app: string; name: string } | undefined {
     for (const app of slots.values()) {
       const rest = source.slice(app.id.length);
+
       if (
         source.startsWith(app.id) &&
         /^[A-Z]/.test(rest) &&
         reachable(app.id)
       ) {
-        return { app: app.id, name: rest[0]!.toLowerCase() + rest.slice(1) };
+        return { app: app.id, name: rest[0].toLowerCase() + rest.slice(1) };
       }
     }
+
     return undefined;
   }
 
@@ -564,12 +711,15 @@ export function appGateway(options: GatewayOptions) {
         version: (await ready(app.id)).version,
       }))
     );
+
     const words = query
       .toLowerCase()
       .split(/[^\p{L}\p{N}]+/u)
       .filter(Boolean);
+
     const found: { score: number; action: object }[] = [];
     const problems: string[] = [];
+
     for (const result of settled) {
       if (result.status === "rejected") {
         problems.push(
@@ -579,9 +729,14 @@ export function appGateway(options: GatewayOptions) {
         );
         continue;
       }
+
       const { app, version } = result.value;
+
       for (const { operation } of version.operations.values()) {
-        if (!operation.agent) continue;
+        if (!operation.agent) {
+          continue;
+        }
+
         const haystack = [
           app.id,
           app.name,
@@ -592,8 +747,13 @@ export function appGateway(options: GatewayOptions) {
         ]
           .join(" ")
           .toLowerCase();
+
         const score = words.filter((word) => haystack.includes(word)).length;
-        if (words.length > 0 && score === 0) continue;
+
+        if (words.length > 0 && score === 0) {
+          continue;
+        }
+
         const { name, kind, description, params } = operation;
         found.push({
           score,
@@ -601,7 +761,9 @@ export function appGateway(options: GatewayOptions) {
         });
       }
     }
+
     found.sort((a, b) => b.score - a.score);
+
     return { actions: found.slice(0, FOUND).map((f) => f.action), problems };
   }
 
@@ -613,6 +775,7 @@ export function appGateway(options: GatewayOptions) {
       },
     ],
   });
+
   // The agent's tools are the same two whichever apps are installed; the section lists the apps so it knows to look.
   options.registry.install(
     defineExtension({
@@ -623,6 +786,7 @@ export function appGateway(options: GatewayOptions) {
             (app) =>
               `- ${app.name} (${app.id})${app.description ? `: ${app.description}` : ""}`
           );
+
           return list.length === 0
             ? "The user has no apps yet."
             : `The user's apps:\n${list.join("\n")}\nTo use one, find what it can do with find_app_actions, then do it with run_app_action. The user sees every change in the app at once.`;
@@ -640,6 +804,7 @@ export function appGateway(options: GatewayOptions) {
           }),
           execute: async ({ query }: { query?: string }) => {
             const { actions, problems } = await find(query ?? "");
+
             if (actions.length === 0 && problems.length === 0) {
               return text(
                 query
@@ -647,6 +812,7 @@ export function appGateway(options: GatewayOptions) {
                   : "No app has any actions."
               );
             }
+
             return text(problems.length > 0 ? { actions, problems } : actions);
           },
         }),
@@ -692,10 +858,15 @@ export function appGateway(options: GatewayOptions) {
     /** Every app the shell or the agent can reach, live or only a draft so far: the draft's name when it has one. */
     apps: () => {
       const shown = new Map<string, AppInfo>();
+
       for (const [slot, app] of slots) {
-        if (slot === draftSlot(app.id)) shown.set(app.id, app);
-        else if (slot === app.id && !shown.has(app.id)) shown.set(app.id, app);
+        if (slot === draftSlot(app.id)) {
+          shown.set(app.id, app);
+        } else if (slot === app.id && !shown.has(app.id)) {
+          shown.set(app.id, app);
+        }
       }
+
       return [...shown.values()].map(
         ({ id, name, description, symbol, cover }) => ({
           id,
@@ -715,7 +886,11 @@ export function appGateway(options: GatewayOptions) {
       slots.set(slot, app);
       loaded.delete(slot);
       failures.delete(slot);
-      if (socket?.readyState === WebSocket.OPEN) sendLoad(socket, slot, app);
+
+      if (socket?.readyState === WebSocket.OPEN) {
+        sendLoad(socket, slot, app);
+      }
+
       return (await ready(slot)).version.manifest;
     },
     /** Stops whatever runs in `slot`. Its data stays unless `removeData` is called. */
@@ -724,10 +899,16 @@ export function appGateway(options: GatewayOptions) {
       slots.delete(slot);
       loaded.delete(slot);
       failures.delete(slot);
-      if (socket?.readyState === WebSocket.OPEN)
+
+      if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ t: "unload", app: slot }));
+      }
+
       closeData(slot);
-      if (app) options.topics.changed(`app:${app.id}`);
+
+      if (app) {
+        options.topics.changed(`app:${app.id}`);
+      }
     },
     /** The migrations a slot's data has had. */
     schemaVersion: (slot: string) =>
@@ -736,20 +917,27 @@ export function appGateway(options: GatewayOptions) {
     /** Copies a slot's data to a file: a consistent copy even while the slot runs. No data copies as no file. */
     copyDataTo(slot: string, file: string) {
       rmSync(file, { force: true });
-      if (existsSync(dataPath(slot)))
+
+      if (existsSync(dataPath(slot))) {
         database(slot).exec(`VACUUM INTO '${file.replaceAll("'", "''")}'`);
+      }
     },
     /** Replaces a slot's data with a file's (none: empty data). The slot must not be running. */
     replaceData(slot: string, file: string | undefined) {
       removeData(slot);
-      if (file && existsSync(file)) copyFileSync(file, dataPath(slot));
+
+      if (file && existsSync(file)) {
+        copyFileSync(file, dataPath(slot));
+      }
     },
     removeData,
     route,
     fromShell,
     /** Loads every app, so a failure shows in the log at start rather than at the first call. */
     async start() {
-      await Promise.all([...slots.keys()].map((slot) => ready(slot)));
+      await Promise.all(
+        [...slots.keys()].map(async (slot) => await ready(slot))
+      );
     },
     /** The agent moved to another machine: drop the socket, so the next call loads every app there. */
     disconnect() {
@@ -757,7 +945,10 @@ export function appGateway(options: GatewayOptions) {
     },
     close() {
       socket?.close();
-      for (const db of databases.values()) db.close();
+
+      for (const db of databases.values()) {
+        db.close();
+      }
     },
   };
 }
@@ -768,7 +959,7 @@ const totalChanges = (db: DatabaseSync) =>
   Number((db.prepare("SELECT total_changes() AS n").get() as { n: number }).n);
 
 /** "setDone" as "set done", so a search for "done" finds it. */
-const spaced = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+const spaced = (name: string) => name.replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2");
 
 const TYPES = new Set(["string", "number", "integer", "boolean", "enum"]);
 
@@ -778,27 +969,38 @@ const TYPES = new Set(["string", "number", "integer", "boolean", "enum"]);
  */
 function checkManifest(id: string, manifest: Manifest): Loaded {
   const problems: string[] = [];
+
   if (
     !Array.isArray(manifest.schema) ||
     manifest.schema.some((sql) => typeof sql !== "string")
-  )
+  ) {
     problems.push("schema must be a list of SQL strings");
+  }
+
   const operations = new Map<
     string,
     { operation: Operation; args: Validator }
   >();
+
   for (const operation of manifest.operations) {
     const at = `operation ${operation.name}`;
     const before = problems.length;
-    if (!NAME.test(operation.name))
+
+    if (!NAME.test(operation.name)) {
       problems.push(`${at}: the name must be camelCase letters and digits`);
-    if (operation.kind !== "read" && operation.kind !== "write")
+    }
+
+    if (operation.kind !== "read" && operation.kind !== "write") {
       problems.push(`${at}: kind must be "read" or "write"`);
+    }
+
     if (
       typeof operation.description !== "string" ||
       !operation.description.trim()
-    )
+    ) {
       problems.push(`${at}: it needs a description`);
+    }
+
     if (
       typeof operation.params !== "object" ||
       operation.params === null ||
@@ -807,15 +1009,17 @@ function checkManifest(id: string, manifest: Manifest): Loaded {
       problems.push(`${at}: params must be an object, {} for none`);
     } else {
       for (const [name, param] of Object.entries(operation.params)) {
-        if (!NAME.test(name))
+        if (!NAME.test(name)) {
           problems.push(
             `${at}: param ${name}: the name must be camelCase letters and digits`
           );
-        if (!TYPES.has(param?.type))
+        }
+
+        if (!TYPES.has(param?.type)) {
           problems.push(
             `${at}: param ${name}: type must be one of ${[...TYPES].join(", ")}`
           );
-        else if (
+        } else if (
           param.type === "enum" &&
           (!Array.isArray(param.values) ||
             param.values.length === 0 ||
@@ -827,32 +1031,41 @@ function checkManifest(id: string, manifest: Manifest): Loaded {
         }
       }
     }
-    if (problems.length === before)
+
+    if (problems.length === before) {
       operations.set(operation.name, {
         operation,
         args: compile(obj(parameters(operation.params))),
       });
+    }
   }
-  if (problems.length > 0)
+
+  if (problems.length > 0) {
     throw new Error(
       `The ${id} app's server.ts breaks the app rules: ${problems.join("; ")}.`
     );
+  }
+
   return { manifest, operations };
 }
 
 function parameters(params: Record<string, Param>): Properties {
   const out: Record<string, Schema | ReturnType<typeof opt>> = {};
+
   for (const [name, param] of Object.entries(params)) {
     const annotations = param.description
       ? { description: param.description }
       : {};
+
     const schema: Schema =
       param.type === "enum"
         ? oneOf(param.values, annotations)
         : { string: str, number: num, integer: int, boolean: bool }[param.type](
             annotations
           );
+
     out[name] = param.optional ? opt(schema) : schema;
   }
+
   return out;
 }

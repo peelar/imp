@@ -8,10 +8,11 @@ import { promisify } from "node:util";
 
 /** The tag a computer advertises to be the agent's. */
 export const COMPUTER_TAG = "tag:imp-computer";
+
 /** The user the agent works as on its computer. */
 export const COMPUTER_USER = "imp";
 
-export interface TailnetDevice {
+export type TailnetDevice = {
   /** The MagicDNS name without the trailing dot, such as "homelab.tail1234.ts.net". */
   readonly dnsName: string;
   readonly name: string;
@@ -21,15 +22,15 @@ export interface TailnetDevice {
   readonly tags: readonly string[];
   /** Present when the device runs Tailscale SSH. */
   readonly hostKeys: readonly string[];
-}
+};
 
-export interface Tailnet {
+export type Tailnet = {
   /** How the tailnet policy names this host as an SSH source: its login, such as "adrian@github", or its tag. */
   readonly source: string;
   readonly devices: readonly TailnetDevice[];
-}
+};
 
-interface PeerStatus {
+type PeerStatus = {
   DNSName?: string;
   HostName?: string;
   OS?: string;
@@ -38,13 +39,14 @@ interface PeerStatus {
   Tags?: string[];
   sshHostKeys?: string[];
   UserID?: number;
-}
+};
 
 /** The tailnet as the host sees it. Rejects with a plain reason when the host is not on one. */
 export async function readTailnet(
   tailscale = process.env.TAILSCALE ?? "tailscale"
 ): Promise<Tailnet> {
   let stdout: string;
+
   try {
     ({ stdout } = await promisify(execFile)(tailscale, ["status", "--json"], {
       timeout: 10_000,
@@ -54,25 +56,33 @@ export async function readTailnet(
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT")
       throw new Error(
-        "This host is not on Tailscale: the tailscale command is missing."
+        "This host is not on Tailscale: the tailscale command is missing.",
+        { cause: error }
       );
     throw new Error(
-      `Tailscale did not answer: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`
+      `Tailscale did not answer: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`,
+      { cause: error }
     );
   }
+
   const status = JSON.parse(stdout) as {
     BackendState?: string;
     Self?: PeerStatus;
     Peer?: Record<string, PeerStatus>;
     User?: Record<string, { LoginName?: string }>;
   };
-  if (status.BackendState !== "Running")
+
+  if (status.BackendState !== "Running") {
     throw new Error(
       `Tailscale on this host is ${status.BackendState ?? "not running"}.`
     );
+  }
+
   const self = status.Self ?? {};
+
   const source =
     self.Tags?.[0] ?? status.User?.[String(self.UserID)]?.LoginName ?? "";
+
   const devices = Object.values(status.Peer ?? {}).map(
     (peer): TailnetDevice => ({
       dnsName: (peer.DNSName ?? "").replace(/\.$/, ""),
@@ -87,6 +97,7 @@ export async function readTailnet(
       hostKeys: peer.sshHostKeys ?? [],
     })
   );
+
   return {
     source,
     devices: devices.filter((d) => d.dnsName !== "" && d.ip !== ""),
@@ -101,6 +112,7 @@ export async function writeKnownHosts(
   const lines = device.hostKeys
     .map((key) => key.trim())
     .filter((key) => key !== "" && !/[\r\n]/.test(key));
+
   await writeFile(
     file,
     lines.map((key) => `${device.dnsName} ${key}\n`).join(""),

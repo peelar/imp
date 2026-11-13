@@ -26,15 +26,16 @@ import {
 const HOME = "/home/user";
 const RUNTIME_DIR = `${HOME}/.imp`;
 
-export interface E2BProviderOptions {
+export type E2BProviderOptions = {
   /** Signs per-machine tokens; keep it stable across host restarts. */
   readonly secret: string;
   readonly apiKey?: string;
-}
+};
 
 export function e2bProvider(options: E2BProviderOptions): MachineProvider {
   const api = options.apiKey === undefined ? {} : { apiKey: options.apiKey };
   let files: Promise<Runtime> | undefined;
+
   /** Template name -> the setup it was built from (for machines created from an older template) and its size. */
   const prepared = new Map<
     string,
@@ -46,11 +47,14 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
       size === undefined
         ? { machineKey: key }
         : { machineKey: key, machineSize: size };
+
     const pages = Sandbox.list({
       ...api,
       query: { metadata, state: ["running", "paused"] },
     });
+
     const items = pages.hasNext ? await pages.nextItems() : [];
+
     return items[0];
   }
 
@@ -63,26 +67,36 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
       const { cpus, memoryMB } = image.size;
       const size = `${cpus}c-${memoryMB}m`;
       const name = `imp-machine-${setup.digest}-${size}`;
+
       if (!(await Template.exists(name, api))) {
         const script = Buffer.from(setup.script).toString("base64");
+
         const template = Template()
           .fromBaseImage()
           .runCmd(`echo ${script} | base64 -d | bash`, { user: "root" });
+
         await Template.build(template, name, {
           ...api,
           cpuCount: cpus,
           memoryMB,
         });
       }
+
       prepared.set(name, { setup, size });
+
       return name;
     },
 
     async ensure(spec: MachineSpec) {
       const image = prepared.get(spec.image);
-      if (!image) throw new Error(`prepareImage did not prepare ${spec.image}`);
+
+      if (!image) {
+        throw new Error(`prepareImage did not prepare ${spec.image}`);
+      }
+
       const { setup, size } = image;
       const existing = await find(spec.key, size);
+
       const sandbox = existing
         ? await Sandbox.connect(existing.sandboxId, {
             ...api,
@@ -95,9 +109,11 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
             lifecycle: { onTimeout: "pause", autoResume: true },
             network: { allowPublicTraffic: false },
           });
+
       const marker = await sandbox.commands.run(
         `cat ${SETUP_MARKER} 2>/dev/null || true`
       );
+
       if (marker.stdout.trim() !== setup.digest) {
         await sandbox.files.write("/tmp/imp-setup.sh", setup.script);
         await sandbox.commands.run(
@@ -105,18 +121,23 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
           { user: "root", timeoutMs: 30 * 60_000 }
         );
       }
+
       const token = agentdToken(options.secret, sandbox.sandboxId);
       await startAgentd(
         sandbox,
         token,
         await (files ??= runtime({ platform: "linux", arch: "x64" }))
       );
+
       return e2bMachine(spec, sandbox, token);
     },
 
     async destroy(key: string) {
       const existing = await find(key);
-      if (existing) await Sandbox.kill(existing.sandboxId, api);
+
+      if (existing) {
+        await Sandbox.kill(existing.sandboxId, api);
+      }
     },
 
     close() {},
@@ -132,10 +153,12 @@ function e2bMachine(
   const headers: Record<string, string> = sandbox.trafficAccessToken
     ? { "e2b-traffic-access-token": sandbox.trafficAccessToken }
     : {};
+
   const endpoints = agentdEndpoints(
     { url: `https://${sandbox.getHost(AGENTD_PORT)}`, headers },
     token
   );
+
   return {
     key: spec.key,
     async daemonCommand() {
@@ -166,12 +189,18 @@ async function startAgentd(
   { files, digest }: Runtime
 ): Promise<void> {
   const expected = healthFor(token, digest);
-  const health = () =>
-    sandbox.commands.run(
+
+  const health = async () =>
+    await sandbox.commands.run(
       `curl -sf http://127.0.0.1:${AGENTD_PORT}/health || true`
     );
+
   const answer = (await health()).stdout.trim();
-  if (answer === expected) return;
+
+  if (answer === expected) {
+    return;
+  }
+
   if (answer !== "") {
     // Another runtime holds the port (an older version, or one started with another token). Everything run from the
     // runtime directory is ours, so stop all of it, pi-env daemons included, and wait for the port to free up.
@@ -186,9 +215,11 @@ async function startAgentd(
       data: toArrayBuffer(file.data),
     }))
   );
+
   const executables = files
     .filter((file) => file.executable)
     .map((file) => `${RUNTIME_DIR}/${file.path}`);
+
   await sandbox.commands.run(
     `chmod +x ${executables.join(" ")} && mkdir -p ${HOME}/workspace`
   );
@@ -199,13 +230,19 @@ async function startAgentd(
       envs: agentdEnv({ token, digest, runtimeDir: RUNTIME_DIR, home: HOME }),
     }
   );
+
   for (let i = 0; i < 50; i++) {
-    if ((await health()).stdout.trim() === expected) return;
+    if ((await health()).stdout.trim() === expected) {
+      return;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
+
   const log = await sandbox.commands.run(
     `tail -n 50 ${RUNTIME_DIR}/agentd.log || true`
   );
+
   throw new Error(`agentd did not start: ${log.stdout}`);
 }
 

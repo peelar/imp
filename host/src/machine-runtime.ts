@@ -10,22 +10,21 @@ import { fileURLToPath } from "node:url";
 import { packagedDaemon } from "@earendil-works/pi-env";
 import type { ImageSpec, MachineSize } from "./machine.ts";
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
 const MACHINE_SOURCES = join(here, "..", "machine");
 const WS_PACKAGE = dirname(require.resolve("ws/package.json"));
 const BRIDGE_CLIENT = join(here, "bridge-client.mjs");
 
 export const AGENTD_PORT = 7070;
-/** Where agentd takes the agent's HTTPS requests that may need a secret (egress.ts), on the machine's loopback. */
-export const EGRESS_PORT = 7071;
+
 /** Where a machine records the digest of the setup it last ran. */
 export const SETUP_MARKER = "/var/lib/imp/setup";
 
 /** The image every machine gets: this host's setup script, at `size` where the provider lets us choose. */
 export async function machineImage(size: MachineSize): Promise<ImageSpec> {
   return {
-    setup: await readFile(join(MACHINE_SOURCES, "setup.sh"), "utf8"),
+    setup: await readFile(join(MACHINE_SOURCES, "setup.sh"), "utf-8"),
     size,
   };
 }
@@ -36,24 +35,25 @@ export async function machineImage(size: MachineSize): Promise<ImageSpec> {
  */
 export function setupScript(setup: string): { digest: string; script: string } {
   const digest = createHash("sha256").update(setup).digest("hex").slice(0, 16);
+
   return {
     digest,
     script: `${setup}\nmkdir -p ${dirname(SETUP_MARKER)} && echo ${digest} > ${SETUP_MARKER}\n`,
   };
 }
 
-export interface Runtime {
+export type Runtime = {
   readonly files: readonly RuntimeFile[];
   /** Changes whenever any file does. */
   readonly digest: string;
-}
+};
 
-export interface RuntimeFile {
+export type RuntimeFile = {
   /** Relative to the runtime directory on the machine. */
   readonly path: string;
   readonly data: Buffer;
   readonly executable?: boolean;
-}
+};
 
 /** A `pkill -f` pattern for every process started from `runtimeDir`, which never matches the shell running pkill. */
 export const runtimePattern = (runtimeDir: string) =>
@@ -83,15 +83,20 @@ export async function runtime(platform: {
       data: await readFile(join(MACHINE_SOURCES, "screen.sh")),
     },
   ];
+
   for (const file of await listFiles(WS_PACKAGE)) {
     files.push({
       path: `node_modules/ws/${relative(WS_PACKAGE, file)}`,
       data: await readFile(file),
     });
   }
+
   const hash = createHash("sha256");
-  for (const file of files)
+
+  for (const file of files) {
     hash.update(file.path).update("\0").update(file.data).update("\0");
+  }
+
   return { files, digest: hash.digest("hex").slice(0, 16) };
 }
 
@@ -154,6 +159,7 @@ export function agentdEndpoints(
   token: string
 ) {
   const ws = base.url.replace(/^http/, "ws");
+
   return {
     /** pi-env's Connection appends `serve --token <hex>` to this command. */
     daemonCommand: [
@@ -169,10 +175,16 @@ export function agentdEndpoints(
 
 async function listFiles(dir: string): Promise<string[]> {
   const out: string[] = [];
+
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await listFiles(path)));
-    else out.push(path);
+
+    if (entry.isDirectory()) {
+      out.push(...(await listFiles(path)));
+    } else {
+      out.push(path);
+    }
   }
+
   return out;
 }

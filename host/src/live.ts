@@ -8,26 +8,37 @@ export class Topics {
 
   on(topic: string, listener: () => void): () => void {
     let set = this.#listeners.get(topic);
-    if (!set) this.#listeners.set(topic, (set = new Set()));
+
+    if (!set) {
+      this.#listeners.set(topic, (set = new Set()));
+    }
+
     set.add(listener);
+
     return () => {
       set.delete(listener);
-      if (set.size === 0) this.#listeners.delete(topic);
+
+      if (set.size === 0) {
+        this.#listeners.delete(topic);
+      }
     };
   }
 
   changed(topic: string): void {
-    for (const listener of [...(this.#listeners.get(topic) ?? [])]) listener();
+    for (const listener of [...(this.#listeners.get(topic) ?? [])]) {
+      listener();
+    }
   }
 }
 
-export interface LiveSource {
+export type LiveSource = {
   /** The topics whose changes can change this answer. */
   readonly topics: readonly string[];
   load(): Promise<unknown>;
-}
+};
 
 const HEARTBEAT_MS = 20_000;
+
 /** Changes that arrive together, such as a streamed reply's tokens, are sent as one answer at most this often. */
 const COALESCE_MS = 40;
 
@@ -53,27 +64,33 @@ export async function serveLive(
   const push = async () => {
     if (loading) {
       again = true;
+
       return;
     }
+
     loading = true;
+
     try {
       do {
         again = false;
         const value = JSON.stringify(await source.load());
+
         if (!closed && value !== last) {
           last = value;
           res.write(`data: ${value}\n\n`);
         }
       } while (again && !closed);
     } catch (error) {
-      if (!closed)
+      if (!closed) {
         res.write(
           `event: failure\ndata: ${JSON.stringify(String(error instanceof Error ? error.message : error))}\n\n`
         );
+      }
     } finally {
       loading = false;
     }
   };
+
   const schedule = () => {
     timer ??= setTimeout(() => {
       timer = undefined;
@@ -82,15 +99,20 @@ export async function serveLive(
   };
 
   const off = source.topics.map((topic) => topics.on(topic, schedule));
+
   const heartbeat = setInterval(
     () => res.write(": heartbeat\n\n"),
     HEARTBEAT_MS
   );
+
   req.on("close", () => {
     closed = true;
     clearInterval(heartbeat);
     clearTimeout(timer);
-    for (const stop of off) stop();
+
+    for (const stop of off) {
+      stop();
+    }
   });
   await push();
 }

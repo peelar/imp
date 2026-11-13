@@ -9,8 +9,10 @@ import { generate, type ShellApp } from "../src/shell.ts";
 
 const client = join(import.meta.dirname, "..", "..", "client");
 const apps: ShellApp[] = [];
+
 for (const app of readApps(join(client, "apps"))) {
   const folder = join(client, "apps", app.id);
+
   const server = (await import(pathToFileURL(join(folder, "server.ts")).href))
     .default as {
     operations?: Record<
@@ -18,18 +20,25 @@ for (const app of readApps(join(client, "apps"))) {
       { kind: "read" | "write"; params: Record<string, never> }
     >;
   };
+
   const operations = Object.entries(server.operations ?? {}).map(
     ([name, { kind, params }]) => ({ name, kind, params })
   );
+
   apps.push({ id: app.id, files: readAppFiles(folder), operations });
 }
+
 const contract = join(client, "app.contract");
 const ts = join(client, "app.ts");
+
 const out = generate(
-  { contract: readFileSync(contract, "utf8"), ts: readFileSync(ts, "utf8") },
+  { contract: readFileSync(contract, "utf-8"), ts: readFileSync(ts, "utf-8") },
   apps,
   "repo"
 );
+
 writeFileSync(contract, out.contract);
+
 writeFileSync(ts, out.ts);
+
 console.log(`wrote the shell's part for ${apps.map((a) => a.id).join(", ")}`);

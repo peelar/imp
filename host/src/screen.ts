@@ -10,10 +10,12 @@ import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import type { Computer } from "./computer.ts";
 
-const PAGE = join(dirname(fileURLToPath(import.meta.url)), "screen.html");
+const PAGE = join(import.meta.dirname, "screen.html");
+
 const NOVNC = dirname(
   dirname(fileURLToPath(import.meta.resolve("@novnc/novnc")))
 );
+
 export const SOCKET_PATH = "/api/computer/screen";
 const KEEP_ALIVE_MS = 30_000;
 
@@ -28,13 +30,22 @@ export function serveScreenPage(
       "cache-control": "no-cache",
     });
     res.end(readFileSync(PAGE));
+
     return true;
   }
-  if (!pathname.startsWith("/computer/novnc/")) return false;
+
+  if (!pathname.startsWith("/computer/novnc/")) {
+    return false;
+  }
+
   const path = normalize(
     join(NOVNC, decodeURIComponent(pathname.slice("/computer/novnc/".length)))
   );
-  if (!path.startsWith(NOVNC + sep) || extname(path) !== ".js") return false;
+
+  if (!path.startsWith(NOVNC + sep) || extname(path) !== ".js") {
+    return false;
+  }
+
   try {
     const body = readFileSync(path);
     res.writeHead(200, {
@@ -42,6 +53,7 @@ export function serveScreenPage(
       "cache-control": "no-cache",
     });
     res.end(body);
+
     return true;
   } catch {
     return false;
@@ -53,17 +65,20 @@ export function screenSockets(computer: Computer) {
   const open = new Set<WebSocket>();
   // The screen belongs to the machine it opened on; a switch ends it, and the page connects to the new one.
   computer.onSwitch(() => {
-    for (const client of open)
+    for (const client of open) {
       client.close(1012, "Your imp moved to another computer.");
+    }
   });
 
   function bridge(client: WebSocket) {
     open.add(client);
     let upstream: WebSocket | undefined;
     const queued: Buffer[] = [];
+
     const end = (code: number, reason: string) =>
       client.readyState === WebSocket.OPEN &&
       client.close(code, reason.slice(0, 120));
+
     client.on("message", (data: Buffer) =>
       upstream?.readyState === WebSocket.OPEN
         ? upstream.send(data)
@@ -71,7 +86,9 @@ export function screenSockets(computer: Computer) {
     );
     // Someone watching keeps the machine awake.
     computer.touch();
-    const awake = setInterval(() => computer.touch(), KEEP_ALIVE_MS);
+    const awake = setInterval(() => {
+      computer.touch();
+    }, KEEP_ALIVE_MS);
     client.on("close", () => {
       open.delete(client);
       clearInterval(awake);
@@ -79,13 +96,18 @@ export function screenSockets(computer: Computer) {
     });
     computer
       .machine()
-      .then((machine) => machine.screen())
+      .then(async (machine) => await machine.screen())
       .then(
         (endpoint) => {
-          if (client.readyState !== WebSocket.OPEN) return;
+          if (client.readyState !== WebSocket.OPEN) {
+            return;
+          }
+
           upstream = new WebSocket(endpoint.url, { headers: endpoint.headers });
           upstream.on("open", () => {
-            for (const data of queued.splice(0)) upstream!.send(data);
+            for (const data of queued.splice(0)) {
+              upstream!.send(data);
+            }
           });
           upstream.on(
             "message",
@@ -113,17 +135,25 @@ export function screenSockets(computer: Computer) {
       allowed: boolean,
       origin: string
     ): boolean {
-      if (new URL(req.url ?? "/", "http://host").pathname !== SOCKET_PATH)
+      if (new URL(req.url ?? "/", "http://host").pathname !== SOCKET_PATH) {
         return false;
+      }
+
       if (!allowed || req.headers.origin !== origin) {
         socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+
         return true;
       }
+
       server.handleUpgrade(req, socket, head, bridge);
+
       return true;
     },
     close() {
-      for (const client of open) client.terminate();
+      for (const client of open) {
+        client.terminate();
+      }
+
       server.close();
     },
   };

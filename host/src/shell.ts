@@ -16,11 +16,11 @@ import {
 import { join, relative } from "node:path";
 import type { AppFiles, Operation } from "./apps.ts";
 
-export interface ShellApp {
+export type ShellApp = {
   readonly id: string;
   readonly files: AppFiles;
   readonly operations: readonly Pick<Operation, "name" | "kind" | "params">[];
-}
+};
 
 /** The shell's own folder, without what a build writes or the apps, which are generated in. */
 const SKIP = new Set([
@@ -32,7 +32,8 @@ const SKIP = new Set([
   "app.contract.d.ts",
 ]);
 
-const pascal = (name: string) => name[0]!.toUpperCase() + name.slice(1);
+const pascal = (name: string) => name[0].toUpperCase() + name.slice(1);
+
 const CONTRACT_TYPE = {
   string: "string",
   number: "number",
@@ -48,25 +49,47 @@ export function screenProps(
 ): { name: string; type: string }[] {
   const lines = contract.split("\n");
   const start = lines.findIndex((line) => /^component Screen\s*$/.test(line));
-  if (start < 0)
+
+  if (start === -1) {
     throw new Error(
       `apps/${id}/app.contract must declare \`component Screen\`: the shell shows it in the app's tab.`
     );
+  }
+
   const props: { name: string; type: string }[] = [];
   let inProps = false;
+
   for (const line of lines.slice(start + 1)) {
-    if (!line.trim() || line.trim().startsWith("//")) continue;
+    if (!line.trim() || line.trim().startsWith("//")) {
+      continue;
+    }
+
     const indent = line.length - line.trimStart().length;
-    if (indent === 0) break;
+
+    if (indent === 0) {
+      break;
+    }
+
     if (indent <= 2) {
-      if (inProps) break;
+      if (inProps) {
+        break;
+      }
+
       inProps = line.trim() === "props";
       continue;
     }
-    if (!inProps) continue;
-    const prop = line.trim().match(/^(\w+)\s*:\s*(.+)$/);
-    if (prop) props.push({ name: prop[1]!, type: prop[2]! });
+
+    if (!inProps) {
+      continue;
+    }
+
+    const prop = /^(\w+)\s*:\s*(.+)$/.exec(line.trim());
+
+    if (prop) {
+      props.push({ name: prop[1], type: prop[2] });
+    }
   }
+
   return props;
 }
 
@@ -80,16 +103,20 @@ function wire(app: ShellApp) {
   const refresh: string[] = [];
   const bindings: string[] = [];
   const mutations: string[] = [];
+
   for (const prop of screenProps(id, app.files["app.contract"])) {
     const operation = app.operations.find((o) => o.name === prop.name);
     const at = `Screen's prop ${prop.name}`;
+
     if (!operation) {
       problems.push(
         `${at} names no operation in server.ts (${app.operations.map((o) => o.name).join(", ") || "it has none"})`
       );
       continue;
     }
+
     const call = `${id}${pascal(operation.name)}`;
+
     if (prop.type === "action") {
       if (operation.kind !== "write") {
         problems.push(
@@ -97,9 +124,11 @@ function wire(app: ShellApp) {
         );
         continue;
       }
+
       const params = Object.values(operation.params).map(
         (param, i) => `arg${i + 1}: ${CONTRACT_TYPE[param.type]}`
       );
+
       const args = params.map((_, i) => `arg${i + 1}`).join(", ");
       const action = `${id}Do${pascal(operation.name)}`;
       members.push(
@@ -116,17 +145,20 @@ function wire(app: ShellApp) {
         );
         continue;
       }
+
       if (Object.keys(operation.params).length > 0) {
         problems.push(
           `${at}: ${operation.name} takes params, and the screen can only use reads without params (filter in the screen)`
         );
         continue;
       }
+
       // The app's shapes, named for the root by the app: Item is TodosItem there.
-      const type = prop.type.replace(
+      const type = prop.type.replaceAll(
         /\b[A-Z]\w*\b/g,
         (shape) => (shapes.add(shape), `${cap}${shape}`)
       );
+
       const resource = `${id}Read${pascal(operation.name)}`;
       members.push(
         `  resource ${resource} = ${call}() when signedIn as shape ${type} else empty()`,
@@ -136,8 +168,11 @@ function wire(app: ShellApp) {
       bindings.push(`${prop.name}=${resource}`);
     }
   }
-  if (problems.length > 0)
+
+  if (problems.length > 0) {
     throw new Error(`apps/${id}/app.contract: ${problems.join("; ")}.`);
+  }
+
   return {
     use: `use Screen as ${cap}Screen${[...shapes].map((shape) => `, ${shape} as ${cap}${shape}`).join("")} from "./apps/${id}/app.contract"`,
     tab: `  tab ${id} "/${id}"`,
@@ -157,8 +192,11 @@ function fill(text: string, name: string, lines: readonly string[]) {
   const pattern = new RegExp(
     `(// <apps:${name}>[^\\n]*)[\\s\\S]*?(\\n[ \\t]*// </apps:${name}>)`
   );
-  if (!pattern.test(text))
+
+  if (!pattern.test(text)) {
     throw new Error(`the shell has no <apps:${name}> block`);
+  }
+
   return text.replace(
     pattern,
     (_, open: string, close: string) => [open, ...lines].join("\n") + close
@@ -172,7 +210,7 @@ export function generate(
   version: string
 ) {
   const parts = [...apps].sort((a, b) => a.id.localeCompare(b.id)).map(wire);
-  let contract = shell.contract;
+  let { contract } = shell;
   contract = fill(
     contract,
     "use",
@@ -201,15 +239,17 @@ export function generate(
     "screens",
     parts.flatMap((p) => p.screen)
   );
+
   const ts = fill(
     shell.ts,
     "mutations",
     parts.flatMap((p) => p.mutations)
   );
+
   return { contract, ts };
 }
 
-export interface BuildOptions {
+export type BuildOptions = {
   /** The shell's source: the repository's client/. */
   readonly clientDir: string;
   /** The Exact checkout. */
@@ -220,7 +260,7 @@ export interface BuildOptions {
   readonly outDir: string;
   readonly apps: readonly ShellApp[];
   readonly version: string;
-}
+};
 
 /** Assembles the shell with these apps and builds it for the web; a failure names what the compiler said. */
 export async function buildShell(
@@ -233,19 +273,25 @@ export async function buildShell(
       filter: (source) =>
         !SKIP.has(relative(options.clientDir, source).split(/[\\/]/)[0] ?? ""),
     });
+
     for (const app of options.apps) {
       const dir = join(options.workDir, "apps", app.id);
       mkdirSync(dir, { recursive: true });
-      for (const [name, content] of Object.entries(app.files))
+
+      for (const [name, content] of Object.entries(app.files)) {
         writeFileSync(join(dir, name), content);
+      }
     }
+
     const read = (name: string) =>
-      readFileSync(join(options.workDir, name), "utf8");
+      readFileSync(join(options.workDir, name), "utf-8");
+
     const { contract, ts } = generate(
       { contract: read("app.contract"), ts: read("app.ts") },
       options.apps,
       options.version
     );
+
     writeFileSync(join(options.workDir, "app.contract"), contract);
     writeFileSync(join(options.workDir, "app.ts"), ts);
   } catch (error) {
@@ -254,7 +300,9 @@ export async function buildShell(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+
   rmSync(options.outDir, { recursive: true, force: true });
+
   const { code, output } = await new Promise<{
     code: number | null;
     output: string;
@@ -269,20 +317,31 @@ export async function buildShell(
         stdio: ["ignore", "pipe", "pipe"],
       }
     );
+
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     child.stderr.on("data", (chunk) => (output += chunk));
-    child.on("close", (code) => resolve({ code, output }));
-    child.on("error", (error) => resolve({ code: -1, output: String(error) }));
+    child.on("close", (code) => {
+      resolve({ code, output });
+    });
+    child.on("error", (error) => {
+      resolve({ code: -1, output: String(error) });
+    });
   });
-  if (code === 0) return { ok: true };
+
+  if (code === 0) {
+    return { ok: true };
+  }
+
   // What the compiler said, quoting the line it refuses, without the build's chatter and the shell's own warnings.
   const noise =
     /^warning: patch|exact\.mjs feedback|^app\.contract:\d+:\d+ warning|^compiler: \d+ warning|^import\.meta\.env|^\(node:|trace-warnings/;
+
   // Paths as the agent knows them: apps/<id>/app.contract, not the host's copy of the shell.
   const said = output
     .replaceAll(`${options.workDir}/`, "")
     .split("\n")
     .filter((line) => line.trim() && !noise.test(line));
+
   return { ok: false, error: said.slice(-40).join("\n").slice(0, 6000) };
 }

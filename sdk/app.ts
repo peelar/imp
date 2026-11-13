@@ -15,9 +15,10 @@ export type Json =
   | string
   | Json[]
   | { [key: string]: Json };
+
 export type SqlValue = null | number | string;
 
-export interface AppContext {
+export type AppContext = {
   readonly id: string;
   readonly db: {
     all<T = Record<string, SqlValue>>(
@@ -37,7 +38,7 @@ export interface AppContext {
       statements: readonly { sql: string; params?: SqlValue[] }[]
     ): Promise<{ changes: number; lastInsertRowid: number }[]>;
   };
-}
+};
 
 export type Param =
   | {
@@ -52,7 +53,7 @@ export type Param =
       optional?: boolean;
     };
 
-export interface AppOperation {
+export type AppOperation = {
   /** A read answers without changing anything; a write changes the app's data. */
   readonly kind: "read" | "write";
   /** What the operation does, for the agent: it searches these. */
@@ -62,11 +63,11 @@ export interface AppOperation {
   /** `false` keeps the operation from the agent; the screen can still call it. */
   readonly agent?: false;
   run(args: Record<string, Json>, app: AppContext): Json | Promise<Json>;
-}
+};
 
-export interface AppServer {
+export type AppServer = {
   /** Migrations, in order. The host applies the ones a database has not had yet, before the first call. */
   readonly schema?: readonly string[];
   /** Everything the app does, by camelCase name, such as `setDone`. */
   readonly operations?: Readonly<Record<string, AppOperation>>;
-}
+};
