@@ -1,0 +1,72 @@
+# A pushed tag vX.Y.Z publishes a GitHub release that installed hosts and Mac apps update themselves to:
+#   imp-host-vX.Y.Z.tar.gz   the host, its production dependencies and the built web client (host/src/update.ts)
+#   Imp-macos.zip            the ad-hoc signed Mac app (scripts/install-mac.sh)
+#   install-host.sh          the host installer
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+env:
+  # The Exact checkout the client builds with. Move it when the client moves to a newer Exact.
+  EXACT_REPO: https://github.com/expo/exact
+  EXACT_REV: fe917faa7f5b1f4eb3178b8c4473b88bd6053f5e
+
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          - part: host
+            runner: ubuntu-latest
+          - part: mac
+            # Exact's Mac host needs the macOS 26 SDK or newer.
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.rustup/toolchains
+            ~/.cache/exact
+          key: exact-${{ matrix.part }}-${{ runner.os }}-${{ env.EXACT_REV }}
+      - name: Set up Exact
+        run: |
+          git init -q "$RUNNER_TEMP/exact"
+          cd "$RUNNER_TEMP/exact"
+          git fetch -q --depth 1 "$EXACT_REPO" "$EXACT_REV"
+          git checkout -q FETCH_HEAD
+          bun scripts/exact.mjs setup
+          echo "EXACT=$RUNNER_TEMP/exact" >> "$GITHUB_ENV"
+      - run: scripts/package.sh ${{ matrix.part }} "$GITHUB_REF_NAME" out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.part }}
+          path: out/
+
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

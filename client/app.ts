@@ -8,12 +8,20 @@ import type { Answer, MutationSource, StreamEvent } from './app.contract.d.ts';
 // `location` from data modules and admits a relative fetch only under /assets/, so the host answers
 // /assets/host.json with the origin the request came to.
 //
+// The released Mac app is built with API_BASE_URL empty too, and has no page origin: the shell passes the address the
+// person saved (`hostAddress`, which the Mac installer fills in), and before one is saved this fails, so the shell
+// asks for it.
+//
 // It is the shell's first resource (`hostOrigin`), and every live stream waits for it, because a stream must open
 // synchronously in its answer's first turn: a stream opened after an `await` is refused on the web.
 const configured: string = import.meta.env.API_BASE_URL ?? 'http://127.0.0.1:8787';
 let API = configured;
 
-async function hostOrigin(): Promise<{ origin: string }> {
+async function hostOrigin(saved: string): Promise<{ origin: string }> {
+  if (saved) {
+    API = saved.replace(/\/+$/, '');
+    return { origin: API };
+  }
   if (configured) return { origin: configured };
   const response = await fetch('/assets/host.json');
   if (!response.ok) throw new Error(`The host answered ${response.status} for its address.`);
@@ -52,7 +60,7 @@ async function call(source: MutationSource, args: unknown[]) {
 }
 
 export const answer: Answer = (source, args) => {
-  if (source === 'hostOrigin') return hostOrigin();
+  if (source === 'hostOrigin') return hostOrigin(String(args[0] ?? ''));
   if (isMutation(source)) return call(source, args);
   if (!API) throw new Error(`The host's address is not known yet, so ${source} cannot open.`);
   return fetch(`${API}/api/live/${source}?args=${encodeURIComponent(JSON.stringify(args))}`, {

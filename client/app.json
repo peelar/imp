@@ -65,11 +65,19 @@
     "name": "Imp"
   },
   "host": {
-    "web": {}
+    "web": {},
+    "macos": {
+      "minimumOS": "14.0",
+      "window": {
+        "width": 900,
+        "height": 700
+      }
+    }
   },
   "deploy": {
     "store": {
-      "web": "0"
+      "web": "0",
+      "macos": "0"
     }
   },
   "env": [

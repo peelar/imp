@@ -22,7 +22,32 @@ an app that stays: a screen you keep using, which the imp can also operate for y
 There is no login page. Put the host behind [Tailscale](https://tailscale.com) (`tailscale serve`), which decides who
 gets in; `OWNER_LOGIN` narrows it to one person.
 
-## Running it
+## Installing it
+
+On the machine that will run your Imp (Linux with systemd, or macOS), with Node 24+:
+
+```sh
+curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
+```
+
+It installs the latest release in `~/.imp` as a service, then prints the rest: your settings in `~/.imp/env`,
+`tailscale serve --bg 8787`, and signing in. Then, on your Mac:
+
+```sh
+curl -fsSL https://<your host>.ts.net/install-mac.sh | sh
+```
+
+That puts Imp in `~/Applications`, already connected to that host. `sh install-mac.sh --uninstall` removes it.
+
+Both keep themselves at the latest release. The host checks every hour, and restarts into a new release once the
+agent is idle; open pages then reload. Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to stop that. The Mac app checks at
+login and every hour, and replaces itself (quitting and reopening if it is running). It is not signed with an Apple
+Developer ID; macOS opens it because curl doesn't quarantine what it downloads.
+
+**Releasing.** Push a tag: `git tag v0.2.0 && git push origin v0.2.0`. `.github/workflows/release.yml` builds the host
+and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and publishes them as a GitHub release.
+
+## Running it from a checkout
 
 You need Node 24+, Bun, and a checkout of Exact next to this repository (or set `EXACT` to its path).
 

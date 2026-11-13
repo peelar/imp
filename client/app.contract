@@ -111,9 +111,13 @@ component App
   state now = 0
   // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
   state chatDocked = true persist
+  // The host's address in the Mac app ("" on the web, where the page's origin is the host). The Mac installer fills it
+  // in; the onboarding asks for it when no host answers.
+  state hostAddress = "" persist
+  state hostDraft = ""
   resource media = exactViewport() as shape Media
   resource time = exactTime() as shape Time
-  resource host = hostOrigin() as shape Host else empty()
+  resource host = hostOrigin(hostAddress) as shape Host else empty()
   resource account = account() when host.origin != "" as shape Account else empty()
   resource chat = chat() when signedIn as shape ChatState else empty()
   resource apps = apps() when signedIn as shape AppTile[] else empty()
@@ -145,6 +149,8 @@ component App
   derive chatLost = match failure(chat) { case some(f) => true, case none => false }
   derive appsLost = match failure(apps) { case some(f) => true, case none => false }
   derive todosLost = match failure(todos) { case some(f) => true, case none => false }
+  // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
+  derive unreachable = hostLost or (accountLost and hostAddress != "")
 
   task appearance mount
     after(1, applyScheme)
@@ -218,6 +224,12 @@ component App
   action afterTodoAdd
     if todoAddError == ""
       todoDraft = ""
+  action editHost(v: string)
+    hostDraft = v
+  action connect
+    if hostDraft.trim() != ""
+      hostAddress = hostDraft.trim().includes("://") ? hostDraft.trim() : `https://${hostDraft.trim()}`
+      refresh account
   action toggleTodo(id: string, done: bool)
     send todoSaved = todosSetDone(id, done)
 
@@ -467,7 +479,24 @@ component App
                 border="1px solid line.subtle" box-sizing="border-box"
               text "Meet your imp. It runs errands in your apps, builds new ones for you, and keeps them."
                 font-family="family.display" font-size="1.625rem" line-height=1.2
-            if account.status == "waiting"
+            if unreachable
+              column gap=12 testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
+                Step(number="01", title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"))
+                text (hostAddress == "" ? "Enter the address your host is served at, such as imp.your-tailnet.ts.net." : `Nothing answered at ${hostAddress}. Check that the host is running and this Mac is on your tailnet, or enter another address.`)
+                  color="ink.muted" font-size="0.9375rem" line-height=1.45
+                row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+                  input value=hostDraft input=editHost submit=connect placeholder="imp.your-tailnet.ts.net"
+                    aria-label="Host address" testId="host-address" flex=1 min-width=0 padding="9px 0" border="none"
+                    background-color="transparent" outline="none" font-family="family.mono" font-size="0.9375rem"
+                    color="ink.strong" autocapitalize="none" autocorrect="off" spellcheck=false
+                  button press=connect disabled=(hostDraft.trim() == "") testId="host-connect-button" padding="10px 14px"
+                    border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
+                    font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                    :disabled
+                      background-color="surface.soft"
+                      color="ink.faint"
+                    text "Connect"
+            else if account.status == "waiting"
               column gap=20 testId="signin-waiting" animation=(still ? "none" : "rise 260ms ease-out both")
                 column gap=10
                   Step(number="01", title="Open ChatGPT's sign-in page")

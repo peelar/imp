@@ -35,6 +35,12 @@ export interface HostOptions {
 	/** The Tailscale login allowed in, such as "adrian@github". Absent: everyone on the tailnet. */
 	readonly owner?: string;
 	readonly machineImage?: string;
+	/** The running release's tag ("dev" in a checkout). Open pages reload when the host they reconnect to has another. */
+	readonly version?: string;
+	/** The GitHub repository releases come from, which the Mac installer downloads Imp.app from. */
+	readonly repo?: string;
+	/** The Mac installer script, served at /install-mac.sh with this host's address and the repository filled in. */
+	readonly macInstaller?: string;
 }
 
 export async function startHost(options: HostOptions) {
@@ -130,6 +136,7 @@ export async function startHost(options: HostOptions) {
 		if (source === "account") return { topics: [ACCOUNT], load: async () => account.state() };
 		if (source === "chat") return { topics: [CHAT], load: () => chat.state() };
 		if (source === "apps") return { topics: [], load: async () => gateway.apps() };
+		if (source === "version") return { topics: [], load: async () => ({ version: options.version ?? "dev" }) };
 		const route = gateway.route(source);
 		if (route) return { topics: [`app:${route.app}`], load: () => gateway.call(route.app, "source", route.name, args) };
 		return undefined;
@@ -193,17 +200,20 @@ export async function startHost(options: HostOptions) {
 				return send(res, 200, reply);
 			}
 
-			// The address the browser reached the host at, for a web build that has none baked in (see client/app.ts). The
-			// host listens on localhost only, so a proxy in front (`tailscale serve`) set the forwarded headers.
-			if (url.pathname === "/assets/host.json" && req.method === "GET") {
-				const forwarded = (name: string) => String(req.headers[name] ?? "").split(",")[0]!.trim();
-				const proto = forwarded("x-forwarded-proto") || "http";
-				const hostname = forwarded("x-forwarded-host") || req.headers.host || `127.0.0.1:${options.port}`;
-				return send(res, 200, { origin: `${proto}://${hostname}` });
+			// The address the browser reached the host at, for a web build that has none baked in (see client/app.ts).
+			if (url.pathname === "/assets/host.json" && req.method === "GET") return send(res, 200, { origin: origin(req, options.port) });
+
+			// `curl -fsSL https://<this host>/install-mac.sh | sh` installs the Mac app, already pointed at this host.
+			if (url.pathname === "/install-mac.sh" && req.method === "GET" && options.macInstaller) {
+				const script = readFileSync(options.macInstaller, "utf8")
+					.replaceAll("__IMP_HOST__", origin(req, options.port))
+					.replaceAll("__IMP_REPO__", options.repo ?? "");
+				res.writeHead(200, { "content-type": "text/x-shellscript; charset=utf-8", "cache-control": "no-store" });
+				return res.end(script);
 			}
 
 			if (url.pathname.startsWith("/api/")) return send(res, 404, { error: "not found" });
-			if (options.clientDir && req.method === "GET") return serveClient(options.clientDir, url.pathname, res);
+			if (options.clientDir && req.method === "GET") return serveClient(options.clientDir, url.pathname, res, options.version ?? "dev");
 			send(res, 404, { error: "not found" });
 		} catch (error) {
 			console.error(error);
@@ -216,6 +226,10 @@ export async function startHost(options: HostOptions) {
 	console.log(`host on http://127.0.0.1:${options.port}, machine ${provider.name}, model ${options.model.provider}/${options.model.modelId}`);
 	return {
 		gateway,
+		/** Whether the agent is between turns. */
+		async idle() {
+			return !(await chat.busy());
+		},
 		async close() {
 			server.closeAllConnections();
 			server.close();
@@ -245,6 +259,15 @@ function allowed(req: IncomingMessage, res: ServerResponse, owner: string | unde
 		res.setHeader("vary", "origin");
 	}
 	return true;
+}
+
+/** The address the request reached the host at. It listens on localhost only, so a proxy in front of it (`tailscale
+ * serve`) set the forwarded headers. */
+function origin(req: IncomingMessage, port: number): string {
+	const forwarded = (name: string) => String(req.headers[name] ?? "").split(",")[0]!.trim();
+	const proto = forwarded("x-forwarded-proto") || "http";
+	const hostname = forwarded("x-forwarded-host") || req.headers.host || `127.0.0.1:${port}`;
+	return `${proto}://${hostname}`;
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -277,7 +300,7 @@ const TYPES: Record<string, string> = {
  * The built web client (`exact web-build --out dist`), served by Exact's static-host rule: a file at the path, else
  * shell.html, from which the client draws the route (or its notfound route).
  */
-function serveClient(dir: string, pathname: string, res: ServerResponse) {
+function serveClient(dir: string, pathname: string, res: ServerResponse, version: string) {
 	const root = normalize(dir);
 	let path = normalize(join(root, decodeURIComponent(pathname)));
 	if (path !== root && !path.startsWith(root + sep)) return send(res, 404, { error: "not found" });
@@ -292,5 +315,15 @@ function serveClient(dir: string, pathname: string, res: ServerResponse) {
 		// every publish, so the browser asks again each time and open clients get the new version.
 		"cache-control": /-[A-Za-z0-9_]{8}\.[a-z]+$/.test(path) ? "public, max-age=31536000, immutable" : "no-cache",
 	});
-	res.end(readFileSync(path));
+	const body = readFileSync(path);
+	res.end(extname(path) === ".html" && version !== "dev" ? withReload(body.toString("utf8"), version) : body);
+}
+
+/**
+ * A released host's pages reload themselves when the host they reach is another release: the version stream ends when
+ * the host restarts into an update, the browser opens it again, and the new host answers with its own version.
+ */
+function withReload(html: string, version: string): string {
+	const script = `<script>new EventSource("/api/live/version").onmessage = (e) => { if (JSON.parse(e.data).version !== ${JSON.stringify(version)}) location.reload(); };</script>`;
+	return html.includes("</head>") ? html.replace("</head>", `${script}</head>`) : script + html;
 }
