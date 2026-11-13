@@ -1,20 +1,19 @@
 // The machine runtime and setup: what the host puts on every machine, whatever the provider. The setup script
 // (machine/setup.sh) installs the system packages once per version; the runtime is one agentd process that serves
-// pi-env, the app daemon and the screen on one port (see machine/agentd.mjs). Adapters run the setup, copy the runtime files,
-// start agentd, and check its health; nothing here depends on the provider.
+// pi-env, the app daemon and the screen on one port (see machine/agentd.ts). Adapters run the setup, copy the runtime
+// files, start agentd, and check its health; nothing here depends on the provider.
 import { createHash, createHmac } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire, stripTypeScriptTypes } from "node:module";
+import path from "node:path";
 import { packagedDaemon } from "@earendil-works/pi-env";
 import type { ImageSpec, MachineSize } from "./machine.ts";
 
 const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
-const MACHINE_SOURCES = join(here, "..", "machine");
-const WS_PACKAGE = dirname(require.resolve("ws/package.json"));
-const BRIDGE_CLIENT = join(here, "bridge-client.mjs");
+const MACHINE_SOURCES = path.join(here, "..", "machine");
+const WS_PACKAGE = path.dirname(require.resolve("ws/package.json"));
+const BRIDGE_CLIENT = path.join(here, "bridge-client.ts");
 
 export const AGENTD_PORT = 7070;
 
@@ -24,7 +23,7 @@ export const SETUP_MARKER = "/var/lib/imp/setup";
 /** The image every machine gets: this host's setup script, at `size` where the provider lets us choose. */
 export async function machineImage(size: MachineSize): Promise<ImageSpec> {
   return {
-    setup: await readFile(join(MACHINE_SOURCES, "setup.sh"), "utf-8"),
+    setup: await readFile(path.join(MACHINE_SOURCES, "setup.sh"), "utf-8"),
     size,
   };
 }
@@ -33,12 +32,12 @@ export async function machineImage(size: MachineSize): Promise<ImageSpec> {
  * The setup as one root shell script that records its digest in SETUP_MARKER once it succeeded, so an adapter runs it
  * only on a machine whose marker differs.
  */
-export function setupScript(setup: string): { digest: string; script: string } {
+export function setupScript(setup: string) {
   const digest = createHash("sha256").update(setup).digest("hex").slice(0, 16);
 
   return {
     digest,
-    script: `${setup}\nmkdir -p ${dirname(SETUP_MARKER)} && echo ${digest} > ${SETUP_MARKER}\n`,
+    script: `${setup}\nmkdir -p ${path.dirname(SETUP_MARKER)} && echo ${digest} > ${SETUP_MARKER}\n`,
   };
 }
 
@@ -52,44 +51,40 @@ export type RuntimeFile = {
   /** Relative to the runtime directory on the machine. */
   readonly path: string;
   readonly data: Buffer;
-  readonly executable?: boolean;
+  readonly executable?: true;
 };
 
 /** A `pkill -f` pattern for every process started from `runtimeDir`, which never matches the shell running pkill. */
 export const runtimePattern = (runtimeDir: string) =>
   `${runtimeDir.slice(0, -1)}[${runtimeDir.slice(-1)}]/`;
 
-/** Every file agentd needs, for a machine of this platform. */
+/**
+ * Every file agentd needs, for a machine of this platform. The machine runs plain JavaScript with no packages but
+ * ws, so agentd and the worker ship with their types stripped.
+ */
 export async function runtime(platform: {
   platform: "linux" | "darwin";
   arch: "x64" | "arm64";
 }): Promise<Runtime> {
-  const files: RuntimeFile[] = [
-    {
-      path: "pi-env",
-      data: await readFile(packagedDaemon(platform)),
-      executable: true,
-    },
-    {
-      path: "agentd.mjs",
-      data: await readFile(join(MACHINE_SOURCES, "agentd.mjs")),
-    },
-    {
-      path: "worker.mjs",
-      data: await readFile(join(MACHINE_SOURCES, "worker.mjs")),
-    },
-    {
-      path: "screen.sh",
-      data: await readFile(join(MACHINE_SOURCES, "screen.sh")),
-    },
-  ];
+  const wsFiles = await listFiles(WS_PACKAGE);
 
-  for (const file of await listFiles(WS_PACKAGE)) {
-    files.push({
-      path: `node_modules/ws/${relative(WS_PACKAGE, file)}`,
-      data: await readFile(file),
-    });
-  }
+  const files: RuntimeFile[] = await Promise.all([
+    readFile(packagedDaemon(platform)).then((data): RuntimeFile => ({
+      path: "pi-env",
+      data,
+      executable: true,
+    })),
+    stripped("agentd"),
+    stripped("worker"),
+    shipped("screen.sh", path.join(MACHINE_SOURCES, "screen.sh")),
+    ...wsFiles.map(
+      async (file) =>
+        await shipped(
+          `node_modules/ws/${path.relative(WS_PACKAGE, file)}`,
+          file
+        )
+    ),
+  ]);
 
   const hash = createHash("sha256");
 
@@ -100,22 +95,41 @@ export async function runtime(platform: {
   return { files, digest: hash.digest("hex").slice(0, 16) };
 }
 
-/** The environment agentd starts with. */
+const shipped = async (to: string, from: string): Promise<RuntimeFile> => ({
+  path: to,
+  data: await readFile(from),
+});
+
+/** machine/<name>.ts as <name>.mjs. */
+const stripped = async (name: string): Promise<RuntimeFile> => ({
+  path: `${name}.mjs`,
+  data: Buffer.from(
+    stripTypeScriptTypes(
+      await readFile(path.join(MACHINE_SOURCES, `${name}.ts`), "utf-8"),
+      { mode: "strip" }
+    )
+  ),
+});
+
+/** The environment agentd starts with. `host` is the address it listens on, when not every address. */
 export function agentdEnv(options: {
   token: string;
   digest: string;
   runtimeDir: string;
   home: string;
-  host?: string;
+  host?: string | undefined;
 }) {
-  return {
+  const env = {
     AGENTD_TOKEN: options.token,
     AGENTD_DIGEST: options.digest,
     AGENTD_PORT: String(AGENTD_PORT),
-    PI_ENV_PATH: join(options.runtimeDir, "pi-env"),
+    PI_ENV_PATH: path.join(options.runtimeDir, "pi-env"),
     MACHINE_HOME: options.home,
-    ...(options.host ? { AGENTD_HOST: options.host } : {}),
   };
+
+  return options.host === undefined
+    ? env
+    : { ...env, AGENTD_HOST: options.host };
 }
 
 /** Where agentd keeps the egress proxy's CA certificate, and a CA bundle with it added. */
@@ -174,17 +188,15 @@ export function agentdEndpoints(
 }
 
 async function listFiles(dir: string): Promise<string[]> {
-  const out: string[] = [];
+  const entries = await readdir(dir, { withFileTypes: true });
 
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const file = path.join(dir, entry.name);
 
-    if (entry.isDirectory()) {
-      out.push(...(await listFiles(path)));
-    } else {
-      out.push(path);
-    }
-  }
+      return entry.isDirectory() ? await listFiles(file) : [file];
+    })
+  );
 
-  return out;
+  return nested.flat();
 }

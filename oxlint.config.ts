@@ -44,6 +44,10 @@ export default defineConfig({
     "eslint/require-unicode-regexp": "off",
     "eslint/require-await": "off",
     "eslint/sort-keys": "off",
+    // A `.catch()` handler types its parameter `unknown`, and anti-slop lets only a parameter named `cause` be that.
+    "unicorn/catch-error-name": ["error", { ignore: ["^cause$"] }],
+    // Nothing here runs in a browser: every postMessage is to or from a worker thread, which has no origin.
+    "unicorn/require-post-message-target-origin": "off",
     "unicorn/consistent-function-scoping": "off",
     "unicorn/no-await-expression-member": "off",
     "unicorn/prefer-ternary": "off",

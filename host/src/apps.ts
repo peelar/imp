@@ -43,6 +43,7 @@ import {
 import WebSocket from "ws";
 import type { Topics } from "./live.ts";
 import type { Machine } from "./machine.ts";
+import { type DbRequest, type FromAgentd, fromAgentdCheck } from "./protocol.ts";
 
 /** Names the shell's own sources use, so no app may take them as its id. */
 const RESERVED = new Set([
@@ -126,20 +127,6 @@ type Loaded = {
     { readonly operation: Operation; readonly args: Validator }
   >;
 };
-
-type FromMachine =
-  | { t: "loaded"; app: string; hash: string; manifest: Manifest }
-  | { t: "loadFailed"; app: string; hash: string; error: string }
-  | { t: "result"; id: string; ok: boolean; value?: unknown; error?: string }
-  | {
-      t: "db";
-      id: number;
-      app: string;
-      op: "all" | "get" | "run" | "batch";
-      sql?: string;
-      params?: SQLInputValue[];
-      statements?: { sql: string; params?: SQLInputValue[] }[];
-    };
 
 /** Where an app's draft runs. */
 export const draftSlot = (id: string) => `${id}~draft`;
@@ -317,7 +304,13 @@ export function appGateway(options: GatewayOptions) {
         ws.once("error", reject);
       });
       ws.on("message", (data) => {
-        onMessage(ws, JSON.parse(String(data)) as FromMachine);
+        const message: unknown = JSON.parse(String(data));
+
+        if (fromAgentdCheck.check(message)) {
+          onMessage(ws, message);
+        } else {
+          log(`app socket: dropped a message agentd should not send`);
+        }
       });
       ws.on("close", () => {
         onClose(ws);
@@ -366,7 +359,7 @@ export function appGateway(options: GatewayOptions) {
     }
   }
 
-  function onMessage(ws: WebSocket, message: FromMachine) {
+  function onMessage(ws: WebSocket, message: FromAgentd) {
     if (message.t === "loaded") {
       const app = slots.get(message.app);
 
@@ -377,8 +370,8 @@ export function appGateway(options: GatewayOptions) {
       let version: Loaded;
 
       try {
-        version = checkManifest(app.id, message.manifest);
-        migrate(message.app, app.id, message.manifest.schema);
+        version = checkManifest(app.id, message.manifest as Manifest);
+        migrate(message.app, app.id, version.manifest.schema);
       } catch (error) {
         settleLoad(
           message.app,
@@ -417,9 +410,9 @@ export function appGateway(options: GatewayOptions) {
       clearTimeout(call.timer);
 
       if (message.ok) {
-        call.resolve(message.value ?? null);
+        call.resolve(message.value);
       } else {
-        call.reject(new Error(message.error ?? "The app failed."));
+        call.reject(new Error(message.error || "The app failed."));
       }
     } else if (message.t === "db") {
       let reply: object;
@@ -429,7 +422,7 @@ export function appGateway(options: GatewayOptions) {
           t: "dbResult",
           id: message.id,
           ok: true,
-          value: runDb(message.app, message),
+          value: runDb(message.app, message.request),
         };
       } catch (error) {
         reply = {
@@ -462,7 +455,7 @@ export function appGateway(options: GatewayOptions) {
     loadWaiters.delete(slot);
   }
 
-  function runDb(slot: string, message: Extract<FromMachine, { t: "db" }>) {
+  function runDb(slot: string, message: DbRequest) {
     const app = slots.get(slot);
 
     if (!app) {
@@ -483,18 +476,11 @@ export function appGateway(options: GatewayOptions) {
 
     let value: unknown;
 
-    if (message.op === "all") {
-      value = db.prepare(message.sql ?? "").all(...(message.params ?? []));
-    } else if (message.op === "get") {
-      value =
-        db.prepare(message.sql ?? "").get(...(message.params ?? [])) ?? null;
-    } else if (message.op === "run") {
-      value = run(message.sql ?? "", message.params);
-    } else {
+    if (message.op === "batch") {
       db.exec("BEGIN");
 
       try {
-        value = (message.statements ?? []).map((statement) =>
+        value = message.statements.map((statement) =>
           run(statement.sql, statement.params)
         );
         db.exec("COMMIT");
@@ -502,6 +488,12 @@ export function appGateway(options: GatewayOptions) {
         db.exec("ROLLBACK");
         throw error;
       }
+    } else if (message.op === "all") {
+      value = db.prepare(message.sql).all(...message.params);
+    } else if (message.op === "get") {
+      value = db.prepare(message.sql).get(...message.params) ?? null;
+    } else {
+      value = run(message.sql, message.params);
     }
 
     if (totalChanges(db) !== before) {
