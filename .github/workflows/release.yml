@@ -54,7 +54,8 @@ jobs:
           git commit -m "Release Imp v$(node -p 'require("./host/package.json").version')"
           # A push that landed meanwhile goes under this commit; its changesets wait for the next run.
           git pull --rebase origin main
-          git push origin HEAD:main
+          # npm ci turned on .githooks/pre-push, which would stop this commit: it consumes changesets, adding none.
+          git push --no-verify origin HEAD:main
       - id: unreleased
         env:
           GH_TOKEN: ${{ github.token }}
