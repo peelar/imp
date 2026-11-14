@@ -20,11 +20,6 @@ export default defineConfig({
   navigation: {
     cta: { href: "/docs/self-hosting/install", label: "Install" },
   },
-  // GitHub Pages serves the site under the repository's name (.github/workflows/docs.yml).
-  deployment: {
-    site: "https://peelar.github.io",
-    base: "/imp",
-  },
   theme: {
     accent: { light: "#2341d6", dark: "#5b74f2" },
     background: { light: "#ffffff", dark: "#0d0d0d" },

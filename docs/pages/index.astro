@@ -4,8 +4,6 @@ import PageLayout from "blume/components/layout/PageLayout.astro";
 import data from "blume:data";
 
 const { config } = data;
-// The site's base path (blume.config.ts deployment.base), which Blume does not add to this page's own links.
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const install = "curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh";
 
 const features = [
@@ -62,12 +60,12 @@ const steps = [
 					own.
 				</p>
 				<div class="actions">
-					<a class="button primary" href={`${base}/docs/self-hosting/install`}>Install your Imp</a>
-					<a class="button" href={`${base}/docs`}>Read the docs</a>
+					<a class="button primary" href="/docs/self-hosting/install">Install your Imp</a>
+					<a class="button" href="/docs">Read the docs</a>
 				</div>
 			</div>
 			<figure class="art">
-				<img src={`${base}/workshop.jpg`} alt="An engraving of a workshop full of machines, papers flying around the person at the desk" width="1200" height="800" />
+				<img src="/workshop.jpg" alt="An engraving of a workshop full of machines, papers flying around the person at the desk" width="1200" height="800" />
 			</figure>
 		</section>
 
@@ -98,7 +96,7 @@ const steps = [
 				))}
 			</ol>
 			<p class="more">
-				Then learn <a href={`${base}/docs/how-it-works/architecture`}>how it fits together</a>, <a href={`${base}/docs/how-it-works/vault`}>how the vault keeps your keys</a>, and <a href={`${base}/docs/building-apps`}>how to build an app</a>.
+				Then learn <a href="/docs/how-it-works/architecture">how it fits together</a>, <a href="/docs/how-it-works/vault">how the vault keeps your keys</a>, and <a href="/docs/building-apps">how to build an app</a>.
 			</p>
 		</section>
 	</div>

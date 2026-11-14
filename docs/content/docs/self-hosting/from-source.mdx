@@ -40,6 +40,6 @@ The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspace
 | `bun exact.mjs test web` | `client/` | The client against a host with a fake model. |
 | `node scripts/smoke-machine.ts` | `host/` | One machine adapter on its own. |
 
-`npm run dev -w @imp/docs` serves these docs with hot reload, under `/imp` as GitHub Pages serves them. A push to `main` that changes them publishes them (`.github/workflows/docs.yml`).
+`npm run dev -w @imp/docs` serves these docs with hot reload. Vercel builds them for every push that changes them, publishing `main` and a preview for each pull request (`docs/vercel.json`).
 
 After you change an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.
