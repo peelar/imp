@@ -5,7 +5,7 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import type { Machine, MachineProvider, MachineSpec } from "./machine.ts";
-import { agentdEndpoints, agentdEnv, agentdToken, healthFor, runtime, type Runtime } from "./machine-runtime.ts";
+import { agentdEndpoints, agentdEnv, agentdToken, egressEnv, healthFor, runtime, type Runtime } from "./machine-runtime.ts";
 
 export interface LocalProviderOptions {
 	readonly secret: string;
@@ -14,7 +14,7 @@ export interface LocalProviderOptions {
 }
 
 export function localProvider(options: LocalProviderOptions): MachineProvider {
-	const running = new Map<string, { child: ChildProcess; port: number; token: string }>();
+	const running = new Map<string, { child: ChildProcess; port: number; egressPort: number; token: string }>();
 	// A local machine lives as long as its host: agentd is a child process, so stop it when the host exits.
 	process.once("exit", () => {
 		for (const { child } of running.values()) child.kill();
@@ -51,16 +51,18 @@ export function localProvider(options: LocalProviderOptions): MachineProvider {
 				}
 				await mkdir(join(home(spec.key), "workspace"), { recursive: true });
 				const port = await freePort();
+				// Every local machine shares the host's loopback, so each takes free ports.
+				const egressPort = await freePort();
 				const child = spawn(process.execPath, [join(runtimeDir, "agentd.mjs")], {
 					env: {
 						...process.env,
-						...agentdEnv({ token, digest, runtimeDir, home: home(spec.key), host: "127.0.0.1" }),
+						...agentdEnv({ token, digest, runtimeDir, home: home(spec.key), host: "127.0.0.1", egressPort }),
 						AGENTD_PORT: String(port),
 						HOME: home(spec.key),
 					},
 					stdio: ["ignore", "inherit", "inherit"],
 				});
-				current = { child, port, token };
+				current = { child, port, egressPort, token };
 				running.set(spec.key, current);
 				let up = false;
 				for (let i = 0; i < 100 && !up; i++) {
@@ -75,6 +77,7 @@ export function localProvider(options: LocalProviderOptions): MachineProvider {
 				daemonCommand: async () => endpoints.daemonCommand,
 				appSocket: async () => endpoints.appSocket,
 				screen: async () => endpoints.screen,
+				egress: async () => ({ socket: endpoints.egress, env: egressEnv(home(spec.key), current.egressPort) }),
 				expose: async (port) => ({ url: `http://127.0.0.1:${port}`, headers: {} }),
 				keepAlive: async () => {},
 				suspend: async () => {},

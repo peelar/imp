@@ -44,3 +44,11 @@ if ! command -v google-chrome >/dev/null && ! command -v chromium >/dev/null; th
 		echo "No Chrome for arm64 $ID; the screen has no browser" >&2
 	fi
 fi
+
+# The agent's commands send their HTTPS requests through agentd's egress proxy, where the host puts the owner's secrets
+# on the ones to a secret's hosts (host/src/egress.ts). Chrome would take the proxy from the same environment; this
+# policy keeps it connecting directly, so no page it opens gets a secret.
+for dir in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do
+	mkdir -p "$dir"
+	echo '{ "ProxyMode": "direct" }' > "$dir/imp-egress.json"
+done

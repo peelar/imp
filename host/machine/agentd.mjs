@@ -6,17 +6,19 @@
 // /pi-env   carries a pi-env daemon's stdin and stdout over a WebSocket. Frames to the host start with one byte: 1 for
 //           stdout, 2 for stderr. Frames from the host are the daemon's stdin.
 // /screen   the computer's screen: a VNC (RFB) stream over a WebSocket, bridged to x11vnc's socket (see screen.sh).
+// /egress  the egress proxy's control socket (see "The egress proxy" below), and with `&stream=<id>` one tunnel.
 // /apps     the app daemon: the host loads each app's server code, and agentd runs it in a worker of its own, so a
 //           new version replaces the old worker and terminating it frees everything. One host connection at a time;
 //           workers keep running when it drops, and the host loads every app again when it reconnects.
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { connect } from "node:net";
+import { connect, createServer as createTcpServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { WebSocketServer } from "./node_modules/ws/wrapper.mjs";
+import { createWebSocketStream, WebSocketServer } from "./node_modules/ws/wrapper.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.AGENTD_PORT ?? 7070);
@@ -34,13 +36,14 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 }
 
 server.on("upgrade", (req, socket, head) => {
 	const url = new URL(req.url ?? "/", "http://agentd");
-	if (url.searchParams.get("token") !== token || !["/pi-env", "/apps", "/screen"].includes(url.pathname)) {
+	if (url.searchParams.get("token") !== token || !["/pi-env", "/apps", "/screen", "/egress"].includes(url.pathname)) {
 		socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
 		return;
 	}
 	wss.handleUpgrade(req, socket, head, (ws) => {
 		if (url.pathname === "/pi-env") servePiEnv(ws, JSON.parse(url.searchParams.get("args") ?? "[]"));
 		else if (url.pathname === "/screen") serveScreen(ws);
+		else if (url.pathname === "/egress") serveEgress(ws, url.searchParams.get("stream"));
 		else serveApps(ws);
 	});
 });
@@ -100,6 +103,135 @@ function serveScreen(ws) {
 		vnc.on("error", () => ws.close(1011, "The screen stopped."));
 		vnc.on("close", () => ws.close(1000));
 	});
+}
+
+// ---- The egress proxy ----
+//
+// The agent's commands send their HTTPS requests here (HTTPS_PROXY, on the machine's loopback). A request to a host
+// one of the owner's secrets is for goes to the host, which puts the secret on it: the host keeps a control socket
+// open, agentd asks it over that socket to open a stream socket for each tunnel, and passes the tunnel's bytes through
+// as they came, CONNECT line included. The host answers the CONNECT itself. Every other request goes out from here
+// directly, as it would without the proxy. The rule list holds host names only; values never come to the machine.
+
+const EGRESS_PORT = Number(process.env.EGRESS_PORT ?? 7071);
+const EGRESS_DIR = process.env.EGRESS_DIR ?? join(home, ".cache", "imp");
+/** The host names whose requests go to the host. */
+let egressHosts = new Set();
+let egressControl;
+/** Waiting for the host's control socket: resolved with it. */
+let controlWaiters = [];
+/** stream id -> the client's socket and what it sent so far */
+const tunnels = new Map();
+const SYSTEM_BUNDLES = ["/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem"];
+
+function serveEgress(ws, stream) {
+	if (stream) {
+		const tunnel = tunnels.get(stream);
+		tunnels.delete(stream);
+		if (!tunnel) return ws.close(1008, "no such tunnel");
+		clearTimeout(tunnel.timer);
+		const duplex = createWebSocketStream(ws);
+		duplex.on("error", () => tunnel.socket.destroy());
+		tunnel.socket.on("error", () => duplex.destroy());
+		duplex.write(tunnel.head);
+		tunnel.socket.pipe(duplex).pipe(tunnel.socket);
+		tunnel.socket.resume();
+		return;
+	}
+	egressControl?.close(4000, "replaced by a newer host connection");
+	egressControl = ws;
+	ws.on("message", (data) => {
+		const message = JSON.parse(String(data));
+		if (message.t !== "config") return;
+		egressHosts = new Set(message.hosts.map((h) => h.toLowerCase()));
+		if (message.ca) writeCa(message.ca);
+		ws.send(JSON.stringify({ t: "configured" }));
+		for (const resolve of controlWaiters.splice(0)) resolve(ws);
+	});
+	ws.on("close", () => {
+		if (egressControl === ws) egressControl = undefined;
+	});
+}
+
+/** The CA certificate, and a bundle of the system's CAs with it, for the commands' environment (see egressEnv). */
+function writeCa(pem) {
+	mkdirSync(EGRESS_DIR, { recursive: true, mode: 0o700 });
+	const caFile = join(EGRESS_DIR, "egress-ca.pem");
+	const bundleFile = join(EGRESS_DIR, "ca-bundle.pem");
+	const system = SYSTEM_BUNDLES.find((file) => existsSync(file));
+	const bundle = `${system ? readFileSync(system, "utf8").trimEnd() + "\n" : ""}${pem.trim()}\n`;
+	const current = existsSync(bundleFile) ? readFileSync(bundleFile, "utf8") : "";
+	writeFileSync(caFile, `${pem.trim()}\n`);
+	if (current !== bundle) writeFileSync(bundleFile, bundle);
+}
+
+/** The host's control socket once it sent its rules; undefined after `ms` without one. */
+function hostControl(ms) {
+	if (egressControl?.readyState === egressControl?.OPEN && egressControl) return Promise.resolve(egressControl);
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => {
+			controlWaiters = controlWaiters.filter((w) => w !== done);
+			resolve(undefined);
+		}, ms);
+		const done = (ws) => (clearTimeout(timer), resolve(ws));
+		controlWaiters.push(done);
+	});
+}
+
+const refuse = (socket, status, reason) =>
+	socket.end(`HTTP/1.1 ${status}\r\ncontent-type: text/plain\r\ncontent-length: ${Buffer.byteLength(reason)}\r\nconnection: close\r\n\r\n${reason}`);
+
+const egressServer = createTcpServer((socket) => {
+	let head = Buffer.alloc(0);
+	socket.on("error", () => {});
+	const onData = (chunk) => {
+		head = Buffer.concat([head, chunk]);
+		const end = head.indexOf("\r\n\r\n");
+		if (end === -1) {
+			if (head.length > 16384) refuse(socket, "431 Request Header Fields Too Large", "");
+			return;
+		}
+		socket.off("data", onData);
+		socket.pause();
+		const [method, target] = head.subarray(0, head.indexOf("\r\n")).toString("latin1").split(" ");
+		const match = /^\[?([^\]]+?)\]?:(\d+)$/.exec(target ?? "");
+		if (method !== "CONNECT" || !match) {
+			return refuse(socket, "405 Method Not Allowed", "Imp's proxy only carries HTTPS (CONNECT).\n");
+		}
+		const [, hostname, port] = match;
+		if (egressHosts.has(hostname.toLowerCase()) && port === "443") void viaHost(socket, head);
+		else direct(socket, hostname, Number(port), head.subarray(end + 4));
+	};
+	socket.on("data", onData);
+});
+
+async function viaHost(socket, head) {
+	const control = await hostControl(10_000);
+	if (!control) return refuse(socket, "502 Bad Gateway", "Imp's host is not connected to this computer, so it cannot add your secret. Try again in a moment.\n");
+	const id = randomUUID();
+	const timer = setTimeout(() => {
+		if (tunnels.delete(id)) refuse(socket, "504 Gateway Timeout", "Imp's host did not open the tunnel.\n");
+	}, 15_000);
+	tunnels.set(id, { socket, head, timer });
+	socket.on("close", () => {
+		if (tunnels.delete(id)) clearTimeout(timer);
+	});
+	control.send(JSON.stringify({ t: "open", id }));
+}
+
+function direct(socket, hostname, port, rest) {
+	const upstream = connect(port, hostname);
+	upstream.on("connect", () => {
+		socket.write("HTTP/1.1 200 Connection established\r\n\r\n");
+		if (rest.length > 0) upstream.write(rest);
+		socket.pipe(upstream).pipe(socket);
+		socket.resume();
+	});
+	upstream.on("error", (error) => {
+		if (!socket.writableEnded) refuse(socket, "502 Bad Gateway", `Could not reach ${hostname}:${port}: ${error.message}\n`);
+		socket.destroy();
+	});
+	socket.on("close", () => upstream.destroy());
 }
 
 // ---- The app daemon ----
@@ -219,5 +351,8 @@ function call(message) {
 }
 
 server.listen(port, process.env.AGENTD_HOST ?? "0.0.0.0", () => console.log(`agentd listening on ${port}`));
+// Only the machine's own programs may use the egress proxy.
+egressServer.on("error", (error) => console.error(`egress proxy: ${error.message}`));
+egressServer.listen(EGRESS_PORT, "127.0.0.1", () => console.log(`egress proxy on 127.0.0.1:${EGRESS_PORT}`));
 // The screen starts with the machine, so the agent's programs have a display before anyone opens it.
 void startScreen().then((up) => console.log(up ? `screen on ${SCREEN_DISPLAY}` : "no screen"));

@@ -9,6 +9,8 @@
 //    after every reconnect.
 // 3. An `expose()` endpoint is unreachable without what only the host holds: its headers, or a tunnel it opened.
 // 4. Provider credentials stay on the host; nothing on the machine can call the provider's API.
+// 5. The owner's secrets stay on the host too: the machine's commands get stand-ins, and their HTTPS requests to a
+//    secret's hosts go through `egress()` to the host, which puts the secret on them (egress.ts).
 
 export interface MachineProvider {
 	readonly name: string;
@@ -58,6 +60,11 @@ export interface Machine {
 	 * the headers it needs. It closes with a reason when the machine has no screen.
 	 */
 	screen(signal?: AbortSignal): Promise<Endpoint>;
+	/**
+	 * The machine's egress proxy: the control socket the host opens to it (agentd's `/egress`), and what a command on
+	 * the machine needs in its environment for its HTTPS requests to go through it.
+	 */
+	egress(signal?: AbortSignal): Promise<{ socket: Endpoint; env: Readonly<Record<string, string>> }>;
 	/** An endpoint the host can reach that forwards to `port` on the machine, with the headers it needs. */
 	expose(port: number, signal?: AbortSignal): Promise<Endpoint>;
 	/** The host is using the machine: postpone the idle suspend by another `idleSuspendMs`. */

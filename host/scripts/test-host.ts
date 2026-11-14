@@ -12,8 +12,13 @@ import { localProvider } from "../src/machine-local.ts";
 import { CHATGPT } from "../src/signin.ts";
 
 const respond: FauxResponseFactory = (context) => {
-	const last = context.messages.at(-1) as { role: string; content: unknown } | undefined;
-	if (last?.role === "toolResult") return fauxAssistantMessage("Done.");
+	// The last message the model answers: a changed prompt section (a secret added) comes as a system message after it.
+	const last = context.messages.filter((m) => m.role !== "system").at(-1) as { role: string; content: unknown } | undefined;
+	if (last?.role === "toolResult") {
+		// What a command printed, when it printed a secret's stand-in: the test checks the agent saw no more than that.
+		const seen = JSON.stringify(last.content).match(/imp-secret-[a-z0-9-]+/);
+		return fauxAssistantMessage(seen ? `I see ${seen[0]}.` : "Done.");
+	}
 	const text = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
 	// Memory's reflection after a run: "I live in <place>" anywhere in the exchange is a fact about the person.
 	const first = context.messages[0];
@@ -21,6 +26,10 @@ const respond: FauxResponseFactory = (context) => {
 		const place = text.match(/I live in (\p{L}+)/u)?.[1];
 		return fauxAssistantMessage(JSON.stringify({ remember: place ? [{ about: "user", facts: [`Lives in ${place}`] }] : [] }));
 	}
+	const wanted = text.match(/ask for a key: ([a-z]+)/);
+	if (wanted) return fauxAssistantMessage(fauxToolCall("request_secret", { service: wanted[1]!, why: "To read your issues." }), { stopReason: "toolUse" });
+	const command = text.match(/run: ([^"\\]+)/);
+	if (command) return fauxAssistantMessage(fauxToolCall("bash", { command: command[1]!.trim() }), { stopReason: "toolUse" });
 	const todo = text.match(/todo: ([^"\\]+)/);
 	if (todo) return fauxAssistantMessage(fauxToolCall("run_app_action", { app: "todos", action: "add", args: { title: todo[1]!.trim() } }), { stopReason: "toolUse" });
 	const fact = text.match(/remember: ([^"\\]+)/);
@@ -68,5 +77,7 @@ await startHost({
 	machines: (secret) => localProvider({ secret, dir: join(dataDir, "machines") }),
 	dataDir,
 	appsDir: join(import.meta.dirname, "..", "..", "client", "apps"),
+	// OpenBao and mitmproxy, downloaded once for every test run.
+	toolsDir: join(tmpdir(), "imp-tools"),
 	port: Number(process.env.PORT ?? 8787),
 });

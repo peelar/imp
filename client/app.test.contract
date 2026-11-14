@@ -99,3 +99,42 @@ test "after a chat the imp remembers what it learned on its own, without a tool 
   clock until state memory.entries.0.facts.0 == "Lives in Gdańsk" within 10000
   tap "tab-settings"
   expect text "memory-fact-0-0" == "Lives in Gdańsk"
+
+test "a key added in Settings reaches the imp's commands as a stand-in, never as its value"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  clock until state secrets.status == "ready" within 120000
+  expect tree has "secrets-empty"
+  tap "secret-add-github"
+  type "secret-value" "ghp_testvalue123"
+  tap "secret-save"
+  clock until state secrets.secrets.0.name == "github" within 20000
+  expect text "secret-name-0" == "github"
+  expect tree missing "secret-form"
+  tap "secret-add-github"
+  expect text "secret-value" == ""
+  tap "secret-cancel"
+  tap "tab-chat"
+  type "composer" "Please run: printenv GITHUB_TOKEN"
+  tap "send"
+  clock until state chat.busy == false within 30000
+  clock until state chat.messages.15.text == "I see imp-secret-github." within 10000
+
+test "the imp asks for a key it lacks, and the owner adds it from the request"
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "Please ask for a key: linear"
+  tap "send"
+  clock until state secrets.requests.0.name == "linear" within 10000
+  clock until state chat.busy == false within 10000
+  tap "tab-settings"
+  expect tree has "secret-request-0"
+  tap "secret-request-add-0"
+  expect tree has "secret-form"
+  type "secret-value" "lin_api_test"
+  tap "secret-save"
+  clock until state secrets.requests.length == 0 within 20000
+  expect tree missing "secret-request-0"
+  clock until state secrets.secrets.length == 2 within 5000
+  tap "secret-delete-0"
+  clock until state secrets.secrets.length == 1 within 10000
+  expect text "secret-name-0" == "linear"

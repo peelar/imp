@@ -10,6 +10,7 @@ import {
 	agentdEndpoints,
 	agentdEnv,
 	agentdToken,
+	egressEnv,
 	healthFor,
 	runtime,
 	runtimePattern,
@@ -107,6 +108,9 @@ function e2bMachine(spec: MachineSpec, sandbox: Sandbox, token: string): Machine
 		},
 		async screen() {
 			return endpoints.screen;
+		},
+		async egress() {
+			return { socket: endpoints.egress, env: egressEnv(HOME) };
 		},
 		async expose(port: number) {
 			return { url: `https://${sandbox.getHost(port)}`, headers };

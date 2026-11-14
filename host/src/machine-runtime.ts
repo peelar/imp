@@ -17,6 +17,8 @@ const WS_PACKAGE = dirname(require.resolve("ws/package.json"));
 const BRIDGE_CLIENT = join(here, "bridge-client.mjs");
 
 export const AGENTD_PORT = 7070;
+/** Where agentd takes the agent's HTTPS requests that may need a secret (egress.ts), on the machine's loopback. */
+export const EGRESS_PORT = 7071;
 /** Where a machine records the digest of the setup it last ran. */
 export const SETUP_MARKER = "/var/lib/imp/setup";
 
@@ -67,14 +69,50 @@ export async function runtime(platform: { platform: "linux" | "darwin"; arch: "x
 }
 
 /** The environment agentd starts with. */
-export function agentdEnv(options: { token: string; digest: string; runtimeDir: string; home: string; host?: string }) {
+export function agentdEnv(options: {
+	token: string;
+	digest: string;
+	runtimeDir: string;
+	home: string;
+	host?: string;
+	egressPort?: number;
+}) {
 	return {
 		AGENTD_TOKEN: options.token,
 		AGENTD_DIGEST: options.digest,
 		AGENTD_PORT: String(AGENTD_PORT),
 		PI_ENV_PATH: join(options.runtimeDir, "pi-env"),
 		MACHINE_HOME: options.home,
+		EGRESS_PORT: String(options.egressPort ?? EGRESS_PORT),
+		EGRESS_DIR: egressDir(options.home),
 		...(options.host ? { AGENTD_HOST: options.host } : {}),
+	};
+}
+
+/** Where agentd keeps the egress proxy's CA certificate, and a CA bundle with it added. */
+const egressDir = (home: string) => join(home, ".cache", "imp");
+
+/**
+ * What a command needs on the machine for its HTTPS requests to go through agentd's egress proxy, where the host puts
+ * the owner's secrets on them: the proxy, and the host's CA certificate, which the proxy's TLS is signed with.
+ */
+export function egressEnv(home: string, port = EGRESS_PORT): Record<string, string> {
+	const proxy = `http://127.0.0.1:${port}`;
+	const noProxy = "localhost,127.0.0.1,::1";
+	const bundle = join(egressDir(home), "ca-bundle.pem");
+	return {
+		HTTPS_PROXY: proxy,
+		https_proxy: proxy,
+		NO_PROXY: noProxy,
+		no_proxy: noProxy,
+		// Node's fetch and https use the proxy only when asked to.
+		NODE_USE_ENV_PROXY: "1",
+		NODE_EXTRA_CA_CERTS: join(egressDir(home), "egress-ca.pem"),
+		// OpenSSL, Python, curl, git and Go read these instead of the system bundle; agentd's bundle is that plus the CA.
+		SSL_CERT_FILE: bundle,
+		REQUESTS_CA_BUNDLE: bundle,
+		CURL_CA_BUNDLE: bundle,
+		GIT_SSL_CAINFO: bundle,
 	};
 }
 
@@ -93,6 +131,8 @@ export function agentdEndpoints(base: { url: string; headers: Readonly<Record<st
 		daemonCommand: [process.execPath, BRIDGE_CLIENT, `${ws}/pi-env?token=${token}`, JSON.stringify(base.headers)],
 		appSocket: { url: `${ws}/apps?token=${token}`, headers: base.headers },
 		screen: { url: `${ws}/screen?token=${token}`, headers: base.headers },
+		/** The egress proxy's control socket; a stream socket adds `&stream=<id>`. */
+		egress: { url: `${ws}/egress?token=${token}`, headers: base.headers },
 	};
 }
 

@@ -19,6 +19,7 @@ import type { MachineProvider } from "./machine.ts";
 import { TOPIC as MEMORY, type MemorySystem } from "./memory.ts";
 import { graphMemory } from "./memory-graph.ts";
 import { screenSockets, serveScreenPage } from "./screen.ts";
+import { openSecrets, TOPIC as SECRETS } from "./secrets.ts";
 import { chatgptAccount, TOPIC as ACCOUNT } from "./signin.ts";
 import { APPS_TOPIC, BUILD_TOPIC, storedApps, studio } from "./studio.ts";
 
@@ -53,6 +54,8 @@ export interface HostOptions {
 	readonly macInstaller?: string;
 	/** An E2B API key for Imp cloud machines; the owner can also enter one in Settings. Default: E2B_API_KEY. */
 	readonly cloudKey?: string;
+	/** Where the programs the host downloads are kept (tools.ts). Default: DATA_DIR/tools. */
+	readonly toolsDir?: string;
 }
 
 export async function startHost(options: HostOptions) {
@@ -94,22 +97,27 @@ export async function startHost(options: HostOptions) {
 	registry.install(memory.extension);
 
 	const stored = storedApps(DATA, options.appsDir, (message) => console.error(message));
-	const gateway = appGateway({
-		apps: stored.live,
-		dataDir: DATA,
-		topics,
-		registry,
-		machine: async () => {
-			const m = await computer.machine();
-			computer.touch();
-			return m;
-		},
-	});
+	const machine = async () => {
+		const m = await computer.machine();
+		computer.touch();
+		return m;
+	};
+	const gateway = appGateway({ apps: stored.live, dataDir: DATA, topics, registry, machine });
+	// The owner's secrets, which the agent's commands use without holding them.
+	const secrets = openSecrets({ dataDir: DATA, toolsDir: options.toolsDir ?? join(DATA, "tools"), topics, registry, machine });
+	secrets.start();
 
 	const account = chatgptAccount(options.models, topics);
-	// Built for each tool call, so a switch reaches the agent's next one.
-	const env = ({ cwd }: { readonly cwd?: string }) =>
+	// Built for each tool call, so a switch reaches the agent's next one, and so does a secret added in Settings.
+	const files = ({ cwd }: { readonly cwd?: string }) =>
 		new RemoteExecutionEnv({ connection: computer.connection(), id: computer.id(), cwd: cwd ?? computer.workspace() });
+	const env = async ({ cwd }: { readonly cwd?: string }) =>
+		new RemoteExecutionEnv({
+			connection: computer.connection(),
+			id: computer.id(),
+			cwd: cwd ?? computer.workspace(),
+			shellEnv: await secrets.shellEnv(),
+		});
 	const clientSource = resolve(options.appsDir, "..");
 	const apps = studio({
 		dataDir: DATA,
@@ -119,7 +127,7 @@ export async function startHost(options: HostOptions) {
 		gateway,
 		topics,
 		registry,
-		files: () => env({}),
+		files: () => files({}),
 		workspace: computer.workspace,
 		context,
 		drafts: stored.drafts,
@@ -136,6 +144,7 @@ export async function startHost(options: HostOptions) {
 	await home.configure(agent(), context);
 	computer.onSwitch(async () => {
 		gateway.disconnect();
+		secrets.switched();
 		await home.configure(agent(), context);
 		gateway.start().catch((error) => console.error(`apps: ${error instanceof Error ? error.message : error}`));
 	});
@@ -160,11 +169,12 @@ export async function startHost(options: HostOptions) {
 		// remembers come with the account.
 		if (source === "account") {
 			return {
-				topics: [ACCOUNT, COMPUTER, MEMORY],
+				topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS],
 				load: async () => ({
 					...account.state(),
 					computer: await computer.load(),
 					memory: { name: memory.name, location: memory.location, entries: await memory.inspect() },
+					secrets: secrets.state(),
 				}),
 			};
 		}
@@ -203,6 +213,14 @@ export async function startHost(options: HostOptions) {
 				// An entry, and one of its facts ("" forgets the whole entry).
 				await memory.forget(String(args[0] ?? ""), args[1] ? String(args[1]) : undefined);
 				return ok;
+			case "secretsPut": {
+				const at = (i: number) => String(args[i] ?? "");
+				return secrets.put({ name: at(0), service: at(1), value: at(2), hosts: at(3), header: at(4), prefix: at(5), envName: at(6) });
+			}
+			case "secretsDelete":
+				return secrets.remove(String(args[0] ?? ""));
+			case "secretsDismiss":
+				return secrets.dismiss(String(args[0] ?? ""));
 			case "chatStop":
 				await home.abort(context);
 				return ok;
@@ -311,6 +329,7 @@ export async function startHost(options: HostOptions) {
 			server.close();
 			gateway.close();
 			computer.close();
+			secrets.close();
 			await chat.close();
 			await harness.close(context);
 		},

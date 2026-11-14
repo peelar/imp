@@ -31,6 +31,14 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   in an editor. The imp writes to it with tools while it works, and after every answer a background task asks the
   model what the exchange taught it, so it remembers without being told to. Another memory system implements
   `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()` as `memory`.
+- **Secrets.** API keys you add in Settings (GitHub, OpenAI, Anthropic, Linear, or any HTTPS API) work on the imp's
+  computer without the imp or its computer holding them. They live in an [OpenBao](https://openbao.org) the host runs
+  in its data directory (`host/src/vault.ts`); the computer gets a stand-in such as `GITHUB_TOKEN=imp-secret-github`,
+  and its HTTPS requests to a key's hosts go through agentd to a [mitmproxy](https://mitmproxy.org) on the host, which
+  puts the key on them and takes it out of the response (`host/src/egress.ts`). It works the same on Imp cloud and on
+  your own computer. The host downloads pinned, checksummed builds of both the first time it needs them
+  (`host/src/tools.ts`). Settings lists each key's latest uses, and OpenBao's audit log (`vault/audit.log`) records
+  every read. When the imp needs a key it does not have, it asks for it in Settings, never in the chat.
 
 ## Apps the imp builds
 
