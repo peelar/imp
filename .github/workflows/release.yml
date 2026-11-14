@@ -1,17 +1,24 @@
-# A pushed tag vX.Y.Z publishes a GitHub release that installed hosts and Mac apps update themselves to:
+# Every push to main releases what its changesets describe (.changeset/README.md). When changesets are pending, the
+# version job runs `changeset version`, which bumps host/package.json (Imp's version is the host's) and writes
+# host/CHANGELOG.md, and commits that to main. When the version then has no GitHub release, the same run builds and
+# publishes release v<version>, with its CHANGELOG.md section as notes. Installed hosts and Mac apps update to it:
 #   imp-host-vX.Y.Z.tar.gz   the host, its production dependencies and the built web client (host/src/update.ts)
 #   Imp-macos.zip            the ad-hoc signed Mac app (scripts/install-mac.sh)
 #   install-host.sh          the host installer
-#
-#   git tag v0.2.0 && git push origin v0.2.0
+# A push without a changeset releases nothing.
 name: Release
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+# One run at a time; each checks out main as it is then, so a queued run sees the previous run's release commit.
+concurrency:
+  group: release
 
 env:
   # The Exact checkout the client builds with. Move it when the client moves to a newer Exact.
@@ -19,7 +26,50 @@ env:
   EXACT_REV: fe917faa7f5b1f4eb3178b8c4473b88bd6053f5e
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.unreleased.outputs.tag }}
+      sha: ${{ steps.unreleased.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Version pending changesets and commit them to main
+        run: |
+          if ! find .changeset -maxdepth 1 -name '*.md' ! -name README.md | grep -q .; then
+            echo "No pending changesets"
+            exit 0
+          fi
+          npm run changeset:version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release Imp v$(node -p 'require("./host/package.json").version')"
+          # A push that landed meanwhile goes under this commit; its changesets wait for the next run.
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - id: unreleased
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./host/package.json").version')"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$tag is already released"
+          else
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
   package:
+    needs: version
+    if: needs.version.outputs.tag != ''
     strategy:
       matrix:
         include:
@@ -31,6 +81,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -56,20 +108,28 @@ jobs:
       # turbo, which prunes the workspace lockfile to the host's dependencies (scripts/package.sh).
       - run: npm ci
         if: matrix.part == 'host'
-      - run: scripts/package.sh ${{ matrix.part }} "$GITHUB_REF_NAME" out
+      - run: scripts/package.sh ${{ matrix.part }} "${{ needs.version.outputs.tag }}" out
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.part }}
           path: out/
 
   release:
-    needs: package
+    needs: [version, package]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
-      - run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+      # The notes are this version's section of host/CHANGELOG.md; the tag is created at the commit that was built.
+      - run: |
+          awk -v heading="## ${TAG#v}" '$0 == heading { found = 1; next } found && /^## / { exit } found' host/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
         env:
+          TAG: ${{ needs.version.outputs.tag }}
+          SHA: ${{ needs.version.outputs.sha }}
           GH_TOKEN: ${{ github.token }}

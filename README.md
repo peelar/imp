@@ -92,8 +92,10 @@ agent is idle; open pages then reload. Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` t
 login and every hour, and replaces itself (quitting and reopening if it is running). It is not signed with an Apple
 Developer ID; macOS opens it because curl doesn't quarantine what it downloads.
 
-**Releasing.** Push a tag: `git tag v0.2.0 && git push origin v0.2.0`. `.github/workflows/release.yml` builds the host
-and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and publishes them as a GitHub release.
+**Releasing.** A commit that changes what Imp does carries a changeset (`npm run changeset`, a patch or minor bump
+for `@imp/host`). Pushing it to `main` releases it: `.github/workflows/release.yml` bumps the version, writes
+`host/CHANGELOG.md`, commits both to `main`, builds the host and web client on Linux and the Mac app on macOS
+(`scripts/package.sh`), and publishes them as a GitHub release. See `.changeset/README.md`.
 
 ## Running it from a checkout
 

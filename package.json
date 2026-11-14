@@ -18,9 +18,12 @@
     "format": "oxfmt -c oxfmt.config.ts --write host/src host/scripts host/test host/machine sdk client/apps scripts docs/blume.config.ts docs/content oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json docs/package.json",
     "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts docs/blume.config.ts docs/content oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json docs/package.json",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck"
+    "check": "npm run lint && npm run typecheck",
+    "changeset": "changeset",
+    "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts --no-audit --no-fund"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.3",
     "@oxlint/plugins": "^1.93.0",
     "eslint-plugin-sonarjs": "^4.2.2",
     "oxfmt": "^0.75.0",
