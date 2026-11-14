@@ -1,11 +1,17 @@
-// The owner's secrets: API keys their imp uses on its computer without holding them. The owner adds them in Settings,
-// the vault keeps them (vault.ts), and the egress proxy puts each one on the agent's HTTPS requests to its hosts
-// (egress.ts). On the machine a secret is only a stand-in, in the environment variables its service's tools read, such
-// as GITHUB_TOKEN=imp-secret-github. The agent sees names and hosts, never a value, and asks the owner for a secret it
-// lacks with request_secret, never in the chat (secret-tools.ts).
+// The owner's secrets, which their imp uses on its computer without holding them. The owner adds them in Settings, and
+// the vault keeps them (vault.ts). There are two kinds:
+//
+//   key     an API key. The egress proxy puts it on the agent's HTTPS requests to its hosts (egress.ts); on the
+//           machine it is only a stand-in, in the variables its service's tools read, such as
+//           GITHUB_TOKEN=imp-secret-github.
+//   login   a website's username, password and, optionally, one-time-code key. The host types it into the agent's
+//           Chrome, on a page of the login's site only, when the agent calls sign_in (secret-logins.ts).
+//
+// The agent sees names, hosts and sites, never a value, and asks the owner for a secret it lacks with request_secret,
+// never in the chat (secret-tools.ts).
 import type { Registry } from "@earendil-works/pi-durable";
 import { type Egress, openEgress } from "./egress.ts";
-import type { EgressRule, EgressRules } from "./egress-proxy.ts";
+import type { EgressRule, EgressRules, EgressUse } from "./egress-proxy.ts";
 import type { Topics } from "./live.ts";
 import type { Machine } from "./machine.ts";
 import {
@@ -14,6 +20,12 @@ import {
   type KeyInput,
   newKey,
 } from "./secret-descriptions.ts";
+import {
+  type LoginInput,
+  newLogin,
+  signIn,
+  storeLogin,
+} from "./secret-logins.ts";
 import { secretRecords } from "./secret-records.ts";
 import { secretsExtension } from "./secret-tools.ts";
 import { secretsState, type SecretsState } from "./secret-view.ts";
@@ -36,11 +48,16 @@ const refused = (error: string) => ({ ok: false, error });
 const why = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause);
 
-/** Which secret goes on which host's requests, and every secret's stand-in. */
+/** The API keys among the secrets: the ones the egress proxy puts on requests. */
+const keysOf = (secrets: readonly Described[]) =>
+  secrets.filter((secret) => secret.kind === "key");
+
+/** Which key goes on which host's requests, and every key's stand-in. */
 function egressRules(secrets: readonly Described[]): EgressRules {
   const hosts = new Map<string, EgressRule[]>();
+  const keys = keysOf(secrets);
 
-  for (const secret of secrets) {
+  for (const secret of keys) {
     for (const { host, ...rule } of secret.rules) {
       hosts.set(host, [
         ...(hosts.get(host) ?? []),
@@ -52,15 +69,15 @@ function egressRules(secrets: readonly Described[]): EgressRules {
   return {
     hosts: Object.fromEntries(hosts),
     standIns: Object.fromEntries(
-      secrets.map((secret) => [secret.name, secret.standIn])
+      keys.map((secret) => [secret.name, secret.standIn])
     ),
   };
 }
 
-/** Each secret's stand-in, under the variables its service's tools read. */
+/** Each key's stand-in, under the variables its service's tools read. */
 const standIns = (secrets: readonly Described[]) =>
   Object.fromEntries(
-    secrets.flatMap((secret) =>
+    keysOf(secrets).flatMap((secret) =>
       secret.env.map((name): [string, string] => [name, secret.standIn])
     )
   );
@@ -132,7 +149,7 @@ async function commandEnv({
 
   const secrets = list.all();
 
-  if (secrets.length === 0) {
+  if (keysOf(secrets).length === 0) {
     return {};
   }
 
@@ -162,15 +179,12 @@ export function openSecrets(options: SecretsOptions) {
     options.topics.changed(TOPIC);
   };
 
-  const egress = openEgress({
-    dataDir,
-    toolsDir,
-    vault,
-    onUse: (use) => {
-      records.used(use);
-      changed();
-    },
-  });
+  const used = (use: EgressUse) => {
+    records.used(use);
+    changed();
+  };
+
+  const egress = openEgress({ dataDir, toolsDir, vault, onUse: used });
 
   const list = secretList({ vault, egress, changed });
 
@@ -182,6 +196,8 @@ export function openSecrets(options: SecretsOptions) {
         records.ask(request);
         changed();
       },
+      signIn: async (login) =>
+        await signIn(login, { vault, machine: options.machine, used }),
     })
   );
 
@@ -226,8 +242,25 @@ export function openSecrets(options: SecretsOptions) {
       }
 
       return await change(async () => {
-        await vault.put(key.name, key.value, key.meta);
+        await vault.put(
+          key.name,
+          key.value ? { value: key.value } : undefined,
+          key.meta
+        );
         records.answered(key.name);
+      });
+    },
+    /** Adds a login, or changes one: an empty password or one-time-code key keeps the one it has. */
+    putLogin: async (input: LoginInput) => {
+      const login = newLogin(input, list.all());
+
+      if (!login.ok) {
+        return refused(login.error);
+      }
+
+      return await change(async () => {
+        await storeLogin(vault, login);
+        records.answered(login.name);
       });
     },
     remove: async (name: string) =>
@@ -243,7 +276,7 @@ export function openSecrets(options: SecretsOptions) {
     },
     /**
      * What every command on the machine gets in its environment: each secret's stand-in, and the egress proxy with the
-     * control socket to the machine open. Nothing, and no machine started, while there are no secrets.
+     * control socket to the machine open. Nothing, and no machine started, while there are no API keys.
      */
     shellEnv: async () =>
       await commandEnv({ list, egress, machine: options.machine }),

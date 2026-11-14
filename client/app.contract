@@ -136,14 +136,19 @@ shape SecretService
   hosts: string
   env: string
 
-// A secret, without its value, which the host never sends back. `standIn` is what the imp's computer holds instead.
+// A secret, without its value, which the host never sends back. `kind` is "key" (an API key; `standIn` is what the
+// imp's computer holds instead) or "login" (a website's, for `site` as `username`). `detail` says what it is for.
 shape Secret
   name: string
+  kind: string
   service: string
   label: string
   hosts: string
   env: string
   standIn: string
+  site: string
+  username: string
+  detail: string
   updated: string
   lastUsed: string
 
@@ -155,12 +160,12 @@ shape SecretRequest
   why: string
   host: string
 
-// One use of a secret: which request it went on, and how the request went.
+// One use of a secret: which request it went on, or the sign-in it typed, and how it went ("200", "typed", "failed").
 shape SecretUse
   id: string
   secret: string
   what: string
-  status: number
+  result: string
   failed: bool
   when: string
 
@@ -326,6 +331,7 @@ component App
   mutation computerKeySaved as shape Reply
   mutation forgotten as shape Reply queue
   mutation secretSaved as shape Reply then afterSecretSaved
+  mutation loginSaved as shape Reply then afterLoginSaved
   mutation secretDeleted as shape Reply queue
   mutation secretDismissed as shape Reply queue
   mutation backupStarted as shape Reply
@@ -361,6 +367,7 @@ component App
   derive tricks = account.tricks
   derive secrets = account.secrets
   derive secretError = match secretSaved { case some(r) => r.error, case none => "" }
+  derive loginError = match loginSaved { case some(r) => r.error, case none => "" }
   derive secretDeleteError = match secretDeleted { case some(r) => r.error, case none => "" }
   derive backup = account.backup
   derive switchError = match computerSwitched { case some(r) => r.error, case none => "" }
@@ -518,6 +525,12 @@ component App
   // A saved secret closes its form: the next one starts empty.
   action afterSecretSaved
     if match secretSaved { case some(r) => r.ok, case none => false }
+      secretRound = secretRound + 1
+  action saveLogin(name: string, site: string, username: string, password: string, otp: string)
+    if not pending(loginSaved)
+      send loginSaved = secretsPutLogin(name, site, username, password, otp)
+  action afterLoginSaved
+    if match loginSaved { case some(r) => r.ok, case none => false }
       secretRound = secretRound + 1
   action deleteSecret(name: string)
     send secretDeleted = secretsDelete(name)
@@ -697,8 +710,9 @@ component App
                           retry=retryComputer, openScreen=openScreen, copyCommand=copyComputerCommand, copyPolicy=copyComputerPolicy)
                         MemorySettings(memory=memory, forget=forget)
                         for r in [secretRound] key=`${r}`
-                          SecretSettings(secrets=secrets, saving=pending(secretSaved), error=secretError,
-                            deleteError=secretDeleteError, save=saveSecret, remove=deleteSecret, dismiss=dismissSecret)
+                          SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
+                            loginError=loginError, deleteError=secretDeleteError, save=saveSecret, saveLogin=saveLogin,
+                            remove=deleteSecret, dismiss=dismissSecret)
                         BackupSettings(backup=backup, busy=(pending(backupStarted) or pending(backupDisconnected)),
                           connect=connectBackup, cancel=cancelBackup, disconnect=disconnectBackup, copyCode=copyBackupCode)
                         column
@@ -923,15 +937,18 @@ component App
                   text "Uses your ChatGPT Plus or Pro plan. Nothing is billed separately." font-size="0.875rem"
                     font-style="italic" color="ink.muted"
 
-// The owner's secrets in Settings: the API keys the imp uses on its computer without seeing them, a form to add one
-// (a value is never shown again once saved), what the imp asked for, and its latest uses.
+// The owner's secrets in Settings: the API keys the imp uses on its computer without seeing them, and the logins the
+// host types into its Chrome; a form to add either (a value is never shown again once saved), what the imp asked for,
+// and its latest uses. A login's form uses `hosts` for its site and `value` for its password.
 component SecretSettings
   props
     secrets: Secrets
     saving: bool
     error: string
+    loginError: string
     deleteError: string
     save: action
+    saveLogin: action
     remove: action
     dismiss: action
   state adding = ""
@@ -941,23 +958,32 @@ component SecretSettings
   state header = ""
   state prefix = ""
   state envName = ""
+  state username = ""
+  state otp = ""
   derive replacing = secrets.secrets.filter(x => x.name == name).length > 0
+  derive login = adding == "login"
   derive formLabel = match first(secrets.services.filter(x => x.id == adding)) { case some(x) => x.label, case none => "Other" }
+  derive ready = login ? (hosts.trim() != "" and username.trim() != "" and (value != "" or replacing)) : (value.trim() != "" and name.trim() != "")
+  derive formError = login ? loginError : error
   action pick(service: string)
     adding = service
-    name = service == "other" ? "" : service
+    name = (service == "other" or service == "login") ? "" : service
   action ask(service: string, wanted: string, host: string)
     adding = service
     name = wanted
     hosts = host
-  action replace(service: string, secret: string)
+  action replace(service: string, secret: string, site: string, user: string)
     adding = service
     name = secret
+    hosts = site
+    username = user
   action cancel
     adding = ""
     name = ""
     value = ""
     hosts = ""
+    username = ""
+    otp = ""
   action editName(v: string)
     name = v
   action editValue(v: string)
@@ -970,15 +996,22 @@ component SecretSettings
     prefix = v
   action editEnv(v: string)
     envName = v
+  action editUsername(v: string)
+    username = v
+  action editOtp(v: string)
+    otp = v
   action submit
-    if value.trim() != "" and name.trim() != "" and not saving
-      save(name.trim(), adding, value.trim(), hosts, header, prefix, envName)
+    if ready and not saving
+      if login
+        saveLogin(name.trim(), hosts, username, value, otp)
+      else
+        save(name.trim(), adding, value.trim(), hosts, header, prefix, envName)
   view
     column testId="secrets"
       row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
         text "Secrets" class=Label color="ink.strong" role="heading" aria-level=2
         text `No. ${numbered(secrets.secrets.length)}` class=Label
-      text "API keys your imp uses on its computer without seeing them. Its computer holds only a stand-in; your host puts the key on its requests to the key's own hosts."
+      text "API keys and logins your imp uses on its computer without seeing them. Its computer holds only a stand-in for a key, which your host puts on requests to the key's own hosts, and your host types a login only into its own site."
         font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=10
       if secrets.status == "failed"
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
@@ -1006,14 +1039,14 @@ component SecretSettings
             padding="12px 0" border-bottom="1px solid line.subtle" testId="secrets-empty"
         for x, i in secrets.secrets key=x.name
           row gap=12 align-items="center" padding="12px 0" border-bottom="1px solid line.subtle" testId=`secret-${i}`
-            image "symbol:lock" width=16 height=16 aria-hidden=true
+            image (x.kind == "login" ? "symbol:person" : "symbol:lock") width=16 height=16 aria-hidden=true
             column flex=1 min-width=0 gap=2
               text x.name font-size="1.0625rem" overflow-wrap="anywhere" testId=`secret-name-${i}`
-              text `${x.hosts} · ${x.env}` font-family="family.mono" font-size="0.75rem" color="ink.muted"
-                overflow-wrap="anywhere"
+              text x.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
+                testId=`secret-detail-${i}`
               text (x.lastUsed == "" ? `Added ${x.updated}, not used yet` : `Used ${x.lastUsed}`) font-size="0.8125rem"
                 color="ink.faint" testId=`secret-used-${i}`
-            button press=replace(x.service, x.name) testId=`secret-replace-${i}` appearance="none" padding="4px 0"
+            button press=replace(x.service, x.name, x.site, x.username) testId=`secret-replace-${i}` appearance="none" padding="4px 0"
               border="none" background-color="transparent" color="ink.muted"
               :hover
                 color="ink.strong"
@@ -1027,7 +1060,7 @@ component SecretSettings
         text deleteError color="-exact-system-red" font-size="0.9375rem" padding-top=10 testId="secret-delete-error"
       if adding == ""
         column gap=10 padding-top=16
-          text "Add a key" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3
+          text "Add a secret" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3
           row flex-wrap="wrap" gap=8
             for v in secrets.services key=v.id
               button press=pick(v.id) testId=`secret-add-${v.id}` padding="8px 12px" border="1px solid line.strong"
@@ -1042,9 +1075,15 @@ component SecretSettings
               :hover
                 background-color="surface.soft"
               text "Other"
+            button press=pick("login") testId="secret-add-login" padding="8px 12px" border="1px solid line.strong"
+              background-color="transparent" color="ink.strong" font-family="family.mono" font-size="0.75rem"
+              letter-spacing="0.1em" text-transform="uppercase"
+              :hover
+                background-color="surface.soft"
+              text "Login"
       else
         column gap=10 padding-top=16 testId="secret-form"
-          text (replacing ? `Replace ${name}` : adding == "other" ? "Add a key for another service" : `Add your ${formLabel} key`)
+          text (replacing ? `Replace ${name}` : login ? "Add a login" : adding == "other" ? "Add a key for another service" : `Add your ${formLabel} key`)
             font-family="family.display" font-size="1.25rem"
             role="heading" aria-level=3
           if adding == "other" and not replacing
@@ -1065,26 +1104,54 @@ component SecretSettings
               input value=envName input=editEnv placeholder="Variable, such as WEATHER_API_KEY" aria-label="Variable"
                 testId="secret-env" padding="9px 14px" border="1px solid line.strong" background-color="transparent"
                 font-family="family.mono" font-size="0.875rem" color="ink.strong"
-          match first(secrets.services.filter(v => v.id == adding))
-            case some(v)
-              text `Goes on requests to ${v.hosts}. Your imp reads it as ${v.env}.` font-size="0.875rem" color="ink.muted"
-                line-height=1.45
-            case none
-              text "Write \"Bearer \" before the key if the service wants one, with its space." font-size="0.875rem"
-                color="ink.muted" line-height=1.45
-          row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
-            input type="password" value=value input=editValue submit=submit placeholder="Paste the key"
-              aria-label="Key" testId="secret-value" flex=1 min-width=0 padding="8px 0" border="none"
-              background-color="transparent" outline="none" font-family="family.mono" font-size="0.875rem" color="ink.strong"
-            button press=submit disabled=(value.trim() == "" or name.trim() == "" or saving) testId="secret-save"
+          if login
+            column gap=8
+              input value=hosts input=editHosts placeholder="Site, such as github.com" aria-label="Site" testId="secret-site"
+                padding="9px 14px" border="1px solid line.strong" background-color="transparent" font-family="family.mono"
+                font-size="0.875rem" color="ink.strong"
+              input value=username input=editUsername placeholder="Username or email" aria-label="Username"
+                testId="secret-username" padding="9px 14px" border="1px solid line.strong" background-color="transparent"
+                font-size="0.9375rem" color="ink.strong"
+              input type="password" value=value input=editValue submit=submit
+                placeholder=(replacing ? "Password: leave empty to keep it" : "Password") aria-label="Password"
+                testId="secret-value" padding="9px 14px" border="1px solid line.strong" background-color="transparent"
+                font-family="family.mono" font-size="0.875rem" color="ink.strong"
+              input type="password" value=otp input=editOtp submit=submit
+                placeholder=(replacing ? "One-time-code key: leave empty to keep it" : "One-time-code key (optional)")
+                aria-label="One-time-code key" testId="secret-otp" padding="9px 14px" border="1px solid line.strong"
+                background-color="transparent" font-family="family.mono" font-size="0.875rem" color="ink.strong"
+            text "Your host types it only into a page on this site, when your imp asks to sign in. For one-time codes, paste the otpauth:// link or the key the site shows when you set up an authenticator app."
+              font-size="0.875rem" color="ink.muted" line-height=1.45
+          else
+            match first(secrets.services.filter(v => v.id == adding))
+              case some(v)
+                text `Goes on requests to ${v.hosts}. Your imp reads it as ${v.env}.` font-size="0.875rem" color="ink.muted"
+                  line-height=1.45
+              case none
+                text "Write \"Bearer \" before the key if the service wants one, with its space." font-size="0.875rem"
+                  color="ink.muted" line-height=1.45
+          if login
+            button press=submit disabled=(not ready or saving) testId="secret-save" align-self="flex-start"
               padding="9px 14px" border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
               font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
               :disabled
                 background-color="surface.soft"
                 color="ink.faint"
               text (saving ? "Saving" : "Save")
-          if error != "" and not saving
-            text error color="-exact-system-red" font-size="0.9375rem" testId="secret-error"
+          else
+            row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+              input type="password" value=value input=editValue submit=submit
+                placeholder="Paste the key" aria-label="Key" testId="secret-value" flex=1 min-width=0 padding="8px 0" border="none"
+                background-color="transparent" outline="none" font-family="family.mono" font-size="0.875rem" color="ink.strong"
+              button press=submit disabled=(not ready or saving) testId="secret-save"
+                padding="9px 14px" border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
+                font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                :disabled
+                  background-color="surface.soft"
+                  color="ink.faint"
+                text (saving ? "Saving" : "Save")
+          if formError != "" and not saving
+            text formError color="-exact-system-red" font-size="0.9375rem" testId="secret-error"
           button press=cancel testId="secret-cancel" align-self="flex-start" padding="6px 0" border="none"
             background-color="transparent" color="ink.muted"
             :hover
@@ -1098,7 +1165,7 @@ component SecretSettings
               text u.secret font-size="0.875rem" min-width="5rem"
               text u.what font-family="family.mono" font-size="0.75rem" color="ink.muted" flex=1 min-width=0
                 overflow-wrap="anywhere"
-              text (u.status == 0 ? "failed" : `${u.status}`) font-family="family.mono" font-size="0.75rem"
+              text u.result font-family="family.mono" font-size="0.75rem"
                 color=(u.failed ? "-exact-system-red" : "ink.muted")
               text u.when font-size="0.75rem" color="ink.faint"
 

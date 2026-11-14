@@ -98,6 +98,8 @@ const KNOWN = new Map<string, readonly [string, string, string]>([
   ["app_code", ["Opened an app's code", "symbol:document", "app"]],
   ["preview_app", ["Built a preview", "symbol:sparkles", "app"]],
   ["find_app_actions", ["Looked up app actions", "symbol:search", "query"]],
+  ["request_secret", ["Asked for a secret", "symbol:lock", "service"]],
+  ["sign_in", ["Signed in", "symbol:lock", "secret"]],
 ]);
 
 export type ToolUse = {

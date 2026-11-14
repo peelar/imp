@@ -2,8 +2,9 @@
 // of ChatGPT, a sign-in that approves itself a moment after it shows its code, the local machine adapter, so the apps
 // run in real workers, and a GitHub CLI (fake-gh.ts) whose repositories are folders in the data directory. When the
 // user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
-// "app code: <id>", "preview app: <id>", "ask for a key: <service>" and "run: <command>" make it call the memory's,
-// the studio's, the secrets' and the shell tools the same way. Its agent-browser knows two tricks. TEST_DATA_DIR names the host's data directory, for a
+// "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for a login: <site>", "sign in: <login>"
+// and "run: <command>" make it call the memory's, the studio's, the secrets' and the shell tools the same way. Its
+// agent-browser knows two tricks. TEST_DATA_DIR names the host's data directory, for a
 // test that starts the host again on it.
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,6 +32,19 @@ const TOOL_CALLS = [
     pattern: /ask for a key: ([a-z]+)/,
     call: (service: string) =>
       fauxToolCall("request_secret", { service, why: "To read your issues." }),
+  },
+  {
+    pattern: /ask for a login: ([a-z.]+)/,
+    call: (host: string) =>
+      fauxToolCall("request_secret", {
+        service: "login",
+        host,
+        why: "To check your notifications.",
+      }),
+  },
+  {
+    pattern: /sign in: ([a-z0-9-]+)/,
+    call: (secret: string) => fauxToolCall("sign_in", { secret }),
   },
   {
     pattern: /run: ([^"\\]+)/,

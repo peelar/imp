@@ -63,7 +63,7 @@ export const runtimePattern = (runtimeDir: string) =>
 
 /**
  * Every file agentd needs, for a machine of this platform. The machine runs plain JavaScript with no packages but
- * ws, so agentd, the worker and the egress proxy ship with their types stripped.
+ * ws, so agentd, the worker, the egress proxy and the Chrome bridge ship with their types stripped.
  */
 export async function runtime(platform: {
   platform: "linux" | "darwin";
@@ -80,6 +80,7 @@ export async function runtime(platform: {
     stripped("agentd"),
     stripped("worker"),
     stripped("egress"),
+    stripped("chrome"),
     shipped("screen.sh", path.join(MACHINE_SOURCES, "screen.sh")),
     ...wsFiles.map(
       async (file) =>
@@ -215,6 +216,8 @@ export function agentdEndpoints(
     ],
     appSocket: { url: `${ws}/apps?token=${token}`, headers: base.headers },
     screen: { url: `${ws}/screen?token=${token}`, headers: base.headers },
+    /** Chrome's DevTools protocol on the machine (its browser target). */
+    chrome: { url: `${ws}/chrome?token=${token}`, headers: base.headers },
     /** The egress proxy's control socket; a stream socket adds `&stream=<id>`. */
     egress: { url: `${ws}/egress?token=${token}`, headers: base.headers },
   };

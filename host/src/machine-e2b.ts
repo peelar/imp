@@ -174,6 +174,9 @@ function e2bMachine(
     async screen() {
       return endpoints.screen;
     },
+    async chrome() {
+      return endpoints.chrome;
+    },
     async egress() {
       return { socket: endpoints.egress, env: egressEnv(HOME) };
     },

@@ -1,6 +1,7 @@
-// A secret's description: its name, its service, the hosts and header its value goes on, the variables its stand-in
-// is in, and the stand-in. The vault keeps it beside the value, as strings (vault.ts). This file reads it back, and
-// works out the description of a key the owner adds in Settings, or why it cannot be added.
+// A secret's description: its name, its kind, its service, the hosts and header a key's value goes on, the variables
+// its stand-in is in, and the stand-in; for a login, its site and username (secret-logins.ts). The vault keeps it
+// beside the value, as strings (vault.ts). This file reads it back, and works out the description of a key the owner
+// adds in Settings, or why it cannot be added.
 import { arr, compile, obj, opt, str } from "@earendil-works/pi-schema";
 import { type HostRule, hostsOf, SERVICES } from "./secret-services.ts";
 import type { StoredSecret } from "./vault.ts";
@@ -8,7 +9,7 @@ import type { StoredSecret } from "./vault.ts";
 export const NAME = /^[a-z][a-z0-9-]{0,39}$/;
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
 
-const HOST =
+export const HOST =
   /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
 const HEADER = /^[A-Za-z0-9-]{1,64}$/;
@@ -21,8 +22,15 @@ type Placement = {
 
 export type Described = Placement & {
   readonly name: string;
+  /** "key": an API key the egress proxy puts on requests. "login": a website's, which the host types into Chrome. */
+  readonly kind: "key" | "login";
   readonly service: string;
   readonly standIn: string;
+  /** A login's site and username; "" for a key. */
+  readonly site: string;
+  readonly username: string;
+  /** Whether a login has a key for one-time codes. */
+  readonly otp: boolean;
   readonly updated: string;
 };
 
@@ -49,7 +57,7 @@ export type NewKey =
     }
   | Refused;
 
-type Refused = { readonly ok: false; readonly error: string };
+export type Refused = { readonly ok: false; readonly error: string };
 
 type Placed = ({ readonly ok: true } & Placement) | Refused;
 
@@ -84,10 +92,14 @@ export function described(stored: StoredSecret): Described | undefined {
   return rules
     ? {
         name,
+        kind: meta.kind === "login" ? "login" : "key",
         service: meta.service ?? "other",
         rules,
         env: (meta.env ?? "").split(",").filter(Boolean),
         standIn: meta.standIn ?? standInFor(name),
+        site: meta.site ?? "",
+        username: meta.username ?? "",
+        otp: meta.otp === "yes",
         updated,
       }
     : undefined;
@@ -184,6 +196,10 @@ export function newKey(input: KeyInput, secrets: readonly Described[]): NewKey {
 
   const existing = secrets.find((secret) => secret.name === name);
 
+  if (existing?.kind === "login") {
+    return refused(`${name} is a login.`);
+  }
+
   if (!existing && value === "") {
     return refused("Paste the key first.");
   }
@@ -210,6 +226,7 @@ export function newKey(input: KeyInput, secrets: readonly Described[]): NewKey {
     name,
     value,
     meta: {
+      kind: "key",
       service: input.service,
       rules: JSON.stringify(placed.rules),
       env: placed.env.join(","),

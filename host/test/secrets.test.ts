@@ -1,5 +1,5 @@
-// The owner's secrets, as the client uses them: the imp asks for a key it lacks, and the owner adds, deletes or turns
-// it down in Settings. They ride on the account stream. The vault is a real OpenBao, which the host downloads the
+// The owner's secrets, as the client uses them: the imp asks for a key or a login it lacks, and the owner adds, deletes
+// or turns it down in Settings. They ride on the account stream. The vault is a real OpenBao, which the host downloads the
 // first time (src/tools.ts). What a command then does with a key is the smoke script's part (scripts/smoke-machine.ts).
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -162,4 +162,133 @@ test("the imp does not ask for a key the owner has; a deleted key is gone, and a
   assert.equal(request?.name, "github");
   assert.deepEqual(await call("secretsDismiss", [request.id ?? ""]), done);
   assert.deepEqual((await until("account", secretsWhen())).requests, []);
+});
+
+/** A login as the form in Settings sends it: name ("" for one from the site), site, username, password, one-time key. */
+const login = (
+  site: string,
+  username: string,
+  [password, otp = ""]: readonly [string, string?]
+) => ["", site, username, password, otp];
+
+test("the imp asks for a login by its site, and a login that cannot be added is refused with the reason", async () => {
+  await toolRow("Please ask for a login: github.com");
+
+  const { requests } = await until(
+    "account",
+    secretsWhen((secrets) =>
+      rows(secrets.requests).some((request) => request.service === "login")
+    )
+  );
+
+  assert.deepEqual(
+    rows(requests).map(({ name, host }) => ({ name, host })),
+    [{ name: "github-login", host: "github.com" }]
+  );
+  assert.deepEqual(
+    await call("secretsPutLogin", login("not a site", "adrian", ["pw"])),
+    refused("Name the site, such as github.com.")
+  );
+  assert.deepEqual(
+    await call("secretsPutLogin", login("github.com", "adrian", [""])),
+    refused("Write the password first.")
+  );
+  assert.deepEqual(
+    await call(
+      "secretsPutLogin",
+      login("github.com", "adrian", [
+        "pw",
+        "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP",
+      ])
+    ),
+    refused("Only time-based one-time codes (TOTP) work.")
+  );
+});
+
+test("a login the owner adds answers the request, shows its site and username, and never its password or code key", async () => {
+  await until(
+    "account",
+    secretsWhen(({ status }) => status === "ready"),
+    120_000
+  );
+  assert.deepEqual(
+    await call(
+      "secretsPutLogin",
+      login("https://github.com/login", "adrian", [
+        "hunter2-secret",
+        "otpauth://totp/GitHub:adrian?secret=JBSWY3DPEHPK3PXP&issuer=GitHub",
+      ])
+    ),
+    done
+  );
+
+  const account = await until(
+    "account",
+    secretsWhen((secrets) => rows(secrets.secrets).length > 0)
+  );
+
+  assert.deepEqual(account.requests, []);
+  assert.deepEqual(
+    rows(account.secrets).map(({ name, kind, detail }) => ({
+      name,
+      kind,
+      detail,
+    })),
+    [
+      {
+        name: "github-login",
+        kind: "login",
+        detail: "github.com · adrian · one-time codes",
+      },
+    ]
+  );
+
+  const shown = JSON.stringify(await until("account", (answer) => answer));
+
+  assert.ok(!shown.includes("hunter2-secret"));
+  assert.ok(!shown.includes("JBSWY3DPEHPK3PXP"));
+  // A login is no API key: it takes no key's place, and no command gets a stand-in for it.
+  assert.deepEqual(
+    await call("secretsPut", key("github-login", "github", "ghp_x")),
+    refused("github-login is a login.")
+  );
+});
+
+test("sign_in names the logins there are, and asks for the page first while Chrome is not open", async () => {
+  const unknown = await toolRow("Please sign in: gitlab-login");
+
+  assert.match(
+    JSON.stringify(unknown.text),
+    /There is no login gitlab-login\. The logins are github-login\./
+  );
+
+  const closed = await toolRow("Please sign in: github-login");
+
+  assert.equal(closed.title, "Signed in");
+  assert.match(
+    JSON.stringify(closed.text),
+    /Open the site's sign-in page first/
+  );
+
+  const { uses } = await until(
+    "account",
+    secretsWhen((secrets) => rows(secrets.uses).length > 0)
+  );
+
+  assert.deepEqual(
+    rows(uses).map(({ secret, what, result, failed }) => ({
+      secret,
+      what,
+      result,
+      failed,
+    })),
+    [
+      {
+        secret: "github-login",
+        what: "sign in on github.com",
+        result: "failed",
+        failed: true,
+      },
+    ]
+  );
 });

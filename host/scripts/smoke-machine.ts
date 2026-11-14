@@ -1,6 +1,6 @@
 // Smoke test for a machine adapter: prepare the image, ensure the machine, reach it through pi-env, run a command,
 // write and read a file, load an app on the app socket and call one of its operations, use a secret through the egress
-// proxy, and reach the screen.
+// proxy, sign in to a test site in the machine's Chrome with a login the host types, and reach the screen.
 //
 //   MACHINE=e2b node scripts/smoke-machine.ts                      (needs E2B_API_KEY; MACHINE_CPUS, MACHINE_MEMORY_MB)
 //   MACHINE=ssh MACHINE_SSH=imp@homelab[:port] [MACHINE_SSH_KEY=~/.ssh/key] node scripts/smoke-machine.ts
@@ -10,7 +10,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createRegistry } from "@earendil-works/pi-durable";
+import {
+  createRegistry,
+  type ToolExecutionApi,
+} from "@earendil-works/pi-durable";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type RawData, WebSocket } from "ws";
 import { Topics } from "../src/live.ts";
@@ -193,11 +196,13 @@ ws.close();
 // the host's egress proxy adds; the machine holds only the stand-in, in its environment and nowhere else.
 const value = Buffer.from("imp:smoke-pass").toString("base64");
 
+const registry = createRegistry();
+
 const secrets = openSecrets({
   dataDir: mkdtempSync(path.join(tmpdir(), "imp-smoke-secrets-")),
   toolsDir: path.join(tmpdir(), "imp-tools"),
   topics: new Topics(),
-  registry: createRegistry(),
+  registry,
   machine: async () => machine,
 });
 
@@ -240,6 +245,70 @@ await withSecrets.exec(
 );
 
 lap(`egress:\n${out.trim()}\nuses: ${JSON.stringify(secrets.state().uses)}`);
+
+// A login for a public test site: the agent opens its sign-in page with agent-browser, and the host types the login
+// into that browser over DevTools; the site's next page is its members' area, /secure, which the agent's own
+// agent-browser session then shows.
+const login = await secrets.putLogin({
+  name: "internet",
+  site: "the-internet.herokuapp.com",
+  username: "tomsmith",
+  password: "SuperSecretPassword!",
+  otp: "",
+});
+
+if (!login.ok) {
+  throw new Error(`adding the login: ${login.error}`);
+}
+
+out = "";
+
+await env.exec(
+  "agent-browser open https://the-internet.herokuapp.com/login 2>&1 | tail -1",
+  {
+    onOutput: (text: string) => {
+      out += text;
+    },
+  },
+  BACKGROUND_CONTEXT
+);
+
+const signIn = registry
+  .snapshot()
+  .extension("secrets")
+  ?.tools?.find((tool) => tool.name === "sign_in");
+
+if (!signIn) {
+  throw new Error("the secrets extension has no sign_in tool");
+}
+
+// SAFETY: secret-tools.ts's sign_in reads only its arguments: it never touches the harness's API.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the smoke test runs the tool without a harness.
+const noHarness = {} as ToolExecutionApi;
+
+const typed = await signIn.execute(
+  { secret: "internet" },
+  noHarness,
+  BACKGROUND_CONTEXT
+);
+
+const [answer] = typed.output ?? [];
+
+lap(`sign in: ${out.trim()}\n${answer?.type === "text" ? answer.text : ""}`);
+
+out = "";
+
+await env.exec(
+  "echo agent-browser is on $(agent-browser get url 2>&1 | tail -1); agent-browser close >/dev/null 2>&1",
+  {
+    onOutput: (text: string) => {
+      out += text;
+    },
+  },
+  BACKGROUND_CONTEXT
+);
+
+lap(out.trim());
 
 secrets.close();
 

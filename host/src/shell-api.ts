@@ -337,7 +337,7 @@ function memoryCalls({ memory }: ShellApiOptions): Calls {
   ];
 }
 
-/** The owner's keys: added, replaced and deleted in Settings, never through the chat. */
+/** The owner's keys and logins: added, replaced and deleted in Settings, never through the chat. */
 function secretsCalls({ secrets }: ShellApiOptions): Calls {
   return [
     [
@@ -351,6 +351,17 @@ function secretsCalls({ secrets }: ShellApiOptions): Calls {
           header: text(args, 4),
           prefix: text(args, 5),
           envName: text(args, 6),
+        }),
+    ],
+    [
+      "secretsPutLogin",
+      async (args) =>
+        await secrets.putLogin({
+          name: text(args, 0),
+          site: text(args, 1),
+          username: text(args, 2),
+          password: text(args, 3),
+          otp: text(args, 4),
         }),
     ],
     ["secretsDelete", async (args) => await secrets.remove(text(args, 0))],

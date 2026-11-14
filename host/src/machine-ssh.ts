@@ -422,6 +422,7 @@ function sshMachine(
     daemonCommand: async () => (await endpoints()).daemonCommand,
     appSocket: async () => (await endpoints()).appSocket,
     screen: async () => (await endpoints()).screen,
+    chrome: async () => (await endpoints()).chrome,
     egress: async () => ({
       socket: (await endpoints()).egress,
       env: egressEnv(remote.target.home),

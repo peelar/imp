@@ -131,6 +131,20 @@ function refusalReason({ status, text }: BaoAnswer) {
   return listed || written || `status ${status}`;
 }
 
+/**
+ * A GET on OpenBao's socket with a token other than the host's, such as a read-only one; undefined for a 404. The
+ * server must be ready.
+ */
+export async function readWith(socket: string, token: string, path: string) {
+  const answer = await send({ socket, method: "GET", path, token });
+
+  if (answer.status >= 400 && answer.status !== 404) {
+    throw new Error(`OpenBao refused GET ${path}: ${refusalReason(answer)}`);
+  }
+
+  return answer.status === 404 ? undefined : answer.text;
+}
+
 /** Starts OpenBao from its configuration, with what it prints appended to its log. */
 function spawnBao(bao: string, files: { config: string; log: string }) {
   appendFileSync(
