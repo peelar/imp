@@ -8,6 +8,8 @@
   ],
   "type": "module",
   "scripts": {
+    "setup": "sh scripts/setup.sh",
+    "start": "npm start -w @imp/host",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",

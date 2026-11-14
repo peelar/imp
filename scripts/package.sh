@@ -5,7 +5,7 @@
 #                                         web client) and install-host.sh; on Linux or macOS
 #   scripts/package.sh mac <tag> <out>    Imp-macos.zip, the ad-hoc signed Mac app; on macOS
 #
-# Both need Bun and Exact (EXACT, or ../tools/exact beside this repository); host also needs Node, npm, and `npm ci` at
+# Both need Bun and Exact (EXACT, or where scripts/setup.sh puts it); host also needs Node, npm, and `npm ci` at
 # the root for turbo.
 set -eu
 

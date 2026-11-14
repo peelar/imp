@@ -21,9 +21,8 @@ concurrency:
   group: release
 
 env:
-  # The Exact checkout the client builds with. Move it when the client moves to a newer Exact.
+  # The Exact repository the client builds with, at the commit in client/exact-rev.
   EXACT_REPO: https://github.com/expo/exact
-  EXACT_REV: fe917faa7f5b1f4eb3178b8c4473b88bd6053f5e
 
 jobs:
   version:
@@ -97,12 +96,13 @@ jobs:
             ~/.cargo/git
             ~/.rustup/toolchains
             ~/.cache/exact
-          key: exact-${{ matrix.part }}-${{ runner.os }}-${{ env.EXACT_REV }}
+          key: exact-${{ matrix.part }}-${{ runner.os }}-${{ hashFiles('client/exact-rev') }}
       - name: Set up Exact
         run: |
+          rev=$(cat client/exact-rev)
           git init -q "$RUNNER_TEMP/exact"
           cd "$RUNNER_TEMP/exact"
-          git fetch -q --depth 1 "$EXACT_REPO" "$EXACT_REV"
+          git fetch -q --depth 1 "$EXACT_REPO" "$rev"
           git checkout -q FETCH_HEAD
           bun scripts/exact.mjs setup
           echo "EXACT=$RUNNER_TEMP/exact" >> "$GITHUB_ENV"

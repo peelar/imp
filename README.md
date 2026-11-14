@@ -102,21 +102,23 @@ for `@imp/host`). Pushing it to `main` releases it: `.github/workflows/release.y
 
 ## Running it from a checkout
 
-You need Node 24+, Bun, a checkout of Exact next to this repository (or set `EXACT` to its path), and the Rust
-toolchains its web build pins (`bun exact.mjs setup --check` in `client/` names what is missing): the host rebuilds
-the web client whenever the imp previews an app.
+With Node 24+ and git:
 
 ```sh
-npm ci
-cd client && API_BASE_URL= bun exact.mjs web-build --out dist
-cd ../host && node src/server.ts   # http://localhost:8787
+npm run setup   # Bun, Rust, Exact at the pinned commit, npm ci, and the web client; about 6 minutes the first time
+npm start       # http://localhost:8787
 ```
 
-Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local` instead
-fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the rest.
-`node scripts/smoke-machine.ts` checks a machine adapter on its own.
+Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local npm start`
+instead fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the
+rest. `node scripts/smoke-machine.ts` in `host/` checks a machine adapter on its own.
 
-**Checks.** After `npm ci` at the root:
+The host rebuilds the web client with [Exact](https://github.com/expo/exact) whenever the imp previews an app, which is
+why a checkout needs it. `scripts/setup.sh` puts it where the client looks for it, `../../tools/exact` from this
+repository (`~/tools/exact` for a checkout in `~/code/imp`), unless you set `EXACT`. Run setup again after a pull that
+moves `client/exact-rev`.
+
+**Checks.** After `npm run setup` (or just `npm ci` for the first three):
 
 ```sh
 npm run check   # oxlint (Ultracite's core and anti-slop rules, type-aware), the lint policy probes, oxfmt, tsc

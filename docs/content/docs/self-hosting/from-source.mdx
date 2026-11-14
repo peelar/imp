@@ -3,17 +3,16 @@ title: Run from a checkout
 description: Run the host and build the client from the repository, for development.
 ---
 
-You need Node 24+, Bun, a checkout of [Exact](https://github.com/expo/exact) next to this repository (or set `EXACT` to its path), and the Rust toolchains its web build pins. `bun exact.mjs setup --check` in `client/` names what is missing. The host needs all of this because it rebuilds the web client whenever the imp previews an app.
-
-The repository is an npm workspace monorepo: `host/`, `client/` and `docs/` are its packages, and one `npm ci` at the root installs them all, with the lint and type tooling.
+You need Node 24+ and git. From the root of the repository:
 
 ```sh
-npm ci
-cd client && API_BASE_URL= bun exact.mjs web-build --out dist
-cd ../host && node src/server.ts   # http://localhost:8787
+npm run setup   # about 6 minutes the first time
+npm start       # http://localhost:8787
 ```
 
-Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local` instead fixes the agent's computer to a directory on this one, with no isolation.
+Setup installs Bun and Rust when they are missing, puts [Exact](https://github.com/expo/exact) at the commit in `client/exact-rev` where the client looks for it (`tools/exact` two directories above the repository, or `EXACT`), runs Exact's own setup, runs `npm ci` for every workspace and the lint and type tooling, and builds the web client. The host needs all of this because it rebuilds the web client whenever the imp previews an app. Run setup again after a pull that moves `client/exact-rev`.
+
+Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local npm start` instead fixes the agent's computer to a directory on this one, with no isolation.
 
 ## Checks
 
