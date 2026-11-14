@@ -1,181 +1,65 @@
-// The host's HTTP API, as the client uses it: live streams, calls, sign-in, the Todos app and the agent operating it.
-// Starts the test host (scripts/test-host.ts: a scripted model, a sign-in that approves itself, the local machine
-// adapter) on a free port, so the apps run in real workers. Run: npm test
+// The host's HTTP API, as the client uses it: live streams, calls, sign-in, the Todos app and the agent operating it,
+// and the studio: the agent's preview of an app it wrote, and the person's Save, Discard and Undo. harness.ts starts
+// the host these tests talk to. Run: npm test
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { createServer } from "node:net";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
 import { after, before, test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
+import type { Json } from "../../sdk/app.ts";
+import {
+  base,
+  call,
+  dataDir,
+  done,
+  first,
+  isRow,
+  refused,
+  repo,
+  type Row,
+  rows,
+  said,
+  settledChat,
+  startTestHost,
+  stopTestHost,
+  until,
+} from "./harness.ts";
 
-type Row = Record<string, unknown>;
-
-const isRow = (value: unknown): value is Row =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const freePort = async () =>
-  await new Promise<number>((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        typeof address === "object" && address
-          ? resolve(address.port)
-          : reject(new Error("no port"));
-      });
-    });
-  });
-
-const port = await freePort();
-const base = `http://127.0.0.1:${port}`;
-
-const host = spawn(
-  process.execPath,
-  [join(import.meta.dirname, "..", "scripts", "test-host.ts")],
-  {
-    env: { ...process.env, PORT: String(port), TEST_SIGNIN_MS: "300" },
-    stdio: ["ignore", "pipe", "inherit"],
-  }
-);
-
-/** The answers a live source sends, one per `data:` event, until the caller stops reading. */
-async function* answers(
-  source: string,
-  args: unknown[],
-  signal: AbortSignal
-): AsyncGenerator {
-  const response = await fetch(
-    `${base}/api/live/${source}?args=${encodeURIComponent(JSON.stringify(args))}`,
-    { signal }
-  );
-
-  assert.equal(response.status, 200, `live ${source}`);
-  assert.ok(response.body);
-  let buffered = "";
-
-  for await (const chunk of response.body.pipeThrough(
-    new TextDecoderStream()
-  )) {
-    buffered += chunk;
-    const events = buffered.split("\n\n");
-    buffered = events.pop() ?? "";
-
-    for (const event of events) {
-      if (event.startsWith("data: ")) {
-        yield JSON.parse(event.slice("data: ".length));
-      }
-    }
-  }
-}
-
-/** The first answer of a live source that `accept` takes, or a failure naming the last one seen. */
-async function until<T>(
-  source: string,
-  accept: (answer: unknown) => T | undefined,
-  timeoutMs = 10_000
-): Promise<T> {
-  const controller = new AbortController();
-
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
-
-  let last: unknown;
-
-  try {
-    for await (const answer of answers(source, [], controller.signal)) {
-      last = answer;
-      const accepted = accept(answer);
-
-      if (accepted !== undefined) {
-        return accepted;
-      }
-    }
-  } catch (error) {
-    if (!controller.signal.aborted) {
-      throw error;
-    }
-  } finally {
-    clearTimeout(timer);
-    controller.abort();
-  }
-
-  throw new Error(
-    `live ${source} never matched within ${timeoutMs} ms; last answer: ${JSON.stringify(last)}`
-  );
-}
-
-const first = async (source: string) => await until(source, (answer) => answer);
-
-async function call(
-  source: string,
-  args: unknown[]
-): Promise<{ status: number; body: unknown }> {
-  const response = await fetch(`${base}/api/call/${source}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(args),
-  });
-
-  return { status: response.status, body: await response.json() };
-}
-
-const rows = (value: unknown): Row[] =>
-  Array.isArray(value) ? value.filter(isRow) : [];
-
-const todoTitles = (answer: unknown) => rows(answer).map((todo) => todo.title);
+const todoTitles = (answer: Json) => rows(answer).map((todo) => todo.title);
 
 /** The account once it has this status, without the computer and the memory that ride on the same stream. */
-const withStatus = (status: string) => (answer: unknown) => {
-  if (!isRow(answer) || answer.status !== status) {
-    return;
-  }
+const withStatus = (status: string) => (answer: Json) => {
+  const {
+    computer: _computer,
+    memory: _memory,
+    ...account
+  } = isRow(answer) ? answer : {};
 
-  const { computer: _computer, memory: _memory, ...account } = answer;
-
-  return account;
+  return account.status === status ? account : undefined;
 };
 
 /** What the imp remembers, once `accept` takes its entries; it rides on the account stream. */
-const remembered =
-  (accept: (entries: Row[]) => boolean) => (answer: unknown) => {
-    if (!isRow(answer) || !isRow(answer.memory)) {
-      return;
-    }
+const remembered = (accept: (entries: Row[]) => boolean) => (answer: Json) => {
+  const memory = isRow(answer) ? answer.memory : undefined;
+  const entries = isRow(memory) ? rows(memory.entries) : undefined;
 
-    const entries = rows(answer.memory.entries);
-
-    return accept(entries) ? entries : undefined;
-  };
-
-/** A chat answer once the agent is between turns and `accept` takes its messages. */
-const settledChat =
-  (accept: (messages: Row[]) => boolean) => (answer: unknown) => {
-    if (!isRow(answer) || answer.busy !== false) {
-      return;
-    }
-
-    const messages = rows(answer.messages);
-
-    return accept(messages) ? messages : undefined;
-  };
+  return entries && accept(entries) ? entries : undefined;
+};
 
 before(async () => {
-  const listening = Promise.withResolvers<undefined>();
-
-  // Keep reading after the host listens: the machine runtime shares this pipe and stops when nobody reads it.
-  host.stdout.on("data", (chunk: Buffer) => {
-    if (chunk.toString("utf-8").includes("host on http://")) {
-      listening.resolve(undefined);
-    }
-  });
-  host.once("exit", () => {
-    listening.reject(new Error("the test host exited before it listened"));
-  });
-  await listening.promise;
+  await startTestHost();
 });
 
-after(() => {
-  host.kill();
+after(async () => {
+  await stopTestHost();
+  rmSync(dataDir, { recursive: true, force: true });
 });
 
 test("a source or mutation nobody owns is not found, and a call must be JSON", async () => {
@@ -223,28 +107,34 @@ test("the shell lists the installed apps and the running version", async () => {
   assert.deepEqual(await first("version"), { version: "dev" });
 });
 
-test("the computer's state rides on the account stream", async () => {
+test("the computer's state rides on the account stream, and the screen's page has a stream of its own", async () => {
   const account = await first("account");
 
   assert.ok(isRow(account) && isRow(account.computer));
   assert.equal(account.computer.kind, "dev");
   assert.equal(account.computer.name, "This computer (development)");
+
+  // host/src/screen.html is a tab of its own and reads the computer's state from here.
+  const computer = await first("computer");
+  const page = await fetch(`${base}/computer`);
+
+  assert.ok(isRow(computer));
+  assert.equal(computer.name, "This computer (development)");
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /\/api\/live\/computer/);
 });
 
 test("a message is refused until ChatGPT is signed in", async () => {
   await until("account", withStatus("signedOut"));
-  assert.deepEqual(await call("chatSend", ["Hello", ""]), {
-    status: 200,
-    body: { ok: false, error: "Sign in with ChatGPT first." },
-  });
+  assert.deepEqual(
+    await call("chatSend", ["Hello", ""]),
+    refused("Sign in with ChatGPT first.")
+  );
 });
 
 test("signing in shows the device code, then the account", async () => {
   const waiting = until("account", withStatus("waiting"));
-  assert.deepEqual(await call("accountSignIn", []), {
-    status: 200,
-    body: { ok: true, error: "" },
-  });
+  assert.deepEqual(await call("accountSignIn", []), done);
   assert.deepEqual(await waiting, {
     status: "waiting",
     code: "TEST-1234",
@@ -265,50 +155,43 @@ test("signing in shows the device code, then the account", async () => {
 
 test("a todo added from the app's view is listed, and one without a title is refused", async () => {
   assert.deepEqual(await first("todosList"), []);
-  assert.deepEqual(await call("todosAdd", ["Pack camera"]), {
-    status: 200,
-    body: { ok: true, error: "" },
-  });
-  assert.deepEqual(await call("todosAdd", ["  "]), {
-    status: 200,
-    body: { ok: false, error: "A todo needs a title." },
-  });
+  assert.deepEqual(await call("todosAdd", ["Pack camera"]), done);
+  assert.deepEqual(
+    await call("todosAdd", ["  "]),
+    refused("A todo needs a title.")
+  );
   assert.deepEqual(await first("todosList"), [
     { id: "1", title: "Pack camera", done: false },
   ]);
 });
 
 test("an open list hears of a change without asking again", async () => {
-  const done = until("todosList", (answer) =>
+  const ticked = until("todosList", (answer) =>
     rows(answer).some((todo) => todo.done === true) ? answer : undefined
   );
 
-  assert.deepEqual(await call("todosSetDone", ["1", true]), {
-    status: 200,
-    body: { ok: true, error: "" },
-  });
-  assert.deepEqual(await done, [{ id: "1", title: "Pack camera", done: true }]);
-  assert.deepEqual(await call("todosSetDone", ["99", true]), {
-    status: 200,
-    body: { ok: false, error: "No todo with id 99." },
-  });
-  assert.deepEqual(await call("todosNothing", []), {
-    status: 200,
-    body: { ok: false, error: "The todos app has no operation named nothing." },
-  });
+  assert.deepEqual(await call("todosSetDone", ["1", true]), done);
+  assert.deepEqual(await ticked, [
+    { id: "1", title: "Pack camera", done: true },
+  ]);
+  assert.deepEqual(
+    await call("todosSetDone", ["99", true]),
+    refused("No todo with id 99.")
+  );
+  assert.deepEqual(
+    await call("todosNothing", []),
+    refused("The todos app has no operation named nothing.")
+  );
 });
 
 test("the assistant adds a todo with the app's tool, and the transcript says what it did", async () => {
-  assert.deepEqual(await call("chatSend", ["  "]), {
-    status: 200,
-    body: { ok: false, error: "Write a message first." },
-  });
+  assert.deepEqual(
+    await call("chatSend", ["  "]),
+    refused("Write a message first.")
+  );
   assert.deepEqual(
     await call("chatSend", ["Please add todo: Book train to Kraków", ""]),
-    {
-      status: 200,
-      body: { ok: true, error: "" },
-    }
+    done
   );
   await until("todosList", (answer) =>
     todoTitles(answer).includes("Book train to Kraków") ? answer : undefined
@@ -320,23 +203,9 @@ test("the assistant adds a todo with the app's tool, and the transcript says wha
   );
 
   assert.deepEqual(
-    messages.map(({ role, text, title, detail, icon, failed }) => ({
-      role,
-      text,
-      title,
-      detail,
-      icon,
-      failed,
-    })),
+    messages.map(({ id: _id, ...row }) => row),
     [
-      {
-        role: "user",
-        text: "Please add todo: Book train to Kraków",
-        title: "",
-        detail: "",
-        icon: "",
-        failed: false,
-      },
+      said("user", "Please add todo: Book train to Kraków"),
       {
         role: "activity",
         text: '{"ok":true,"error":""}',
@@ -345,14 +214,7 @@ test("the assistant adds a todo with the app's tool, and the transcript says wha
         icon: "symbol:checkmark",
         failed: false,
       },
-      {
-        role: "assistant",
-        text: "Done.",
-        title: "",
-        detail: "",
-        icon: "",
-        failed: false,
-      },
+      said("assistant", "Done."),
     ]
   );
 });
@@ -360,7 +222,7 @@ test("the assistant adds a todo with the app's tool, and the transcript says wha
 test("a message sent beside an open app reaches the agent with the app's name, and the transcript without it", async () => {
   assert.deepEqual(
     await call("chatSend", ["Add todo: Call the vet", "todos"]),
-    { status: 200, body: { ok: true, error: "" } }
+    done
   );
 
   const messages = await until(
@@ -377,16 +239,15 @@ test("a message sent beside an open app reaches the agent with the app's name, a
 });
 
 test("the imp remembers what it is told, Settings shows it, and the person can make it forget", async () => {
-  assert.deepEqual(
-    await until(
-      "account",
-      remembered(() => true)
-    ),
-    []
+  const atFirst = await until(
+    "account",
+    remembered(() => true)
   );
+
+  assert.deepEqual(atFirst, []);
   assert.deepEqual(
     await call("chatSend", ["Please remember: Prefers trains to planes", ""]),
-    { status: 200, body: { ok: true, error: "" } }
+    done
   );
   assert.deepEqual(
     await until(
@@ -415,9 +276,193 @@ test("the imp remembers what it is told, Settings shows it, and the person can m
     remembered((entries) => entries.length === 0)
   );
 
-  assert.deepEqual(await call("memoryForget", ["user", ""]), {
-    status: 200,
-    body: { ok: true, error: "" },
-  });
+  assert.deepEqual(await call("memoryForget", ["user", ""]), done);
   assert.deepEqual(await forgotten, []);
+});
+
+// ---- The studio: the agent previews an app it wrote; the person saves, discards and undoes ----
+
+// A preview builds the shell, so these tests need the Exact checkout the host builds with (HostOptions.exact): EXACT
+// names it. Without one they are skipped.
+const exact =
+  process.env.EXACT ?? path.resolve(repo, "..", "..", "tools", "exact");
+
+const it = existsSync(path.join(exact, "scripts", "app-cli.mjs"))
+  ? test
+  : test.skip;
+
+const starter = readFileSync(
+  path.join(repo, "host", "studio", "starter", "server.ts"),
+  "utf-8"
+);
+
+/** A change to the starter's server.ts that keeps its migrations: the notes read in capitals. */
+const capitals = ["row.text }", "row.text.toUpperCase() }"] as const;
+
+const ready = (data: string) =>
+  `The preview is ready: the user sees Notes in its tab, on ${data}, with Save and Discard. Tell them what to try; only they can save.`;
+
+/** The notes app's folder in the agent's workspace, a directory on this machine: app_code says where it wrote it. */
+let notesDir = "";
+let previews = 0;
+
+const inNotes = (name: string) =>
+  readFileSync(path.join(notesDir, name), "utf-8");
+
+/**
+ * Sends the agent a message that makes it call a tool, and answers the transcript's row for the call once the agent
+ * is done: the message, that row and the model's "Done." are then the last three.
+ */
+async function toolRow(message: string) {
+  assert.deepEqual(await call("chatSend", [message, ""]), done);
+
+  const messages = await until(
+    "chat",
+    settledChat((all) => all.at(-3)?.text === message),
+    60_000
+  );
+
+  const { title, text, failed } = messages.at(-2) ?? {};
+
+  return { title, text, failed };
+}
+
+/** Writes the starter's server.ts with one change into the workspace and has the agent preview it. */
+async function preview(from: string, to: string) {
+  const changed = starter.replace(from, to);
+
+  assert.notEqual(changed, starter);
+  writeFileSync(path.join(notesDir, "server.ts"), changed);
+  previews += 1;
+
+  return await toolRow(`Please preview app: notes (change ${previews})`);
+}
+
+/** The notes app as the shell shows it: whether it is a draft, what Undo does, and the texts its read answers. */
+const notes = async () => {
+  const app = rows(await first("apps")).find(({ id }) => id === "notes");
+  const texts = rows(await first("notesNotes")).map((note) => note.text);
+
+  return { draft: app?.draft, undo: app?.undo, texts };
+};
+
+const draft = (...texts: string[]) => ({ draft: true, undo: "", texts });
+
+const saved = (undo: string, ...texts: string[]) => ({
+  draft: false,
+  undo,
+  texts,
+});
+
+it("app_code writes a starter into the agent's workspace, and preview_app shows it as a draft on empty data", async () => {
+  const wrote = await toolRow("Please write app code: notes");
+
+  assert.equal(wrote.title, "Opened an app's code");
+  notesDir =
+    /Wrote (\S+\/apps\/notes)\/ \(a starter app \(a list of notes\)/.exec(
+      JSON.stringify(wrote.text)
+    )?.[1] ?? "";
+  assert.equal(inNotes("server.ts"), starter);
+  assert.match(inNotes("app.json"), /"id": "notes",\n {2}"name": "Notes"/);
+  assert.ok(existsSync(path.join(notesDir, "..", "GUIDE.md")));
+  assert.ok(existsSync(path.join(notesDir, "..", "sdk.ts")));
+  assert.deepEqual(await first("build"), { id: "repo" });
+  assert.deepEqual(await toolRow("Please preview app: notes"), {
+    title: "Built a preview",
+    text: ready("empty data (the app is new)"),
+    failed: false,
+  });
+  assert.deepEqual(await notes(), draft());
+  assert.deepEqual(await call("notesAddNote", ["Draft only"]), done);
+  assert.deepEqual(await notes(), draft("Draft only"));
+  // The host serves the shell it built with the draft's screen.
+  assert.notDeepEqual(await first("build"), { id: "repo" });
+  assert.equal((await fetch(`${base}/`)).status, 200);
+});
+
+it("only a draft is saved or discarded and only a save undone; Save makes the draft the app, on the person's data", async () => {
+  const refusals = await Promise.all(
+    [
+      ["appsUndo", "notes"],
+      ["appsSave", "todos"],
+      ["appsDiscard", "todos"],
+      ["appsUndo", "todos"],
+    ].map(async ([source = "", app = ""]) => await call(source, [app]))
+  );
+
+  assert.deepEqual(refusals, [
+    refused("Save or discard the preview first."),
+    refused("The todos app has no preview to save."),
+    refused("The todos app has no preview to discard."),
+    refused("The todos app has no save to undo."),
+  ]);
+  assert.deepEqual(await call("appsSave", ["notes"]), done);
+  // What was tried in the draft went with it. Undoing the save that made the app would remove the app.
+  assert.deepEqual(await notes(), saved("remove"));
+  assert.deepEqual(await call("notesAddNote", ["Kept"]), done);
+});
+
+it("a change previews on a copy of the data, the next preview keeps the draft's entries, and Undo brings back the version before", async () => {
+  const shown = await preview(...capitals);
+
+  assert.equal(shown.text, ready("a copy of the user's data"));
+  assert.deepEqual(await call("notesAddNote", ["Draft only"]), done);
+  assert.deepEqual(await notes(), draft("KEPT", "DRAFT ONLY"));
+  await preview("row.text }", 'row.text + "!" }');
+  assert.deepEqual(await notes(), draft("Kept!", "Draft only!"));
+
+  // A version saved over more than 48 hours ago goes with the next save, unless it is the newest.
+  const history = path.join(dataDir, "code", "notes", "history");
+
+  mkdirSync(path.join(history, "1000"));
+  assert.deepEqual(await call("appsSave", ["notes"]), done);
+  assert.equal(readdirSync(history).length, 2);
+  assert.ok(!existsSync(path.join(history, "1000")));
+  // The data's structure did not change, so Undo keeps the data.
+  assert.deepEqual(await notes(), saved("keep", "Kept!"));
+  assert.deepEqual(await call("notesAddNote", ["Later"]), done);
+  assert.deepEqual(await call("appsUndo", ["notes"]), done);
+  assert.deepEqual(await notes(), saved("remove", "Kept", "Later"));
+});
+
+it("a saved migration cannot change; a new one is saved, and undoing that save restores the data from before it", async () => {
+  const changed = await preview("text TEXT NOT NULL", "text TEXT");
+
+  assert.equal(changed.failed, true);
+  assert.match(
+    JSON.stringify(changed.text),
+    /Migration 1 in server\.ts differs/
+  );
+  assert.deepEqual(await notes(), saved("remove", "Kept", "Later"));
+  await preview('NOT NULL)"]', 'NOT NULL)", "CREATE TABLE tags (name TEXT)"]');
+  assert.deepEqual(await call("appsSave", ["notes"]), done);
+  assert.deepEqual(await call("notesAddNote", ["After"]), done);
+  assert.deepEqual(await notes(), saved("data", "Kept", "Later", "After"));
+  assert.deepEqual(await call("appsUndo", ["notes"]), done);
+  assert.deepEqual(await notes(), saved("remove", "Kept", "Later"));
+});
+
+it("a host started again has the saved app, its draft and its build; Discard drops the draft, and Undo the app the save made", async () => {
+  await preview(...capitals);
+
+  const build = await first("build");
+
+  await startTestHost();
+  assert.deepEqual(await first("build"), build);
+  // Once the draft runs again, the host builds the shell again; it keeps the three newest builds.
+  await until(
+    "build",
+    (answer) => (isDeepStrictEqual(answer, build) ? undefined : answer),
+    60_000
+  );
+  assert.deepEqual(await notes(), draft("KEPT", "LATER"));
+  const builds = readdirSync(path.join(dataDir, "builds"));
+
+  assert.equal(builds.filter((name) => !name.includes(".")).length, 3);
+  assert.deepEqual(await call("appsDiscard", ["notes"]), done);
+  assert.deepEqual(await notes(), saved("remove", "Kept", "Later"));
+  assert.deepEqual(await call("appsUndo", ["notes"]), done);
+  assert.equal(rows(await first("apps")).length, 1);
+  assert.equal((await fetch(`${base}/api/live/notesNotes`)).status, 404);
+  assert.ok(!existsSync(path.join(dataDir, "code", "notes")));
 });
