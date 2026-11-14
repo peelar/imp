@@ -31,6 +31,7 @@ import {
   stopTestHost,
   toolRow,
   until,
+  vaultReady,
 } from "./harness.ts";
 
 const todoTitles = (answer: Json) => rows(answer).map((todo) => todo.title);
@@ -57,6 +58,7 @@ const remembered = (accept: (entries: Row[]) => boolean) => (answer: Json) => {
 
 before(async () => {
   await startTestHost();
+  await vaultReady();
 });
 
 after(async () => {
@@ -461,7 +463,7 @@ it("a host started again has the saved app, its draft and its build; Discard dro
   await until(
     "build",
     (answer) => (isDeepStrictEqual(answer, build) ? undefined : answer),
-    60_000
+    180_000
   );
   assert.deepEqual(await notes(), draft("KEPT", "LATER"));
   const builds = readdirSync(path.join(dataDir, "builds"));

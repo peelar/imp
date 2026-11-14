@@ -82,6 +82,24 @@ export async function startTestHost() {
   host = await spawnTestHost();
 }
 
+/**
+ * Waits for the host's vault. The agent's first command waits for OpenBao to start, which on a busy machine outlasts
+ * a test's wait, so tests of the agent start once it is up.
+ */
+export async function vaultReady() {
+  await until(
+    "account",
+    (answer) => {
+      const secrets = isRow(answer) ? answer.secrets : undefined;
+
+      return isRow(secrets) && secrets.status !== "starting"
+        ? secrets
+        : undefined;
+    },
+    120_000
+  );
+}
+
 export async function stopTestHost() {
   if (host) {
     host.kill();
@@ -220,7 +238,8 @@ export async function toolRow(message: string) {
   const messages = await until(
     "chat",
     settledChat((all) => all.at(-3)?.text === message),
-    60_000
+    // A preview builds the shell, which takes minutes where Exact's build caches are cold.
+    180_000
   );
 
   const { title, text, failed } = messages.at(-2) ?? {};

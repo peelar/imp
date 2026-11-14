@@ -80,6 +80,10 @@ jobs:
       # One install for the workspaces and the root's tooling.
       - run: npm ci
         working-directory: imp
+      - name: Build the shell once
+        # Warms Exact's build caches, so the studio tests' previews build in seconds rather than minutes.
+        working-directory: imp/client
+        run: bun exact.mjs web-build --out "$RUNNER_TEMP/warm"
       - name: Host API tests, the studio's included
         working-directory: imp
         run: npm test
