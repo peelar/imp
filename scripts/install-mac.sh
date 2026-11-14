@@ -8,7 +8,7 @@
 # it again. The release is ad-hoc signed (no Apple Developer ID), which macOS opens because curl does not quarantine
 # what it downloads. `sh install-mac.sh --uninstall` takes it all away.
 #
-# The host fills in __IMP_HOST__ and __IMP_REPO__ when it serves this file (host/src/host.ts).
+# The host fills in __IMP_HOST__ and __IMP_REPO__ when it serves this file (host/src/http.ts).
 set -eu
 
 HOST="${IMP_HOST:-__IMP_HOST__}"
