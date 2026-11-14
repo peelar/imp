@@ -1,5 +1,6 @@
-// The home conversation as the shell shows it: what the person said, what the assistant answered, and what it did
-// along the way (one activity row per tool call, in words, not JSON), plus the reply being written.
+// A conversation as the shell shows it: what the person said, what the assistant answered, and what it did along the
+// way (one activity row per tool call, in words, not JSON), plus the reply being written. chats.ts keeps the list of
+// conversations and which one is open.
 import type { Context } from "@earendil-works/chord/context";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
@@ -8,7 +9,6 @@ import {
   type Harness,
   LiveDoc,
 } from "@earendil-works/pi-durable";
-import type { Topics } from "./live.ts";
 import { messageText } from "./message-text.ts";
 
 export const TOPIC = "chat";
@@ -106,10 +106,57 @@ export type ToolUse = {
   readonly apps: readonly AppLabel[];
 };
 
+/** The first of a command's values for `--description`, quoted or not. */
+const described = (command: string) => {
+  const [, ...values] =
+    /--description[ =](?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command) ?? [];
+
+  return values.find(Boolean);
+};
+
+/** A command that drives agent-browser, in words: the tricks the imp learns and runs, and the pages it uses. */
+function browserStep(command: string) {
+  const icon = "symbol:sparkles";
+  const [, saved] = /\bflow\s+save\s+(\S+)/.exec(command) ?? [];
+
+  if (saved !== undefined) {
+    const title = "Learned a trick";
+
+    return { title, detail: oneLine(described(command) ?? saved), icon };
+  }
+
+  const [, ran] = /\bflow\s+run\s+([^\n;&|]+)/.exec(command) ?? [];
+
+  if (ran !== undefined) {
+    return { title: "Ran a trick", detail: oneLine(ran), icon };
+  }
+
+  const [, opened] =
+    /\bagent-browser\b[^\n;&|]*?\sopen\s+(\S+)/.exec(command) ?? [];
+
+  return opened === undefined
+    ? {
+        title: "Used the browser",
+        detail: oneLine(command.replace(/^[^]*?\bagent-browser\s+/, "")),
+        icon: "symbol:link",
+      }
+    : {
+        title: "Opened a page",
+        detail: oneLine(opened.replaceAll(/^["']|["']$/g, "")),
+        icon: "symbol:link",
+      };
+}
+
 /** What a tool call did, in words the person reads at a glance. */
 export function describeTool({ name, args, apps }: ToolUse) {
   if (name === "run_app_action") {
     return describeAction(args, apps);
+  }
+
+  const { command } = args;
+
+  if (name === "bash" && isText(command) && /\bagent-browser\b/.test(command)) {
+    return browserStep(command);
   }
 
   const known = KNOWN.get(name);
@@ -202,65 +249,74 @@ function transcript(
   });
 }
 
-export type HomeChatOptions = {
+export type ConversationOptions = {
   readonly harness: Harness;
-  readonly home: Conversation;
-  readonly topics: Topics;
+  readonly conversation: Conversation;
   /** The apps whose actions the transcript names. */
-  readonly apps: () => readonly AppLabel[];
+  readonly apps: readonly AppLabel[];
   readonly context: Context;
 };
 
-export async function homeChat(options: HomeChatOptions) {
-  const { harness, home, topics, apps, context } = options;
-
-  /** What the agent is doing now: whether it works, and the words of the reply on the way. */
-  async function live() {
-    const doc = await harness.snapshot(LiveDoc, home.id, context);
-
-    return {
-      busy: doc?.run !== undefined,
-      streaming: messageText(doc?.generation?.message?.content),
-    };
-  }
-
-  async function state() {
-    const page = await home.entries(
-      { order: "descending" },
-      SHOWN,
-      undefined,
-      context
-    );
-
-    const messages = transcript(page.items.toReversed(), apps());
-    const { busy, streaming } = await live();
-
-    if (busy && streaming) {
-      messages.push(row("live", "assistant", { text: streaming }));
-    }
-    // Busy with no words on the way (before the first, or while a tool runs): the shell draws a thinking row.
-    else if (busy) {
-      messages.push(row("thinking", "thinking", {}));
-    }
-
-    return { messages, busy };
-  }
-
-  // Every commit to the conversation, including each streamed piece of a reply, refreshes the open chat views.
-  const watch = await home.watch(context);
-
-  watch.start(async () => {
-    topics.changed(TOPIC);
-  });
+/** What the agent is doing in a conversation now: whether it works, and the words of the reply on the way. */
+export async function liveState(
+  harness: Harness,
+  id: Conversation["id"],
+  context: Context
+) {
+  const doc = await harness.snapshot(LiveDoc, id, context);
 
   return {
-    state,
-    /** Whether the agent is in a turn. */
-    busy: async () => (await live()).busy,
-    async close() {
-      await watch.stop();
-    },
+    busy: doc?.run !== undefined,
+    streaming: messageText(doc?.generation?.message?.content),
   };
 }
 
-export type HomeChat = Awaited<ReturnType<typeof homeChat>>;
+/** The conversation's transcript, with the reply on the way, and whether the agent works in it. */
+export async function conversationState(options: ConversationOptions) {
+  const { harness, conversation, apps, context } = options;
+
+  const page = await conversation.entries(
+    { order: "descending" },
+    SHOWN,
+    undefined,
+    context
+  );
+
+  const messages = transcript(page.items.toReversed(), apps);
+
+  const { busy, streaming } = await liveState(
+    harness,
+    conversation.id,
+    context
+  );
+
+  if (busy && streaming) {
+    messages.push(row("live", "assistant", { text: streaming }));
+  }
+  // Busy with no words on the way (before the first, or while a tool runs): the shell draws a thinking row.
+  else if (busy) {
+    messages.push(row("thinking", "thinking", {}));
+  }
+
+  return { messages, busy };
+}
+
+/** What the person's first message in a conversation says, on one line, to name it in the sidebar. */
+export async function firstWords(conversation: Conversation, context: Context) {
+  const page = await conversation.entries(
+    { order: "ascending" },
+    20,
+    undefined,
+    context
+  );
+
+  const first = page.items.find((entry) => entry.kind === "pi.user");
+  const [message] = first?.model ?? [];
+
+  return message?.role === "user"
+    ? titleOf(messageText(message.content).replace(CONTEXT, ""))
+    : "";
+}
+
+/** A conversation's name in the sidebar: its first message, on one line. */
+export const titleOf = (text: string) => oneLine(text, 60);

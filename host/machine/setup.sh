@@ -52,3 +52,10 @@ for dir in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do
 	mkdir -p "$dir"
 	echo '{ "ProxyMode": "direct" }' > "$dir/imp-egress.json"
 done
+
+# agent-browser, the CLI the agent drives that browser with (machine/agentd.ts points it at the Chrome above, on the
+# screen). Its saved flows are the imp's tricks. Pinned, so every machine runs the same one.
+AGENT_BROWSER_VERSION=0.43.0
+if [ "$(agent-browser --version 2>/dev/null || true)" != "agent-browser $AGENT_BROWSER_VERSION" ]; then
+	/usr/local/bin/npm install -g --no-audit --no-fund "agent-browser@$AGENT_BROWSER_VERSION"
+fi

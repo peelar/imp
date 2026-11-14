@@ -2,23 +2,26 @@
 // `{ ok, error }`. The shell's own names start with one of a few words (account, chat, apps, build, version,
 // computer, memory, secrets, backup), which no app may take as its id (app-folders.ts); every other name goes to the
 // app that owns it, such as `todosSetDone` to the todos app's `setDone`.
-import type { Context } from "@earendil-works/chord/context";
-import type { Conversation } from "@earendil-works/pi-durable";
 import type { Json } from "../../sdk/app.ts";
 import type { AppGateway } from "./apps.ts";
-import { TOPIC as CHAT, type HomeChat, withAppContext } from "./chat.ts";
+import { TOPIC as CHAT } from "./chat.ts";
+import type { Chats } from "./chats.ts";
 import { TOPIC as COMPUTER, type Computer } from "./computer.ts";
 import type { Answer, LiveSource } from "./live.ts";
 import { type AppBackup, TOPIC as BACKUP } from "./backup.ts";
 import { TOPIC as MEMORY, type MemoryProvider } from "./memory.ts";
 import { TOPIC as SECRETS, type Secrets } from "./secrets.ts";
 import { TOPIC as ACCOUNT, type ChatGPTAccount } from "./signin.ts";
+import { TOPIC as TRICKS, type Tricks } from "./tricks.ts";
 import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio.ts";
 import { appTopic } from "./app-folders.ts";
 
 export type ShellApiOptions = {
   readonly account: ChatGPTAccount;
-  readonly chat: HomeChat;
+  /** The person's conversations: the open one, which their messages go to, and the rest. */
+  readonly chats: Chats;
+  /** What the imp learned to do in the browser. */
+  readonly tricks: Tricks;
   readonly computer: Computer;
   readonly memory: MemoryProvider;
   readonly secrets: Secrets;
@@ -27,9 +30,6 @@ export type ShellApiOptions = {
   /** The app studio: drafts, saved versions and the shell's builds. */
   readonly studio: ReturnType<typeof studio>;
   readonly gateway: AppGateway;
-  /** The home conversation, which the person's messages go to. */
-  readonly home: Conversation;
-  readonly context: Context;
   /** The running release's tag; "dev" in a checkout. */
   readonly version: string;
 };
@@ -117,8 +117,17 @@ export function shellApi(options: ShellApiOptions) {
  * host), so what Settings shows comes with the account.
  */
 function shellSources(options: ShellApiOptions) {
-  const { account, backup, chat, computer, memory, secrets, studio, version } =
-    options;
+  const {
+    account,
+    backup,
+    chats,
+    computer,
+    memory,
+    secrets,
+    studio,
+    tricks,
+    version,
+  } = options;
 
   const whole = async (): Promise<Answer> => ({
     ...account.state(),
@@ -130,14 +139,18 @@ function shellSources(options: ShellApiOptions) {
     },
     secrets: secrets.state(),
     backup: backup.state(),
+    tricks: tricks.list(),
   });
 
   return new Map<string, LiveSource>([
     [
       "account",
-      { topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS, BACKUP], load: whole },
+      {
+        topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS, BACKUP, TRICKS],
+        load: whole,
+      },
     ],
-    ["chat", { topics: [CHAT], load: async () => await chat.state() }],
+    ["chat", { topics: [CHAT], load: async () => await chats.state() }],
     ["apps", { topics: [APPS_TOPIC], load: async () => studio.state() }],
     [
       "build",
@@ -183,7 +196,7 @@ function accountCalls({ account }: ShellApiOptions): Calls {
 }
 
 function chatCalls(options: ShellApiOptions): Calls {
-  const { account, gateway, home, context } = options;
+  const { account, gateway, chats } = options;
 
   return [
     [
@@ -202,14 +215,7 @@ function chatCalls(options: ShellApiOptions): Calls {
         // The second argument is the app open beside the chat, "" from the chat tab.
         const open = gateway.apps().find((app) => app.id === args[1]);
 
-        await home.submit(
-          {
-            type: "input",
-            content: withAppContext(message, open),
-            whenBusy: "steer",
-          },
-          context
-        );
+        await chats.submit(message, open);
 
         return ok;
       },
@@ -217,9 +223,29 @@ function chatCalls(options: ShellApiOptions): Calls {
     [
       "chatStop",
       async () => {
-        await home.abort(context);
+        await chats.stop();
 
         return ok;
+      },
+    ],
+    [
+      "chatNew",
+      async () => {
+        await chats.fresh();
+
+        return ok;
+      },
+    ],
+    [
+      "chatShow",
+      async (args) => {
+        try {
+          await chats.show(text(args, 0));
+
+          return ok;
+        } catch (error) {
+          return refused(why(error));
+        }
       },
     ],
   ];
@@ -268,12 +294,12 @@ function studioCalls({ studio, gateway, backup }: ShellApiOptions): Calls {
   ];
 }
 
-function computerCalls({ computer, chat }: ShellApiOptions): Calls {
+function computerCalls({ computer, chats }: ShellApiOptions): Calls {
   // A switch mid-turn would cut the agent's tools off from the machine they started on.
   const betweenTurns =
     (change: (value: string) => Promise<Reply>): Call =>
     async (args) =>
-      (await chat.busy())
+      (await chats.busy())
         ? refused("Wait until your imp finishes, or stop it, then switch.")
         : await change(text(args, 0));
 

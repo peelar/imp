@@ -3,9 +3,9 @@
 // run in real workers, and a GitHub CLI (fake-gh.ts) whose repositories are folders in the data directory. When the
 // user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
 // "app code: <id>", "preview app: <id>", "ask for a key: <service>" and "run: <command>" make it call the memory's,
-// the studio's, the secrets' and the shell tools the same way. TEST_DATA_DIR names the host's data directory, for a
+// the studio's, the secrets' and the shell tools the same way. Its agent-browser knows two tricks. TEST_DATA_DIR names the host's data directory, for a
 // test that starts the host again on it.
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createModels, type Provider } from "@earendil-works/pi-ai/models";
@@ -197,6 +197,34 @@ models.setProvider(chatgpt);
 
 const dataDir =
   process.env.TEST_DATA_DIR ?? mkdtempSync(path.join(tmpdir(), "imp-test-"));
+
+// The machine's agent-browser, which the host asks for the imp's tricks (tricks.ts): a stand-in that knows two.
+const flows = [
+  {
+    name: "hn-search",
+    description: "Search Hacker News",
+    origin: "hn.algolia.com",
+    params: ["query"],
+  },
+  {
+    name: "parcel",
+    description: "Track a parcel",
+    origin: "inpost.pl",
+    params: ["number"],
+  },
+];
+
+const bin = path.join(dataDir, "bin");
+
+mkdirSync(bin, { recursive: true });
+
+writeFileSync(
+  path.join(bin, "agent-browser"),
+  `#!/bin/sh\n[ "$1 $2" = "flow list" ] || { echo "agent-browser (test): only flow list" >&2; exit 1; }\necho '${JSON.stringify({ success: true, data: { flows } })}'\n`,
+  { mode: 0o755 }
+);
+
+process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
 
 await startHost({
   models,

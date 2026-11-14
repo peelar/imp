@@ -153,3 +153,52 @@ test "settings back the apps' code up to GitHub, connected with a device code"
   tap "backup-disconnect"
   clock until state backup.status == "off" within 5000
   expect tree has "backup-connect"
+
+test "the sidebar starts new chats, folds all but the latest three, and lists the imp's tricks"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  expect tree has "sidebar"
+  expect text "conversation-0" == "Please add todo: Book train to Kraków"
+  expect text "tricks-count" == "2"
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  expect tree has "home"
+  type "composer" "First new chat"
+  tap "send"
+  clock until state chat.conversations.length == 2 within 5000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  type "composer" "Second new chat"
+  tap "send"
+  clock until state chat.conversations.length == 3 within 5000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  type "composer" "Third new chat"
+  tap "send"
+  clock until state chat.conversations.length == 4 within 5000
+  expect text "conversation-0" == "Third new chat"
+  expect text "conversation-2" == "First new chat"
+  expect tree missing "conversation-3"
+  tap "conversations-older"
+  expect text "conversation-3" == "Please add todo: Book train to Kraków"
+  tap "conversation-3"
+  clock until state chat.messages.0.text == "Please add todo: Book train to Kraków" within 5000
+  tap "tricks-entry"
+  expect tree has "tricks"
+  expect text "trick-title-0" == "Search Hacker News"
+  expect text "trick-title-1" == "Track a parcel"
+  tap "trick-0"
+  expect tree missing "tricks"
+  expect text "composer" == "Search Hacker News: "
+
+test "on a narrow window the conversations and tricks open as a drawer"
+  size 390x844
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  expect tree missing "sidebar"
+  tap "drawer-toggle"
+  expect tree has "drawer-sidebar"
+  tap "drawer-tricks-entry"
+  expect tree missing "drawer"
+  expect tree has "tricks"

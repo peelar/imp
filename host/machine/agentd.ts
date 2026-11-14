@@ -15,6 +15,7 @@
 // worker.mjs, egress.mjs and the ws package. Import only types, Node's own modules and ws.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { connect, type Socket } from "node:net";
 import { homedir } from "node:os";
@@ -106,12 +107,46 @@ server.on("upgrade", (req, socket, head) => {
   });
 });
 
+const chrome = ["/usr/bin/google-chrome", "/usr/bin/chromium"].find((file) =>
+  existsSync(file)
+);
+
+/**
+ * What the agent's programs run with besides agentd's own environment. With the screen up they open their windows on
+ * it. agent-browser runs in the machine's Chrome, shown on the screen, in a profile that keeps the sites the owner
+ * signed in to, and records every session, so a task can be saved as a trick.
+ */
+type AgentEnv = {
+  AGENT_BROWSER_PROFILE: string;
+  AGENT_BROWSER_CAPTURE: "flow";
+  AGENT_BROWSER_EXECUTABLE_PATH?: string;
+  AGENT_BROWSER_HEADED?: "1";
+  DISPLAY?: string;
+};
+
+function agentEnv() {
+  const env: AgentEnv = {
+    AGENT_BROWSER_PROFILE: path.join(home, ".config", "imp", "browser"),
+    AGENT_BROWSER_CAPTURE: "flow",
+  };
+
+  if (chrome) {
+    env.AGENT_BROWSER_EXECUTABLE_PATH = chrome;
+  }
+
+  if (screenUp) {
+    env.DISPLAY = SCREEN_DISPLAY;
+    env.AGENT_BROWSER_HEADED = "1";
+  }
+
+  return env;
+}
+
 function servePiEnv(ws: WebSocket, command: string, args: readonly string[]) {
   const child = spawn(command, args, {
     stdio: ["pipe", "pipe", "pipe"],
     cwd: home,
-    // With the screen up, the agent's programs open their windows on it.
-    env: screenUp ? { ...process.env, DISPLAY: SCREEN_DISPLAY } : process.env,
+    env: { ...process.env, ...agentEnv() },
   });
 
   const send = (kind: 1 | 2, chunk: Buffer) => {

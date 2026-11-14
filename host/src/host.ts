@@ -18,9 +18,11 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type AppGateway, appGateway } from "./apps.ts";
 import { appBackup } from "./backup.ts";
-import { homeChat, TOPIC as CHAT } from "./chat.ts";
+import { TOPIC as CHAT } from "./chat.ts";
+import { openChats } from "./chats.ts";
 import { type Computer, openComputer } from "./computer.ts";
 import { serveHttp } from "./http.ts";
+import { openTricks } from "./tricks.ts";
 import { Topics } from "./live.ts";
 import type { Machine, MachineProvider } from "./machine.ts";
 import {
@@ -90,6 +92,10 @@ function hostSecret(dataDir: string) {
   return readFileSync(file, "utf-8").trim();
 }
 
+/** How the imp uses the web: agent-browser on its computer, and the tricks it keeps (tricks.ts). */
+const BROWSER =
+  'To use the web, drive the browser on your computer with the agent-browser CLI in bash: it opens Chrome on your computer\'s screen, where the user can watch you and sign in to sites for you. Before your first browser task, read `agent-browser skills get core`. Every browser session is recorded, so a task you did once can become a trick (agent-browser calls it a saved flow) that later runs in a second without the page. When `open` or `agent-browser flow list` shows a trick that fits the task, run it with `agent-browser flow run`, and use the page only if that fails. After a browser task the user may ask for again, keep it as a trick: if it only read, save it yourself with `agent-browser flow save <name> --description "<what it does, such as Search Hacker News>" --param <name>=<each value you typed>` and say so in one short sentence; if it changed something (sent, bought, booked, posted, deleted), ask the user before saving it. The user sees your tricks in the app; call them tricks.';
+
 /** What the agent is told and can do before any app: who it is, its computer's tools, and what it remembers. */
 function agentRegistry(computer: Computer, memory: MemoryProvider) {
   const registry = createRegistry();
@@ -105,6 +111,7 @@ function agentRegistry(computer: Computer, memory: MemoryProvider) {
             `You are Imp, the user's own imp: a small, clever, loyal helper that runs their errands in the Imp app. You use their apps for them and build new apps when they ask. You have your own Linux computer: the read, write, edit, and bash tools run on it, in ${computer.workspace()}. Act without asking, except before destructive or irreversible actions. Keep answers short.`,
           { tag: false }
         ),
+        section("browser", () => BROWSER, { tag: false }),
       ],
     })
   );
@@ -192,7 +199,7 @@ type Followers = {
   readonly secrets: Secrets;
 };
 
-/** The agent and its home conversation, which follow the computer when the owner switches it. */
+/** The agent, its conversations and its tricks, which follow the computer when the owner switches it. */
 async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
   const { options, topics, computer, registry } = parts;
 
@@ -212,40 +219,60 @@ async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
   );
 
   const agent = () => ({ model: options.model, cwd: computer.workspace() });
-  const home = await harness.root(context, { agent: agent() });
 
-  // root() applies `agent` only when it creates the conversation; a changed model or machine applies on every start,
-  // and a switch of computer at once: its apps load on the new machine and the agent works there.
-  await home.configure(agent(), context);
-  computer.onSwitch(async () => {
-    gateway.disconnect();
-    secrets.switched();
-    await home.configure(agent(), context);
-    gateway.start().catch(report("apps"));
-  });
-
-  const chat = await homeChat({
+  const chats = await openChats({
     harness,
-    home,
     topics,
     apps: gateway.apps,
     context,
+    dataDir: options.dataDir,
+    agent,
+  });
+
+  // The agent's files only: listing the tricks needs none of the owner's secrets.
+  const tricks = openTricks({
+    env: async () => new RemoteExecutionEnv(place(computer)),
+    topics,
+    context,
+  });
+
+  // A switch of computer applies at once: its apps load on the new machine, the agent works there, and its tricks
+  // are that machine's.
+  computer.onSwitch(async () => {
+    gateway.disconnect();
+    secrets.switched();
+    await chats.configure();
+
+    const reload = async () => {
+      await gateway.start();
+      await tricks.refresh();
+    };
+
+    reload().catch(report("apps"));
   });
 
   harness.resume();
 
-  // While the agent works, its tools use the machine.
-  const keepAwake = async () => {
-    if (await chat.busy()) {
+  // While the agent works, its tools use the machine. Once a turn ends, the imp may have learned a trick.
+  let working = false;
+
+  const followTurn = async () => {
+    const busy = await chats.busy();
+
+    if (busy) {
       computer.touch();
+    } else if (working) {
+      await tricks.refresh();
     }
+
+    working = busy;
   };
 
   topics.on(CHAT, () => {
-    keepAwake().catch(report("chat"));
+    followTurn().catch(report("chat"));
   });
 
-  return { harness, home, chat };
+  return { harness, chats, tricks };
 }
 
 export async function startHost(options: HostOptions) {
@@ -305,12 +332,16 @@ export async function startHost(options: HostOptions) {
   const { secrets, backup } = openKeeping(parts, gateway, machine);
   const apps = openStudio(parts, gateway, stored.drafts);
   const account = chatgptAccount(options.models, topics);
-  const { harness, home, chat } = await openAgent(parts, { gateway, secrets });
+
+  const { harness, chats, tricks } = await openAgent(parts, {
+    gateway,
+    secrets,
+  });
 
   // Load every app now. A machine that is down is retried by the first call that needs it.
   const loadApps = async () => {
     await gateway.start();
-    await apps.start();
+    await Promise.all([apps.start(), tricks.refresh()]);
   };
 
   loadApps().catch(report("apps"));
@@ -322,15 +353,14 @@ export async function startHost(options: HostOptions) {
     owner: options.owner,
     api: shellApi({
       account,
-      chat,
+      chats,
+      tricks,
       computer,
       memory,
       secrets,
       backup,
       studio: apps,
       gateway,
-      home,
-      context,
       version,
     }),
     topics,
@@ -349,7 +379,7 @@ export async function startHost(options: HostOptions) {
   return {
     gateway,
     /** Whether the agent is between turns. */
-    idle: async () => !(await chat.busy()),
+    idle: async () => !(await chats.busy()),
     async close() {
       screens.close();
       http.close();
@@ -357,7 +387,7 @@ export async function startHost(options: HostOptions) {
       computer.close();
       secrets.close();
       backup.close();
-      await chat.close();
+      await chats.close();
       await harness.close(context);
     },
   };

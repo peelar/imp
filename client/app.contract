@@ -46,6 +46,7 @@ shape Account
   memory: Memory
   secrets: Secrets
   backup: Backup
+  tricks: Trick[]
 
 // A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
 shape ChatMessage
@@ -58,9 +59,18 @@ shape ChatMessage
   failed: bool
 
 // While the assistant writes, its partial answer is the last message, with id "live".
+// A conversation in the sidebar, named by its first message.
+shape ChatSummary
+  id: string
+  title: string
+
+// The open conversation (`current`, with its rows in `messages`) and every one with something said in it, the most
+// recently written in first.
 shape ChatState
   messages: ChatMessage[]
   busy: bool
+  current: string
+  conversations: ChatSummary[]
 
 // An installed app. `cover` is its engraving in the client's assets ("" for none), `symbol` its fallback icon.
 // `draft` is true while the app shows a preview of a new version; `undo` says what undoing its last save does: ""
@@ -176,6 +186,14 @@ shape Backup
   versions: number
   synced: bool
 
+// A browser task the imp recorded once and runs again without the page (agent-browser's saved flow): what it does,
+// on which site, and what it asks for each time.
+shape Trick
+  name: string
+  title: string
+  site: string
+  params: string[]
+
 shape Reply
   ok: bool
   error: string
@@ -239,6 +257,12 @@ component App
   state now = 0
   // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
   state chatDocked = true persist
+  // What the chat tab shows: "chat" (the open conversation) or "tricks" (what the imp learned in the browser).
+  state pane = "chat"
+  // The sidebar's conversations past the latest three are folded until this opens them.
+  state olderOpen = false
+  // On a narrow window the sidebar is a drawer over the chat.
+  state drawer = false
   // The host's address in the Mac app ("" on the web, where the page's origin is the host). The Mac installer fills it
   // in; the onboarding asks for it when no host answers.
   state hostAddress = "" persist
@@ -257,6 +281,7 @@ component App
   mutation signedOut as shape Reply
   mutation sent as shape Reply then toEnd
   mutation stopped as shape Reply
+  mutation chatChanged as shape Reply
   mutation appSaved as shape Reply
   mutation appDiscarded as shape Reply
   mutation appUndone as shape Reply
@@ -276,6 +301,8 @@ component App
   derive wide = media.width >= 960
   derive onApp = nav.tab != "chat" and nav.tab != "settings"
   derive docked = wide and onApp and chatDocked
+  // Beside the chat on a wide window: the conversations and the tricks.
+  derive sidebar = wide and nav.tab == "chat"
   // The apps the top bar lists: the installed ones this build has a screen (a tab) for.
   derive shownApps = apps.filter(a => nav.tabs.map(t => t.name).includes(a.id))
   derive openAppName = match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
@@ -296,6 +323,7 @@ component App
   derive unreachable = hostLost or (accountLost and hostAddress != "")
   derive computer = account.computer
   derive memory = account.memory
+  derive tricks = account.tricks
   derive secrets = account.secrets
   derive secretError = match secretSaved { case some(r) => r.error, case none => "" }
   derive secretDeleteError = match secretDeleted { case some(r) => r.error, case none => "" }
@@ -366,6 +394,31 @@ component App
     focus("composer")
   action stop
     send stopped = chatStop()
+  action newChat
+    pane = "chat"
+    drawer = false
+    nav = select(nav, "chat")
+    send chatChanged = chatNew()
+    focus("composer")
+  action showChat(id: string)
+    pane = "chat"
+    drawer = false
+    nav = select(nav, "chat")
+    if id != chat.current
+      send chatChanged = chatShow(id)
+  action openTricks
+    pane = "tricks"
+    drawer = false
+    nav = select(nav, "chat")
+  // A trick asked for in the open conversation: its name starts the message, and the person adds what it asks for.
+  action useTrick(title: string)
+    pane = "chat"
+    draft = `${title}: `
+    focus("composer")
+  action toggleOlder
+    olderOpen = not olderOpen
+  action toggleDrawer
+    drawer = not drawer
   action toEnd
     if docked
       scrollIntoView("side-transcript", lastId, block="end")
@@ -442,7 +495,7 @@ component App
       color="ink.strong" font-family="family.text"
       if signedIn
         // The routes. On a wide window they sit under the top bar, and beside the chat panel while an app is open.
-        column position="absolute" left=0 bottom=0 top=(wide ? "3.25rem" : "0px") right=(docked ? "26rem" : "0px")
+        column position="absolute" left=(sidebar ? "16rem" : "0px") bottom=0 top=(wide ? "3.25rem" : "0px") right=(docked ? "26rem" : "0px")
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
@@ -454,8 +507,13 @@ component App
                     border-bottom=(wide ? "none" : "1px solid line.subtle") background-color="surface.page"
                     row width="100%" max-width="46rem" align-items="center" gap=12 padding=(wide ? "22px 0 0" : "12px 0 11px")
                       if e.name == "chat" and not wide
+                        button press=toggleDrawer aria-label="Conversations and tricks" aria-expanded=drawer
+                          testId="drawer-toggle" appearance="none" width=32 height=32 padding=0 display="flex"
+                          align-items="center" justify-content="center" border="1px solid line.strong"
+                          background-color="transparent" color="ink.strong"
+                          image "symbol:menu" width=16 height=16
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=tabTitle(e.name, wide, apps), size="1.5rem", heading=1)
+                      Initialled(word=(e.name == "chat" and pane == "tricks" ? "Tricks" : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
                       if e.name == "chat" and chat.busy
                         row gap=8 align-items="center" testId="busy"
@@ -471,7 +529,9 @@ component App
                           color=(chatDocked ? "surface.page" : "ink.strong")
                           image "symbol:icon.panel" width=14 height=14 aria-hidden=true
                           text "Chat" class=Label color="inherit"
-                  if e.name == "chat"
+                  if e.name == "chat" and pane == "tricks"
+                    TrickList(tricks=tricks, use=useTrick)
+                  else if e.name == "chat"
                     if chat.messages.length == 0 and not chat.busy
                       // Home with nothing said yet: the day, a greeting, the workshop, and the apps.
                       scroll id="home-scroll" flex=1 min-height=0
@@ -624,6 +684,13 @@ component App
                     AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone)
                   // </apps:screens>
+        // The conversations and the tricks, beside the chat on a wide window.
+        if sidebar
+          aside position="absolute" top="3.25rem" left=0 bottom=0 width="16rem" box-sizing="border-box"
+            display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
+            aria-label="Conversations and tricks"
+            Sidebar(prefix="", conversations=chat.conversations, current=chat.current, pane=pane, tricks=tricks.length,
+              olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks, toggleOlder=toggleOlder)
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
         if docked
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
@@ -659,7 +726,7 @@ component App
         // The apps, drawn: on a wide window a dock floating over the bottom of the page (Chat, each app's cover, and
         // Settings at the end; the open one shows its name), on a phone a bar of symbols along the bottom.
         row role="tablist" appearance="none" testId="tabs" position="absolute" box-sizing="border-box"
-          left=(wide ? (docked ? "calc((100% - 26rem) / 2)" : "50%") : "0px") right=(wide ? "auto" : "0px")
+          left=(wide ? (docked ? "calc((100% - 26rem) / 2)" : sidebar ? "calc(16rem + (100% - 16rem) / 2)" : "50%") : "0px") right=(wide ? "auto" : "0px")
           translate=(wide ? "-50% 0" : "0 0") bottom=(wide ? "16px" : "0px")
           height=(wide ? "auto" : "calc(3.5rem + env(safe-area-inset-bottom))")
           padding=(wide ? "5px" : "0 0 env(safe-area-inset-bottom)") gap=(wide ? 4 : 0)
@@ -696,6 +763,17 @@ component App
               else if not wide
                 text tabLabel(t.name, apps) font-family="family.mono" font-size="0.625rem" font-weight=500
                   letter-spacing="0.1em" text-transform="uppercase" aria-hidden=true
+        // On a narrow window the sidebar opens as a drawer over everything.
+        if drawer and not wide
+          row position="absolute" inset=0 testId="drawer"
+            aside width="17rem" max-width="85%" box-sizing="border-box" display="flex" flex-direction="column"
+              padding-top="env(safe-area-inset-top)" background-color="surface.page" border-right="1px solid line.strong"
+              aria-label="Conversations and tricks"
+              Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, pane=pane,
+                tricks=tricks.length, olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks,
+                toggleOlder=toggleOlder)
+            button press=toggleDrawer aria-label="Close" testId="drawer-close" appearance="none" flex=1 border="none"
+              background-color="ink.strong" opacity=0.25
         // The masthead above everything on a wide window: the wordmark and the day.
         if wide
           row position="absolute" top=0 left=0 right=0 height="3.25rem" box-sizing="border-box" align-items="center"
@@ -975,6 +1053,105 @@ component SecretSettings
               text (u.status == 0 ? "failed" : `${u.status}`) font-family="family.mono" font-size="0.75rem"
                 color=(u.failed ? "-exact-system-red" : "ink.muted")
               text u.when font-size="0.75rem" color="ink.faint"
+
+// The left sidebar: a new chat, the imp's tricks, the three latest conversations and, folded under them, the rest.
+component Sidebar
+  props
+    prefix: string
+    conversations: ChatSummary[]
+    current: string
+    pane: string
+    tricks: number
+    olderOpen: bool
+    newChat: action
+    show: action
+    openTricks: action
+    toggleOlder: action
+  view
+    column flex=1 min-height=0 testId=`${prefix}sidebar`
+      column gap=2 padding="14px 10px 12px" border-bottom="1px solid line.subtle"
+        button press=newChat testId=`${prefix}chat-new` appearance="none" display="flex" align-items="center" gap=10
+          padding="9px 10px" border="none" background-color="transparent" color="ink.strong" text-align="start"
+          :hover
+            background-color="surface.soft"
+          image "symbol:compose" width=15 height=15 aria-hidden=true
+          text "New chat" font-size="0.9375rem"
+        button press=openTricks aria-pressed=(pane == "tricks") testId=`${prefix}tricks-entry` appearance="none"
+          display="flex" align-items="center" gap=10 padding="9px 10px" border="none" text-align="start"
+          background-color=(pane == "tricks" ? "surface.soft" : "transparent") color="ink.strong"
+          :hover
+            background-color="surface.soft"
+          image "symbol:sparkles" width=15 height=15 aria-hidden=true
+          text "Tricks" font-size="0.9375rem" flex=1
+          text `${tricks}` class=Label testId=`${prefix}tricks-count`
+      scroll flex=1 min-height=0
+        column gap=2 padding="14px 10px 20px"
+          text "Recent" class=Label padding="0 10px 6px"
+          if conversations.length == 0
+            text "Nothing said yet." font-size="0.875rem" font-style="italic" color="ink.muted" padding="4px 10px"
+          for c, i in conversations.slice(0, 3) key=c.id
+            ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(pane == "chat" and c.id == current), show=show)
+          if conversations.length > 3
+            button press=toggleOlder aria-expanded=olderOpen testId=`${prefix}conversations-older` appearance="none"
+              display="flex" align-items="center" gap=8 padding="9px 10px" margin-top=4 border="none"
+              background-color="transparent" color="ink.muted" text-align="start"
+              :hover
+                color="ink.strong"
+              text (olderOpen ? "−" : "+") font-family="family.mono" width=12 aria-hidden=true
+              text (olderOpen ? "Hide older" : `Older (${conversations.length - 3})`) class=Label color="inherit"
+            if olderOpen
+              for c, i in conversations.slice(3) key=c.id
+                ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(pane == "chat" and c.id == current), show=show)
+
+// One conversation in the sidebar, by its first message.
+component ChatEntry
+  props
+    prefix: string
+    index: number
+    id: string
+    title: string
+    selected: bool
+    show: action
+  view
+    button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
+      padding="8px 10px" border="none" text-align="start" color="ink.strong" min-width=0
+      background-color=(selected ? "surface.soft" : "transparent")
+      :hover
+        background-color="surface.soft"
+      text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+// The imp's tricks: what each does, on which site, and what it asks for. One asked for starts a message.
+component TrickList
+  props
+    tricks: Trick[]
+    use: action
+  view
+    scroll id="tricks-list" flex=1 min-height=0
+      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=18 box-sizing="border-box" width="100%"
+        testId="tricks"
+        text "What your imp learned to do in the browser. A trick runs in a second, without the page; tap one to ask for it."
+          color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+        column
+          row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+            text "Your tricks" class=Label color="ink.strong" role="heading" aria-level=2
+            text `No. ${numbered(tricks.length)}` class=Label
+          if tricks.length == 0
+            text "None yet. When your imp does something in the browser you may ask for again, it keeps it here."
+              font-size="0.9375rem" font-style="italic" color="ink.muted" padding="14px 0" testId="tricks-empty"
+          for k, i in tricks key=k.name
+            button press=use(k.title) testId=`trick-${i}` display="flex" align-items="center" gap=14 padding="14px 0"
+              background-color="transparent" border="none" border-bottom="1px solid line.subtle" text-align="start"
+              color="ink.strong" transition="background-color 120ms ease"
+              :hover
+                background-color="surface.soft"
+              row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                image "symbol:sparkles" width=18 height=18
+              column gap=2 flex=1 min-width=0
+                text k.title font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`trick-title-${i}`
+                text (k.params.length == 0 ? k.site : `${k.site} · asks for ${k.params.join(", ")}`) font-size="0.9375rem"
+                  color="ink.muted" line-clamp=1
+              text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
 
 // What the imp remembers, in Settings: who it is, who its person is, and everything else it learned, each fact with
 // a way to forget it.
