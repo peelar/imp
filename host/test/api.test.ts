@@ -124,16 +124,28 @@ const rows = (value: unknown): Row[] =>
 
 const todoTitles = (answer: unknown) => rows(answer).map((todo) => todo.title);
 
-/** The account once it has this status, without the computer that rides on the same stream. */
+/** The account once it has this status, without the computer and the memory that ride on the same stream. */
 const withStatus = (status: string) => (answer: unknown) => {
   if (!isRow(answer) || answer.status !== status) {
     return;
   }
 
-  const { computer: _computer, ...account } = answer;
+  const { computer: _computer, memory: _memory, ...account } = answer;
 
   return account;
 };
+
+/** What the imp remembers, once `accept` takes its entries; it rides on the account stream. */
+const remembered =
+  (accept: (entries: Row[]) => boolean) => (answer: unknown) => {
+    if (!isRow(answer) || !isRow(answer.memory)) {
+      return;
+    }
+
+    const entries = rows(answer.memory.entries);
+
+    return accept(entries) ? entries : undefined;
+  };
 
 /** A chat answer once the agent is between turns and `accept` takes its messages. */
 const settledChat =
@@ -362,4 +374,50 @@ test("a message sent beside an open app reaches the agent with the app's name, a
     "Book train to Kraków",
     "Call the vet",
   ]);
+});
+
+test("the imp remembers what it is told, Settings shows it, and the person can make it forget", async () => {
+  assert.deepEqual(
+    await until(
+      "account",
+      remembered(() => true)
+    ),
+    []
+  );
+  assert.deepEqual(
+    await call("chatSend", ["Please remember: Prefers trains to planes", ""]),
+    { status: 200, body: { ok: true, error: "" } }
+  );
+  assert.deepEqual(
+    await until(
+      "account",
+      remembered((entries) => entries.length > 0)
+    ),
+    [
+      {
+        id: "user",
+        title: "You",
+        kind: "",
+        facts: ["Prefers trains to planes"],
+        links: [],
+      },
+    ]
+  );
+  await until(
+    "chat",
+    settledChat(
+      (all) => all.at(-2)?.text === "Remembered 1 new fact about user."
+    )
+  );
+
+  const forgotten = until(
+    "account",
+    remembered((entries) => entries.length === 0)
+  );
+
+  assert.deepEqual(await call("memoryForget", ["user", ""]), {
+    status: 200,
+    body: { ok: true, error: "" },
+  });
+  assert.deepEqual(await forgotten, []);
 });
