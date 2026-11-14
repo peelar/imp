@@ -14,7 +14,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, relative } from "node:path";
-import type { AppFiles, Operation } from "./apps.ts";
+import type { AppFiles } from "./app-folders.ts";
+import type { Operation } from "./protocol.ts";
 
 export type ShellApp = {
   readonly id: string;

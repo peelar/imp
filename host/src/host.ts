@@ -253,7 +253,7 @@ export async function startHost(options: HostOptions) {
       return {
         topics: [`app:${route.app}`],
         load: async () =>
-          await gateway.fromShell(route.app, "read", route.name, args),
+          await gateway.fromShell({ ...route, kind: "read", args }),
       };
     }
 
@@ -383,7 +383,7 @@ export async function startHost(options: HostOptions) {
     }
 
     try {
-      return await gateway.fromShell(route.app, "write", route.name, args);
+      return await gateway.fromShell({ ...route, kind: "write", args });
     } catch (error) {
       return refused(error instanceof Error ? error.message : String(error));
     }

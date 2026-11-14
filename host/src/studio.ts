@@ -32,14 +32,14 @@ import {
   APP_FILES,
   APP_ID,
   type AppFiles,
-  type AppGateway,
   type AppInfo,
   appInfo,
   checkSlot,
   draftSlot,
   readAppFiles,
   readApps,
-} from "./apps.ts";
+} from "./app-folders.ts";
+import type { AppGateway } from "./apps.ts";
 import type { Topics } from "./live.ts";
 import { buildShell, type ShellApp } from "./shell.ts";
 
@@ -209,7 +209,7 @@ export function studio(options: StudioOptions) {
       return "remove";
     }
 
-    return entry.schema === gateway.schemaVersion(id) ? "keep" : "data";
+    return entry.schema === gateway.data.schemaVersion(id) ? "keep" : "data";
   };
 
   // ---- Builds ----
@@ -409,15 +409,15 @@ export function studio(options: StudioOptions) {
 
     const manifestFor = async (base: string) => {
       gateway.uninstall(check);
-      gateway.copyDataTo(base, scratch);
-      gateway.replaceData(check, scratch);
+      gateway.data.copyTo(base, scratch);
+      gateway.data.replace(check, scratch);
       rmSync(scratch, { force: true });
 
       try {
         return await gateway.install(check, app);
       } finally {
         gateway.uninstall(check);
-        gateway.removeData(check);
+        gateway.data.remove(check);
       }
     };
 
@@ -453,8 +453,8 @@ export function studio(options: StudioOptions) {
     // All good: this is the draft now.
     if (!keepDraftData) {
       gateway.uninstall(draft);
-      gateway.copyDataTo(id, scratch);
-      gateway.replaceData(draft, scratch);
+      gateway.data.copyTo(id, scratch);
+      gateway.data.replace(draft, scratch);
       rmSync(scratch, { force: true });
     }
 
@@ -486,12 +486,12 @@ export function studio(options: StudioOptions) {
 
     if (live) {
       writeApp(join(entry, "code"), live.files);
-      gateway.copyDataTo(id, join(entry, "data.sqlite"));
+      gateway.data.copyTo(id, join(entry, "data.sqlite"));
     }
 
     writeFileSync(
       join(entry, "meta.json"),
-      JSON.stringify({ schema: gateway.schemaVersion(id) })
+      JSON.stringify({ schema: gateway.data.schemaVersion(id) })
     );
 
     try {
@@ -500,11 +500,11 @@ export function studio(options: StudioOptions) {
     } catch (error) {
       if (live) {
         gateway.uninstall(id);
-        gateway.replaceData(id, join(entry, "data.sqlite"));
+        gateway.data.replace(id, join(entry, "data.sqlite"));
         await gateway.install(id, live).catch(() => {});
       } else {
         gateway.uninstall(id);
-        gateway.removeData(id);
+        gateway.data.remove(id);
       }
 
       rmSync(entry, { recursive: true, force: true });
@@ -515,7 +515,7 @@ export function studio(options: StudioOptions) {
     writeApp(code(id, "live"), draft.files);
     rmSync(code(id, "draft"), { recursive: true, force: true });
     gateway.uninstall(draftSlot(id));
-    gateway.removeData(draftSlot(id));
+    gateway.data.remove(draftSlot(id));
     prune(id);
     // The shell already shows this version's screen; only its bar changes.
     topics.changed(APPS_TOPIC);
@@ -527,7 +527,7 @@ export function studio(options: StudioOptions) {
     }
 
     gateway.uninstall(draftSlot(id));
-    gateway.removeData(draftSlot(id));
+    gateway.data.remove(draftSlot(id));
     rmSync(code(id, "draft"), { recursive: true, force: true });
     topics.changed(APPS_TOPIC);
     await rebuild();
@@ -545,7 +545,7 @@ export function studio(options: StudioOptions) {
     }
 
     const restoreData =
-      !entry.code || entry.schema !== gateway.schemaVersion(id);
+      !entry.code || entry.schema !== gateway.data.schemaVersion(id);
 
     gateway.uninstall(id);
 
@@ -553,7 +553,7 @@ export function studio(options: StudioOptions) {
       const previous = appInfo(readAppFiles(entry.code), id);
 
       if (restoreData) {
-        gateway.replaceData(id, join(entry.dir, "data.sqlite"));
+        gateway.data.replace(id, join(entry.dir, "data.sqlite"));
       }
 
       rmSync(code(id, "live"), { recursive: true, force: true });
@@ -561,7 +561,7 @@ export function studio(options: StudioOptions) {
       await gateway.install(id, previous);
     } else {
       // The save made the app: undoing it removes the app, with the rest of its folder.
-      gateway.removeData(id);
+      gateway.data.remove(id);
       rmSync(code(id), { recursive: true, force: true });
     }
 

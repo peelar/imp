@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { readAppFiles, readApps } from "../src/apps.ts";
+import { readAppFiles, readApps } from "../src/app-folders.ts";
 import { generate, type ShellApp } from "../src/shell.ts";
 
 const client = join(import.meta.dirname, "..", "..", "client");
