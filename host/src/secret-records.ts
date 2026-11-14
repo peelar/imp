@@ -4,7 +4,7 @@
 //   DATA_DIR/secrets-requests.json   the open requests
 //   DATA_DIR/secrets-uses.json       the newest 200 uses
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   arr,
@@ -15,6 +15,7 @@ import {
   type Validator,
 } from "@earendil-works/pi-schema";
 import type { EgressUse } from "./egress-proxy.ts";
+import { readKept } from "./kept.ts";
 
 const USES_KEPT = 200;
 
@@ -52,18 +53,11 @@ const usesJson = compile(
   )
 );
 
-/** The list a file holds, which the host wrote; none when the file is missing or holds something else. */
-function readList<T>(file: string, listed: Validator<T[]>): T[] {
-  try {
-    const kept: unknown = existsSync(file)
-      ? JSON.parse(readFileSync(file, "utf-8"))
-      : [];
-
-    return listed.check(kept) ? kept : [];
-  } catch {
-    return [];
-  }
-}
+/** The list a file holds, which the host wrote; none when the file is missing or damaged. */
+const readList = <T>(file: string, listed: Validator<T[]>): T[] =>
+  readKept(file, listed, (problem) => {
+    console.error(`secrets: ${problem}`);
+  }) ?? [];
 
 export type SecretRecords = ReturnType<typeof secretRecords>;
 

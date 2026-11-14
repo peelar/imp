@@ -21,6 +21,7 @@ import {
   writeRuntime,
 } from "./machine-runtime.ts";
 import { freePort, healthy } from "./ports.ts";
+import { killOnExit } from "./children.ts";
 
 export type LocalProviderOptions = {
   readonly secret: string;
@@ -38,19 +39,6 @@ type Agentd = {
 
 export function localProvider(options: LocalProviderOptions): MachineProvider {
   const running = new Map<string, Agentd>();
-
-  // A local machine lives as long as its host: agentd is a child process, so stop it when the host exits.
-  process.once("exit", () => {
-    for (const { child } of running.values()) {
-      child.kill();
-    }
-  });
-
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () =>
-      process.exit(128 + (signal === "SIGINT" ? 2 : 15))
-    );
-  }
 
   let files: Promise<Runtime> | undefined;
 
@@ -80,7 +68,7 @@ export function localProvider(options: LocalProviderOptions): MachineProvider {
       if (
         !current ||
         current.child.exitCode !== null ||
-        !(await healthy(current.port, expected))
+        !(await healthy(current.port, expected, AbortSignal.timeout(5000)))
       ) {
         current?.child.kill();
         const runtimeDir = path.join(dirFor(spec.key), "runtime");
@@ -140,7 +128,8 @@ function spawnAgentd(options: {
 }): ChildProcess {
   const { runtimeDir, home, port, egressPort, token, digest } = options;
 
-  return spawn(process.execPath, [path.join(runtimeDir, "agentd.mjs")], {
+  // A local machine lives as long as its host: agentd is a child process, so it stops when the host exits.
+  const child = spawn(process.execPath, [path.join(runtimeDir, "agentd.mjs")], {
     env: {
       ...process.env,
       ...agentdEnv({
@@ -156,13 +145,18 @@ function spawnAgentd(options: {
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
+
+  killOnExit(child);
+
+  return child;
 }
 
 /** Waits for the agentd just started on `port` to answer as `expected`; throws when it does not within its tries. */
 async function started(port: number, expected: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
+    // Each try is bounded, so an agentd that takes the connection and never answers fails the start.
     // oxlint-disable-next-line no-await-in-loop -- a poll: each try follows the one that found agentd not up yet.
-    if (await healthy(port, expected)) {
+    if (await healthy(port, expected, AbortSignal.timeout(1000))) {
       return;
     }
 

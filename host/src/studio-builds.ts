@@ -7,7 +7,6 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -15,6 +14,7 @@ import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
 import { draftSlot } from "./app-folders.ts";
 import type { AppGateway } from "./apps.ts";
+import { readKept } from "./kept.ts";
 import { buildShell, type ShellApp } from "./shell.ts";
 
 const KEPT_BUILDS = 3;
@@ -39,20 +39,22 @@ const why = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause);
 
 /**
- * The build current.json names, if that build is still there. A file that says something else names no build, as a
- * missing one does: the host then serves the repository's build until it builds its own.
+ * The build current.json names, if that build is still there. A file that is damaged names no build, as a missing one
+ * does: the host then serves the repository's build until it builds its own.
  */
-function servedBuild(builds: string): string | undefined {
-  const file = path.join(builds, "current.json");
+function servedBuild(
+  builds: string,
+  log: (message: string) => void
+): string | undefined {
+  const current = readKept(
+    path.join(builds, "current.json"),
+    currentJson,
+    (problem) => {
+      log(`studio: ${problem}`);
+    }
+  );
 
-  if (!existsSync(file)) {
-    return undefined;
-  }
-
-  const current: unknown = JSON.parse(readFileSync(file, "utf-8"));
-
-  return currentJson.check(current) &&
-    existsSync(path.join(builds, current.id, "index.html"))
+  return current && existsSync(path.join(builds, current.id, "index.html"))
     ? current.id
     : undefined;
 }
@@ -63,7 +65,7 @@ export function shellBuilds(options: ShellBuildsOptions) {
 
   mkdirSync(builds, { recursive: true });
 
-  let current = servedBuild(builds);
+  let current = servedBuild(builds, log);
 
   /** An app as the shell shows it: its draft while it has one. None while its server code fails to start. */
   async function screen(id: string): Promise<ShellApp[]> {

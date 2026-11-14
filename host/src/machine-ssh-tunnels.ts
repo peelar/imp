@@ -3,6 +3,7 @@
 // network. This module opens them, opens them again when their `ssh` exited, and closes them with the host.
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { killOnExit } from "./children.ts";
 import { accepts, freePort } from "./ports.ts";
 
 export type Tunnel = {
@@ -15,21 +16,6 @@ export type TunnelTarget = {
   readonly destination: string;
   readonly args: readonly string[];
 };
-
-// Tunnels are child processes of the host, so close them when the host exits.
-const tunnels = new Set<ChildProcess>();
-
-process.once("exit", () => {
-  for (const child of tunnels) {
-    child.kill();
-  }
-});
-
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () =>
-    process.exit(128 + (signal === "SIGINT" ? 2 : 15))
-  );
-}
 
 /** A local port that forwards to `remotePort` on the machine's loopback, for as long as `child` runs. */
 async function openTunnel(
@@ -52,14 +38,12 @@ async function openTunnel(
     { stdio: ["ignore", "ignore", "pipe"] }
   );
 
-  tunnels.add(child);
+  // Tunnels are child processes of the host, so they close when the host exits.
+  killOnExit(child);
   let stderr = "";
 
   child.stderr.on("data", (chunk: Buffer) => {
     stderr += chunk.toString("utf-8");
-  });
-  child.on("exit", () => {
-    tunnels.delete(child);
   });
 
   for (let attempt = 0; attempt < 200; attempt += 1) {

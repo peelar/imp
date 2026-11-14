@@ -122,7 +122,14 @@ export function appDecisions(options: DecisionsOptions) {
         return "";
       }
 
-      const entry = history.latest(id);
+      let entry: ReturnType<typeof history.latest>;
+
+      try {
+        entry = history.latest(id);
+      } catch {
+        // A damaged history entry offers no Undo here; pressing Undo anyway would say what is wrong with it.
+        return "";
+      }
 
       if (!entry) {
         return "";

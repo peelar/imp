@@ -3,6 +3,7 @@
 // repositories are bare git repositories in the host's data directory. The backup rides on the account stream.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../sdk/app.ts";
@@ -10,6 +11,7 @@ import {
   call,
   dataDir,
   done,
+  first,
   isRow,
   type Row,
   startTestHost,
@@ -107,4 +109,22 @@ test("disconnecting stops the backup to GitHub and signs the host out; a sign-in
   await waiting;
   assert.deepEqual(await call("backupCancel", []), done);
   assert.equal((await until("account", withStatus("off"))).code, "");
+});
+
+test("a host whose kept files were damaged still starts, and reads them as empty", async () => {
+  await stopTestHost();
+  mkdirSync(path.join(dataDir, "builds"), { recursive: true });
+
+  for (const file of [
+    "backup.json",
+    "computer.json",
+    "secrets-uses.json",
+    path.join("builds", "current.json"),
+  ]) {
+    writeFileSync(path.join(dataDir, file), "{ half written");
+  }
+
+  await startTestHost();
+  assert.equal((await until("account", withStatus("off"))).repo, "");
+  assert.deepEqual(await first("build"), { id: "repo" });
 });

@@ -3,7 +3,7 @@
 // one release and checked against its SHA-256 before it is unpacked, so a host runs exactly these builds wherever it
 // came from: a release, a checkout, or a test.
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -161,18 +161,32 @@ async function install(home: string, build: Build) {
     );
   }
 
-  // Unpacked beside its final place and renamed into it, so a half-unpacked tool is never taken for a whole one.
-  const staging = `${home}.partial`;
+  // Unpacked beside its final place and renamed into it, so a half-unpacked tool is never taken for a whole one. Each
+  // download stages in a folder of its own: another host process may be fetching the same tool into the same folder.
+  const staging = `${home}.partial-${randomUUID()}`;
 
-  rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
   const file = path.join(staging, "archive.tar.gz");
 
-  writeFileSync(file, archive);
-  await unpack(file, staging);
-  rmSync(file);
-  rmSync(home, { recursive: true, force: true });
-  renameSync(staging, home);
+  try {
+    writeFileSync(file, archive);
+    await unpack(file, staging);
+    rmSync(file);
+    settle(staging, home, path.join(home, build.path));
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+/** Moves an unpacked tool into its place, unless another process put the same tool there first. */
+function settle(staging: string, home: string, program: string) {
+  try {
+    renameSync(staging, home);
+  } catch (cause) {
+    if (!existsSync(program)) {
+      throw cause;
+    }
+  }
 }
 
 async function unpack(archive: string, into: string): Promise<void> {

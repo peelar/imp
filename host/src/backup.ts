@@ -5,13 +5,14 @@
 // stays on the host.
 //
 // The host needs git for the history and the GitHub CLI (gh) for GitHub; Settings says which one is missing.
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
 import type { AppInfo } from "./app-folders.ts";
 import { backupCommands } from "./backup-commands.ts";
 import { githubSignIn, type Remote } from "./backup-github.ts";
 import { type BackupHistory, backupHistory } from "./backup-history.ts";
+import { readKept } from "./kept.ts";
 import type { Topics } from "./live.ts";
 
 export const TOPIC = "backup";
@@ -74,19 +75,11 @@ function oneAtATime() {
 }
 
 /** Where the host pushes to, kept in DATA_DIR/backup.json while GitHub is connected. */
-function keptRemote(file: string) {
-  /** As the host wrote it; none when the file is missing or says anything else. */
-  const read = (): Remote | undefined => {
-    if (!existsSync(file)) {
-      return undefined;
-    }
-
-    const kept: unknown = JSON.parse(readFileSync(file, "utf-8"));
-
-    return remoteJson.check(kept) ? kept : undefined;
-  };
-
-  let remote = read();
+function keptRemote(file: string, log: (message: string) => void) {
+  // A damaged file reads as not connected: Settings then offers to connect GitHub again.
+  let remote = readKept(file, remoteJson, (problem) => {
+    log(`backup: ${problem}`);
+  });
 
   return {
     current: () => remote,
@@ -196,18 +189,21 @@ function versionKeeper({ history, remote, state, log }: Keeping) {
 export function appBackup(options: BackupOptions) {
   const commands = backupCommands(options);
   const github = githubSignIn(commands);
-  const remote = keptRemote(path.join(options.dataDir, "backup.json"));
+
+  const log =
+    options.log ??
+    ((line: string) => {
+      console.error(line);
+    });
+
+  const remote = keptRemote(path.join(options.dataDir, "backup.json"), log);
   const state = backupState(options.topics, remote);
 
   const keeper = versionKeeper({
     history: backupHistory({ commands, apps: options.apps }),
     remote,
     state,
-    log:
-      options.log ??
-      ((line) => {
-        console.error(line);
-      }),
+    log,
   });
 
   /** After the sign-in: the person's repository is where the versions go, starting with the ones there are. */

@@ -11,6 +11,7 @@ import {
   str,
   union,
 } from "@earendil-works/pi-schema";
+import { readKept } from "./kept.ts";
 
 /** The cloud sizes, all within E2B's free plan (up to 8 vCPUs and 8 GiB). */
 export const SIZES = [
@@ -47,28 +48,11 @@ export type Choice = Static<typeof choice>;
 
 export type ChoiceStore = ReturnType<typeof openChoice>;
 
-/** The choice a file holds; none when there is no file or it does not hold one. */
-function read(file: string): Choice | undefined {
-  if (!existsSync(file)) {
-    return undefined;
-  }
-
-  try {
-    const value: unknown = JSON.parse(readFileSync(file, "utf-8"));
-
-    if (stored.check(value)) {
-      return value;
-    }
-  } catch {
-    // Not JSON: reported below like any other file that holds no choice.
-  }
-
-  console.error(
-    `computer: ${file} does not hold a choice of computer; choose one again in Settings.`
-  );
-
-  return undefined;
-}
+/** The choice a file holds; none when there is no file or it is damaged. */
+const read = (file: string): Choice | undefined =>
+  readKept(file, stored, (problem) => {
+    console.error(`computer: ${problem} Choose a computer again in Settings.`);
+  });
 
 /** `environmentKey` is an E2B API key from the environment; one entered in Settings takes its place. */
 export function openChoice(dataDir: string, environmentKey = "") {

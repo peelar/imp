@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile, int, obj } from "@earendil-works/pi-schema";
+import { readKept } from "./kept.ts";
 import { freePort } from "./ports.ts";
 
 const ADMIN_POLICY = `
@@ -133,10 +134,15 @@ async function ports(file: string): Promise<Ports> {
     writeFileSync(file, JSON.stringify(await twoPorts()), { mode: 0o600 });
   }
 
-  const kept: unknown = JSON.parse(readFileSync(file, "utf-8"));
+  // New ports would not match the address Raft kept, so a damaged file stops the vault, and Settings says why.
+  let problem = "";
 
-  if (!portsJson.check(kept)) {
-    throw new Error(`${file} does not name OpenBao's two ports.`);
+  const kept = readKept(file, portsJson, (damaged) => {
+    problem = damaged;
+  });
+
+  if (!kept) {
+    throw new Error(`OpenBao's two ports are unknown: ${problem}`);
   }
 
   return kept;
