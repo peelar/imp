@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.3.0
+
+### Minor Changes
+
+- 23fd004: Dictate a message: the microphone button beside Send writes what you say into the composer, using your browser's speech recognition.
+
 ## 0.2.0
 
 ### Minor Changes
