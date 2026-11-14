@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck",
     "changeset": "changeset",
-    "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts --no-audit --no-fund"
+    "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts --no-audit --no-fund",
+    "prepare": "test -e .git && git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

@@ -1,5 +1,5 @@
 # Releasing Imp
 
-A commit that changes what the host, the Mac app or the apps do carries a changeset: run `npm run changeset`, pick a bump for `@imp/host` (patch for fixes, minor for features; Imp's version is the host's) and commit the Markdown file it writes with the change. Refactors, tests, CI and docs need none, and nothing checks for one.
+A commit that changes what the host, the Mac app or the apps do carries a changeset: run `npm run changeset`, pick a bump for `@imp/host` (patch for fixes, minor for features; Imp's version is the host's) and commit the Markdown file it writes with the change. Tests, CI and docs need none. A commit that changes shipped code but not what it does (a refactor) puts a line `Changeset: none` in its message instead. `.githooks/pre-push`, which `npm ci` turns on, blocks a push to `main` that changes shipped code with neither; `git push --no-verify` skips it.
 
 On every push to `main`, the Release workflow (`.github/workflows/release.yml`) runs `changeset version` when changesets are pending: it bumps `host/package.json`, writes `host/CHANGELOG.md` and commits both to `main` as "Release Imp v<version>". The same run builds the host and the Mac app and publishes GitHub release `v<version>`, which installed hosts and Mac apps update themselves to. A push without a changeset releases nothing. Nothing is published to npm.
