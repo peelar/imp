@@ -89,3 +89,13 @@ test "what the imp is asked to remember shows in Settings, reaches its prompt, a
   tap "memory-forget-0"
   clock until state memory.entries.length == 0 within 5000
   expect tree has "memory-empty"
+
+test "after a chat the imp remembers what it learned on its own, without a tool call"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  type "composer" "By the way, I live in Gdańsk now."
+  tap "send"
+  clock until state chat.busy == false within 10000
+  clock until state memory.entries.0.facts.0 == "Lives in Gdańsk" within 10000
+  tap "tab-settings"
+  expect text "memory-fact-0-0" == "Lives in Gdańsk"

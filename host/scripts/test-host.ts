@@ -15,6 +15,12 @@ const respond: FauxResponseFactory = (context) => {
 	const last = context.messages.at(-1) as { role: string; content: unknown } | undefined;
 	if (last?.role === "toolResult") return fauxAssistantMessage("Done.");
 	const text = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
+	// Memory's reflection after a run: "I live in <place>" anywhere in the exchange is a fact about the person.
+	const first = context.messages[0];
+	if (first?.role === "system" && JSON.stringify(first.content).includes("long-term memory of Imp")) {
+		const place = text.match(/I live in (\p{L}+)/u)?.[1];
+		return fauxAssistantMessage(JSON.stringify({ remember: place ? [{ about: "user", facts: [`Lives in ${place}`] }] : [] }));
+	}
 	const todo = text.match(/todo: ([^"\\]+)/);
 	if (todo) return fauxAssistantMessage(fauxToolCall("run_app_action", { app: "todos", action: "add", args: { title: todo[1]!.trim() } }), { stopReason: "toolUse" });
 	const fact = text.match(/remember: ([^"\\]+)/);

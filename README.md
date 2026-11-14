@@ -28,8 +28,9 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   speak), across conversations, and Settings lists all of it with a way to forget each fact. The default is the Model
   Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory)
   used as a library: a knowledge graph in one JSONL file, `memory.jsonl` in the data directory, that you can also open
-  in an editor. Another memory system implements `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()`
-  as `memory`.
+  in an editor. The imp writes to it with tools while it works, and after every answer a background task asks the
+  model what the exchange taught it, so it remembers without being told to. Another memory system implements
+  `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()` as `memory`.
 
 ## Apps the imp builds
 
