@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Amp orbs run this once for a fresh orb (and again on a stale snapshot) before work starts, so an agent can build,
+# test and run Imp at once: the same setup as a checkout's (scripts/setup.sh), which puts Exact in ~/tools/exact.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+time npm run setup
