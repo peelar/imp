@@ -41,6 +41,9 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   your own computer. The host downloads pinned, checksummed builds of both the first time it needs them
   (`host/src/tools.ts`). Settings lists each key's latest uses, and OpenBao's audit log (`vault/audit.log`) records
   every read. When the imp needs a key it does not have, it asks for it in Settings, never in the chat.
+  Website logins work the same way: you add a site, username, password and optionally the key its one-time codes come
+  from, and when the imp calls `sign_in`, the host types them into the page Chrome has open on that site over Chrome's
+  DevTools protocol, never into a page of another site (`host/src/chrome.ts`, `host/src/secret-logins.ts`).
 
 The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces: `host/`, `client/` and `docs/` are
 its packages, and one `npm ci` at the root installs them all with the lint and type tooling. `npm run build`,

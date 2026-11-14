@@ -7,12 +7,14 @@
 //           stdout, 2 for stderr. Frames from the host are the daemon's stdin.
 // /screen   the computer's screen: a VNC (RFB) stream over a WebSocket, bridged to x11vnc's socket (see screen.sh).
 // /egress   the egress proxy's control socket (see egress.ts), and with `&stream=<id>` one tunnel.
+// /chrome   Chrome's DevTools protocol (its browser target), so the host can type a login into a page of the
+//           login's site (see chrome.ts).
 // /apps     the app daemon: the host loads each app's server code, and agentd runs it in a worker of its own, so a
 //           new version replaces the old worker and terminating it frees everything. One host connection at a time;
 //           workers keep running when it drops, and the host loads every app again when it reconnects.
 //
 // The host strips this file's types and installs it on the machine as agentd.mjs (src/machine-runtime.ts), beside
-// worker.mjs, egress.mjs and the ws package. Import only types, Node's own modules and ws.
+// worker.mjs, egress.mjs, chrome.mjs and the ws package. Import only types, Node's own modules and ws.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -30,6 +32,7 @@ import type {
   ToAgentd,
   ToWorker,
 } from "../src/protocol.ts";
+import { serveChrome } from "./chrome.ts";
 import { egressProxy } from "./egress.ts";
 
 type Outcome = { ok: true; value: Json } | { ok: false; error: string };
@@ -82,7 +85,9 @@ server.on("upgrade", (req, socket, head) => {
 
   if (
     url.searchParams.get("token") !== token ||
-    !["/pi-env", "/apps", "/screen", "/egress"].includes(url.pathname)
+    !["/pi-env", "/apps", "/screen", "/egress", "/chrome"].includes(
+      url.pathname
+    )
   ) {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
 
@@ -101,11 +106,16 @@ server.on("upgrade", (req, socket, head) => {
       serveScreen(ws);
     } else if (url.pathname === "/egress") {
       egress.serve(ws, url.searchParams.get("stream"));
+    } else if (url.pathname === "/chrome") {
+      serveChrome(ws, BROWSER_PROFILE);
     } else {
       serveApps(ws);
     }
   });
 });
+
+/** agent-browser's Chrome profile, which keeps the owner's sign-ins; the host's /chrome reaches the Chrome in it. */
+const BROWSER_PROFILE = path.join(home, ".config", "imp", "browser");
 
 const chrome = ["/usr/bin/google-chrome", "/usr/bin/chromium"].find((file) =>
   existsSync(file)
@@ -126,7 +136,7 @@ type AgentEnv = {
 
 function agentEnv() {
   const env: AgentEnv = {
-    AGENT_BROWSER_PROFILE: path.join(home, ".config", "imp", "browser"),
+    AGENT_BROWSER_PROFILE: BROWSER_PROFILE,
     AGENT_BROWSER_CAPTURE: "flow",
   };
 

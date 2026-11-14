@@ -139,6 +139,34 @@ test "the imp asks for a key it lacks, and the owner adds it from the request"
   clock until state secrets.secrets.length == 1 within 10000
   expect text "secret-name-0" == "linear"
 
+test "the imp asks for a login, and the owner adds it with its one-time-code key"
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "Please ask for a login: github.com"
+  tap "send"
+  clock until state secrets.requests.0.name == "github-login" within 10000
+  clock until state chat.busy == false within 10000
+  tap "tab-settings"
+  clock until state secrets.status == "ready" within 120000
+  tap "secret-request-add-0"
+  expect text "secret-site" == "github.com"
+  type "secret-username" "adrian"
+  type "secret-value" "hunter2"
+  type "secret-otp" "not a key"
+  tap "secret-save"
+  clock until state loginSaved.ok == false within 20000
+  expect tree has "secret-error"
+  type "secret-otp" "otpauth://totp/GitHub:adrian?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
+  tap "secret-save"
+  clock until state secrets.requests.length == 0 within 20000
+  clock until state secrets.secrets.0.name == "github-login" within 5000
+  expect text "secret-detail-0" == "github.com · adrian · one-time codes"
+  tap "secret-replace-0"
+  expect text "secret-username" == "adrian"
+  type "secret-username" "adrian-p"
+  tap "secret-save"
+  clock until state secrets.secrets.0.username == "adrian-p" within 20000
+  expect text "secret-detail-0" == "github.com · adrian-p · one-time codes"
+
 test "settings back the apps' code up to GitHub, connected with a device code"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"

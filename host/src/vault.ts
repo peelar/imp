@@ -5,7 +5,8 @@
 //
 //   imp-admin   what the host signs in with (Settings): it writes, lists and deletes secrets and reads their
 //               descriptions, but cannot read a value back. A saved value is never shown again.
-//   imp-egress  what the egress proxy gets (egress.ts): a short-lived token that only reads values.
+//   imp-egress  what the egress proxy gets (egress.ts), and what the host mints for each sign-in it types
+//               (secret-logins.ts): a short-lived token that only reads values.
 import path from "node:path";
 import {
   arr,
@@ -16,7 +17,7 @@ import {
   opt,
   str,
 } from "@earendil-works/pi-schema";
-import { answered, vaultServer } from "./vault-server.ts";
+import { answered, readWith, vaultServer } from "./vault-server.ts";
 
 /** A secret as the vault describes it, without its value. */
 export type StoredSecret = {
@@ -60,6 +61,10 @@ const newToken = compile(
   )
 );
 
+const fields = compile(
+  obj({ data: obj({ data: map(str()) }, { open: true }) }, { open: true })
+);
+
 const pathOf = (name: string) => `imp/${name}`;
 
 export function openVault(options: VaultOptions) {
@@ -99,15 +104,18 @@ export function openVault(options: VaultOptions) {
 
       return await Promise.all(names.map(describe));
     },
-    /** Stores a new value (an empty one keeps the current value) and replaces the description. */
+    /**
+     * Stores new fields (`value`, and for a login `otp`), in place of every field it had, and replaces the
+     * description. Undefined fields keep the stored ones.
+     */
     put: async (
       name: string,
-      value: string,
+      stored: Readonly<Record<string, string>> | undefined,
       meta: Readonly<Record<string, string>>
     ) => {
-      if (value !== "") {
+      if (stored) {
         await server.request("POST", `secret/data/${pathOf(name)}`, {
-          data: { value },
+          data: { ...stored },
         });
       }
 
@@ -129,6 +137,41 @@ export function openVault(options: VaultOptions) {
     },
     revoke: async (accessor: string) => {
       await server.request("POST", "auth/token/revoke-accessor", { accessor });
+    },
+    /**
+     * A secret's stored fields, read with a read-only token minted for this one read and revoked after it: the host's
+     * own token cannot read a value. Only a sign-in reads one (secret-logins.ts).
+     */
+    read: async (name: string): Promise<Readonly<Record<string, string>>> => {
+      const what = `secret/data/${pathOf(name)}`;
+
+      const answer = await server.request(
+        "POST",
+        "auth/token/create/imp-egress",
+        {}
+      );
+
+      const { auth } = answered(
+        newToken,
+        answer ?? "",
+        "auth/token/create/imp-egress"
+      );
+
+      try {
+        await server.ready();
+        const read = await readWith(server.socket, auth.client_token, what);
+
+        return answered(fields, read ?? "", what).data.data;
+      } finally {
+        await server
+          .request("POST", "auth/token/revoke-accessor", {
+            accessor: auth.accessor,
+          })
+          .catch((cause: unknown) => {
+            // The token lapses within the hour anyway.
+            console.error(`vault: revoking a read token: ${String(cause)}`);
+          });
+      }
     },
     close: server.close,
   };

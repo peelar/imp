@@ -185,6 +185,7 @@ function localMachine(key: string, agentd: LocalAgentd): Machine {
     daemonCommand: async () => endpoints.daemonCommand,
     appSocket: async () => endpoints.appSocket,
     screen: async () => endpoints.screen,
+    chrome: async () => endpoints.chrome,
     egress: async () => ({ socket: endpoints.egress, env: agentd.egress }),
     expose: async (port) => ({
       url: `http://127.0.0.1:${port}`,

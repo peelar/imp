@@ -1,5 +1,5 @@
-// What Settings shows about the owner's secrets: each one's name, hosts and variables, the keys the imp asked for,
-// the latest uses, and the services to pick from. Never a value.
+// What Settings shows about the owner's secrets: each key's name, hosts and variables, each login's site and username,
+// what the imp asked for, the latest uses, and the services to pick from. Never a value.
 import type { Described } from "./secret-descriptions.ts";
 import type { KeyRequest, RecordedUse } from "./secret-records.ts";
 import { hostsOf, SERVICES, variables } from "./secret-services.ts";
@@ -8,11 +8,18 @@ const USES_SHOWN = 12;
 
 export type SecretView = {
   readonly name: string;
+  /** "key" or "login". */
+  readonly kind: string;
   readonly service: string;
   readonly label: string;
   readonly hosts: string;
   readonly env: string;
   readonly standIn: string;
+  /** A login's site and username ("" for a key). */
+  readonly site: string;
+  readonly username: string;
+  /** One line on what it is for: a key's hosts and variables, or a login's site and username. */
+  readonly detail: string;
   readonly updated: string;
   readonly lastUsed: string;
 };
@@ -27,7 +34,8 @@ export type SecretsState = {
     readonly id: string;
     readonly secret: string;
     readonly what: string;
-    readonly status: number;
+    /** "200", "typed" for a sign-in, or "failed". */
+    readonly result: string;
     readonly failed: boolean;
     readonly when: string;
   }[];
@@ -74,6 +82,37 @@ function ago(iso: string, now = Date.now()): string {
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
+function detail(secret: Described) {
+  if (secret.kind === "login") {
+    return `${secret.site} · ${secret.username}${secret.otp ? " · one-time codes" : ""}`;
+  }
+
+  return `${hostsOf(secret.rules)} · ${variables(secret.env)}`;
+}
+
+/** One recorded use, as a row: a request it went on, or a sign-in it typed. */
+function useRow(use: RecordedUse) {
+  const signIn = use.method === "sign in";
+  let result = String(use.status);
+
+  if (use.status === 0) {
+    result = "failed";
+  } else if (signIn) {
+    result = "typed";
+  }
+
+  return {
+    id: use.id,
+    secret: use.secret,
+    what: signIn
+      ? `sign in on ${use.host}`
+      : `${use.method} ${use.host}${use.path}`,
+    result,
+    failed: use.status === 0 || use.status >= 400,
+    when: ago(use.at),
+  };
+}
+
 function status({ vault, listed }: SecretsSnapshot) {
   if (vault.status === "failed") {
     return "failed";
@@ -97,6 +136,7 @@ export function secretsState(snapshot: SecretsSnapshot): SecretsState {
     error: vault.error,
     secrets: secrets.map((secret) => ({
       name: secret.name,
+      kind: secret.kind,
       service: secret.service,
       label:
         SERVICES.find((service) => service.id === secret.service)?.label ??
@@ -104,21 +144,14 @@ export function secretsState(snapshot: SecretsSnapshot): SecretsState {
       hosts: hostsOf(secret.rules),
       env: variables(secret.env),
       standIn: secret.standIn,
+      site: secret.site,
+      username: secret.username,
+      detail: detail(secret),
       updated: ago(secret.updated),
       lastUsed: lastUsed(secret.name),
     })),
     requests,
-    uses: uses
-      .slice(-USES_SHOWN)
-      .toReversed()
-      .map((use) => ({
-        id: use.id,
-        secret: use.secret,
-        what: `${use.method} ${use.host}${use.path}`,
-        status: use.status,
-        failed: use.status === 0 || use.status >= 400,
-        when: ago(use.at),
-      })),
+    uses: uses.slice(-USES_SHOWN).toReversed().map(useRow),
     services: SERVICES.map((service) => ({
       id: service.id,
       label: service.label,

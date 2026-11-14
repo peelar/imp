@@ -48,6 +48,7 @@ const mutations: Record<MutationSource, true> = {
   secretsPut: true,
   secretsDelete: true,
   secretsDismiss: true,
+  secretsPutLogin: true,
   computerUseCloud: true,
   computerUseOwn: true,
   computerRefresh: true,

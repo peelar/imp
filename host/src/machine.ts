@@ -10,7 +10,8 @@
 // 3. An `expose()` endpoint is unreachable without what only the host holds: its headers, or a tunnel it opened.
 // 4. Provider credentials stay on the host; nothing on the machine can call the provider's API.
 // 5. The owner's secrets stay on the host too: the machine's commands get stand-ins, and their HTTPS requests to a
-//    secret's hosts go through `egress()` to the host, which puts the secret on them (egress.ts).
+//    secret's hosts go through `egress()` to the host, which puts the secret on them (egress.ts). A login's password
+//    comes to the machine only typed into a page of the login's site, by the host through `chrome()` (chrome.ts).
 
 export type MachineProvider = {
   readonly name: string;
@@ -71,6 +72,11 @@ export type Machine = {
    * the machine needs in its environment for its HTTPS requests to go through it.
    */
   readonly egress: (signal?: AbortSignal) => Promise<MachineEgress>;
+  /**
+   * Chrome's DevTools protocol on the machine: a WebSocket to its browser target, and the headers it needs. It closes
+   * with a reason when Chrome is not open.
+   */
+  readonly chrome: (signal?: AbortSignal) => Promise<Endpoint>;
   /** An endpoint the host can reach that forwards to `port` on the machine, with the headers it needs. */
   readonly expose: (port: number, signal?: AbortSignal) => Promise<Endpoint>;
   /** The host is using the machine: postpone the idle suspend by another `idleSuspendMs`. */

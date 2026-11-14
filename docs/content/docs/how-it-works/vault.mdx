@@ -4,8 +4,9 @@ description: How the imp uses your API keys without ever holding them, with Open
 ---
 
 <Callout type="note" title="What ships today">
-  API keys added to the imp's HTTPS requests. Logins and handing a key to one
-  command are planned, and listed at the end.
+  API keys added to the imp's HTTPS requests, and website logins the host types
+  into the imp's browser. Handing a key to one command is planned, and listed at
+  the end.
 </Callout>
 
 The imp often needs your keys: a GitHub token to open a pull request, an API key to call a service. The vault lets it use them **without the key ever reaching its computer.**
@@ -93,6 +94,14 @@ A new key reaches the imp's next command.
 
 When the imp needs a key you have not added, it calls `request_secret` with the service and why. The request shows at the top of Settings → Secrets with **Add** and **Dismiss**. The imp never gets a field to paste a value into, so you never send a secret through the chat.
 
+## Logins
+
+Add a **Login** in Settings → Secrets: the site, your username and password, and optionally the key your one-time codes come from (the `otpauth://` link, or the key the site shows when you set up an authenticator app). Like a key, it is never shown again.
+
+To sign in, the imp opens the site's sign-in page with agent-browser and calls `sign_in`. The host reads the login from the vault with a read-only token made for that one read, works out the current one-time code (RFC 6238), and types them into the page over Chrome's DevTools protocol, through agentd. It types only into an `https` page on the login's site or one of its subdomains, and checks again before each field, so a page the imp was led to can't collect your password. The imp learns which page it ended on, never what was typed. Each sign-in shows in Recent use.
+
+Once typed, the password is in that page on the computer, where root could read it; the site's session then stays in the browser's profile.
+
 ## Limits
 
 - **Injection gives use, not reading.** Anything on the computer can still use a key against that key's own hosts. Keep rule hosts to API hosts, and watch Recent use.
@@ -101,5 +110,4 @@ When the imp needs a key you have not added, it calls `request_secret` with the 
 
 ## Planned
 
-- **Logins.** The host types a username, password and one-time code into the page Chrome has open, over the DevTools protocol, after checking that the page's origin matches the secret's site. The codes come from OpenBao's TOTP engine.
 - **Hand a key to one command**, for what a proxy can't inject: SSH keys, database passwords, request signing. Off by default, per secret, and it asks you each time unless you turn that off.
