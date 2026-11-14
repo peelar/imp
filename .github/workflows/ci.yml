@@ -31,3 +31,83 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npx turbo run build --filter=@imp/docs
+
+  studio:
+    # The parts that build the shell with Exact: the host's studio tests (skipped in the job above, which has no Exact)
+    # and the client's own tests in a browser. Exact is pinned to the commit the client was last built and tested with.
+    name: Studio and client tests (Exact)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      EXACT: ${{ github.workspace }}/exact
+      EXACT_REF: fe917faa7f5b1f4eb3178b8c4473b88bd6053f5e
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: imp
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: expo/exact
+          ref: ${{ env.EXACT_REF }}
+          path: exact
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Rust (Exact's rust-toolchain.toml)
+        working-directory: exact
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: exact
+          cache-on-failure: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+      - uses: browser-actions/setup-chrome@c785b87e244131f27c9f19c1a33e2ead956ab7ce # v1
+        id: chrome
+      # What Exact's own CI does before a web build: its packages, the Hermes bundle, and the web SDK.
+      - name: Exact
+        working-directory: exact
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          bun install --frozen-lockfile
+          cargo run --manifest-path vendor/ibex/crates/hermes-lean-sys-installer/Cargo.toml -- --target x86_64-unknown-linux-gnu
+          bun scripts/exact.mjs setup
+      # One install for the workspaces and the root's tooling.
+      - run: npm ci
+        working-directory: imp
+      - name: Host API tests, the studio's included
+        working-directory: imp
+        run: npm test
+      - name: Client tests
+        working-directory: imp/client
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: bun exact.mjs test web
+
+  e2b-smoke:
+    # The E2B adapter against a real sandbox, run by hand from the Actions tab: it needs an E2B_API_KEY secret, and
+    # each run builds or reuses the template and starts a sandbox.
+    name: E2B machine smoke test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: Smoke test
+        if: env.E2B_API_KEY != ''
+        working-directory: host
+        run: MACHINE=e2b node scripts/smoke-machine.ts
+      - name: No key
+        if: env.E2B_API_KEY == ''
+        run: echo "::warning::Add an E2B_API_KEY repository secret to run the E2B smoke test."
