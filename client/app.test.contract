@@ -256,3 +256,37 @@ test "the app directory installs an app from a GitHub link through the imp, and 
   tap "directory-open-todos"
   expect tree has "chat-panel"
   expect text "todo-1" == "Pack camera"
+
+test "a routine the imp saves is listed in the sidebar, runs now in its own conversation, pauses and is deleted"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  expect tree has "routines-empty"
+  type "composer" "Please save routine: Weather | 0 8 * * 1-5 | Check the weather"
+  tap "send"
+  clock until state routines.length == 1 within 10000
+  clock until state chat.busy == false within 10000
+  expect text "routine-name-0" == "Weather"
+  tap "routine-0"
+  clock until state chat.routine == "Weather" within 5000
+  expect tree has "routine-bar"
+  expect text "routine-instruction" == "Check the weather"
+  expect text "routine-last" == "Not run yet"
+  tap "routine-run"
+  clock until state chat.messages.1.text == "Hello from the test model." within 10000
+  expect state chat.messages.0.text == "Check the weather"
+  clock until state routines.0.running == false within 5000
+  expect tree missing "routine-unread-0"
+  tap "routine-pause"
+  clock until state routines.0.paused == true within 5000
+  expect text "routine-status" == "Paused"
+  tap "routine-pause"
+  clock until state routines.0.paused == false within 5000
+  tap "routine-delete"
+  tap "routine-delete-confirm"
+  clock until state routines.length == 0 within 5000
+  clock until state chat.routine == "" within 5000
+  expect tree missing "routine-bar"
+  expect tree has "routines-empty"

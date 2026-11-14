@@ -11,6 +11,7 @@ import { compile, obj, opt, str } from "@earendil-works/pi-schema";
  */
 const RESERVED = new Set([
   "chat",
+  "routines",
   "account",
   "shell",
   "apps",

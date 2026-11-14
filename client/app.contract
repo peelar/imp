@@ -47,6 +47,7 @@ shape Account
   secrets: Secrets
   backup: Backup
   tricks: Trick[]
+  routines: Routine[]
 
 // A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
 shape ChatMessage
@@ -65,11 +66,13 @@ shape ChatSummary
   title: string
 
 // The open conversation (`current`, with its rows in `messages`) and every one with something said in it, the most
-// recently written in first.
+// recently written in first. `routine` names the routine whose conversation is open ("" for a chat); the routines'
+// conversations are not in `conversations`.
 shape ChatState
   messages: ChatMessage[]
   busy: bool
   current: string
+  routine: string
   conversations: ChatSummary[]
 
 // An installed app. `cover` is its engraving in the client's assets ("" for none), `symbol` its fallback icon.
@@ -207,6 +210,23 @@ shape DirectoryApp
   repo: string
   symbol: string
 
+// What the imp does on a schedule, in a conversation of its own (`id` is that conversation's). `when` is the schedule
+// in words; `next` and `last` are times on the routine's own clock ("" for none). `unread` says a run ended since the
+// person last opened it, `running` that one runs now, and `asked` that the person asked for one, which waits until the
+// imp is free.
+shape Routine
+  id: string
+  name: string
+  when: string
+  instruction: string
+  next: string
+  last: string
+  failed: bool
+  paused: bool
+  unread: bool
+  running: bool
+  asked: bool
+
 shape Reply
   ok: bool
   error: string
@@ -287,6 +307,9 @@ fn directory(): DirectoryApp[] = [
     repo="https://github.com/kuba/imp-people", symbol="symbol:people"),
   DirectoryApp(id="journal", name="Journal", description="A line a day. Your imp can write it for you from your chats.",
     repo="https://github.com/imp-apps/journal", symbol="symbol:pencil")]
+fn routineStatus(r: Routine): string =
+  r.running ? "Running now" : r.asked ? "Starting soon" : r.paused ? "Paused" : r.next == "" ? "Not scheduled" : `Next ${r.next}`
+fn routineLast(r: Routine): string = r.last == "" ? "Not run yet" : r.failed ? `Last run failed ${r.last}` : `Last ran ${r.last}`
 fn computerStatus(status: string): string =
   status == "ready" ? "Ready" : status == "starting" ? "Starting…" : status == "failed" ? "Not reachable" : "Not chosen yet"
 
@@ -322,6 +345,10 @@ component App
   mutation sent as shape Reply then toEnd
   mutation stopped as shape Reply
   mutation chatChanged as shape Reply
+  mutation routineOpened as shape Reply
+  mutation routineRan as shape Reply
+  mutation routinePaused as shape Reply
+  mutation routineDeleted as shape Reply
   mutation appSaved as shape Reply
   mutation appDiscarded as shape Reply
   mutation appUndone as shape Reply
@@ -365,6 +392,7 @@ component App
   derive computer = account.computer
   derive memory = account.memory
   derive tricks = account.tricks
+  derive routines = account.routines
   derive secrets = account.secrets
   derive secretError = match secretSaved { case some(r) => r.error, case none => "" }
   derive loginError = match loginSaved { case some(r) => r.error, case none => "" }
@@ -448,6 +476,20 @@ component App
     nav = select(nav, "chat")
     if id != chat.current
       send chatChanged = chatShow(id)
+  // A routine's conversation, which shows what each run found and takes the person's reply.
+  action showRoutine(id: string)
+    pane = "chat"
+    drawer = false
+    nav = select(nav, "chat")
+    send routineOpened = routinesOpen(id)
+  action runRoutine(id: string)
+    send routineRan = routinesRun(id)
+  action pauseRoutine(id: string, paused: bool)
+    send routinePaused = routinesPause(id, paused)
+  action askDeleteRoutine
+    showModal("confirm-routine-delete")
+  action deleteRoutine
+    send routineDeleted = routinesDelete(chat.current)
   action openTricks
     pane = "tricks"
     drawer = false
@@ -564,13 +606,13 @@ component App
                     border-bottom=(wide ? "none" : "1px solid line.subtle") background-color="surface.page"
                     row width="100%" max-width="46rem" align-items="center" gap=12 padding=(wide ? "22px 0 0" : "12px 0 11px")
                       if e.name == "chat" and not wide
-                        button press=toggleDrawer aria-label="Conversations and tricks" aria-expanded=drawer
+                        button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
                           testId="drawer-toggle" appearance="none" width=32 height=32 padding=0 display="flex"
                           align-items="center" justify-content="center" border="1px solid line.strong"
                           background-color="transparent" color="ink.strong"
                           image "symbol:menu" width=16 height=16
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=(e.name == "chat" and pane != "chat" ? paneTitle(pane) : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
+                      Initialled(word=(e.name == "chat" and pane != "chat" ? paneTitle(pane) : e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
                       if e.name == "chat" and chat.busy
                         row gap=8 align-items="center" testId="busy"
@@ -592,7 +634,17 @@ component App
                     AppDirectory(entries=directory(), installed=apps.map(a => a.id), sending=pending(sent),
                       install=installApp, open=pick)
                   else if e.name == "chat"
-                    if chat.messages.length == 0 and not chat.busy
+                    for r in routines.filter(r => r.id == chat.current) key=r.id
+                      RoutineBar(routine=r, busy=(pending(routineRan) or pending(routinePaused) or pending(routineDeleted)),
+                        run=runRoutine, pause=pauseRoutine, remove=askDeleteRoutine)
+                    dialog id="confirm-routine-delete" role="alertdialog" aria-label="Delete this routine?"
+                      text "It stops running, and its conversation goes with it."
+                      button commandfor="confirm-routine-delete" command="close" testId="routine-delete-cancel"
+                        text "Cancel"
+                      button press=deleteRoutine commandfor="confirm-routine-delete" command="close" destructive=true
+                        testId="routine-delete-confirm"
+                        text "Delete"
+                    if chat.messages.length == 0 and not chat.busy and chat.routine == ""
                       // Home with nothing said yet: the day, a greeting, the workshop, and the apps.
                       scroll id="home-scroll" flex=1 min-height=0
                         column max-width="48.5rem" margin="0 auto" padding="28px 20px 28px" gap=28 box-sizing="border-box"
@@ -685,7 +737,7 @@ component App
                                   text s
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
-                    Composer(prefix="", placeholder="Ask your imp", compact=false, draft=draft, busy=chat.busy,
+                    Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=sendError, edit=edit, post=post, stop=stop)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
@@ -749,10 +801,10 @@ component App
         if sidebar
           aside position="absolute" top="3.25rem" left=0 bottom=0 width="16rem" box-sizing="border-box"
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
-            aria-label="Conversations and tricks"
+            aria-label="Conversations, routines and tricks"
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, pane=pane, tricks=tricks.length,
-              olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks, openDirectory=openDirectory,
-              toggleOlder=toggleOlder)
+              routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, openRoutine=showRoutine,
+              openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder)
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
         if docked
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
@@ -830,10 +882,10 @@ component App
           row position="absolute" inset=0 testId="drawer"
             aside width="17rem" max-width="85%" box-sizing="border-box" display="flex" flex-direction="column"
               padding-top="env(safe-area-inset-top)" background-color="surface.page" border-right="1px solid line.strong"
-              aria-label="Conversations and tricks"
+              aria-label="Conversations, routines and tricks"
               Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, pane=pane,
-                tricks=tricks.length, olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks,
-                openDirectory=openDirectory, toggleOlder=toggleOlder)
+                tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat,
+                openRoutine=showRoutine, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder)
             button press=toggleDrawer aria-label="Close" testId="drawer-close" appearance="none" flex=1 border="none"
               background-color="ink.strong" opacity=0.25
         // The masthead above everything on a wide window: the wordmark and the day.
@@ -1169,8 +1221,8 @@ component SecretSettings
                 color=(u.failed ? "-exact-system-red" : "ink.muted")
               text u.when font-size="0.75rem" color="ink.faint"
 
-// The left sidebar: a new chat, the imp's tricks, the app directory, the three latest conversations and, folded under
-// them, the rest.
+// The left sidebar: a new chat, the imp's tricks, the app directory, its routines, the three latest conversations and,
+// folded under them, the rest.
 component Sidebar
   props
     prefix: string
@@ -1178,9 +1230,11 @@ component Sidebar
     current: string
     pane: string
     tricks: number
+    routines: Routine[]
     olderOpen: bool
     newChat: action
     show: action
+    openRoutine: action
     openTricks: action
     openDirectory: action
     toggleOlder: action
@@ -1210,7 +1264,13 @@ component Sidebar
           text "App directory" font-size="0.9375rem" flex=1
       scroll flex=1 min-height=0
         column gap=2 padding="14px 10px 20px"
-          text "Recent" class=Label padding="0 10px 6px"
+          text "Routines" class=Label padding="0 10px 6px"
+          if routines.length == 0
+            text "None yet. Ask your imp to do something on a schedule." font-size="0.875rem" font-style="italic"
+              color="ink.muted" padding="4px 10px" testId=`${prefix}routines-empty`
+          for r, i in routines key=r.id
+            RoutineEntry(prefix=prefix, index=i, routine=r, selected=(pane == "chat" and r.id == current), open=openRoutine)
+          text "Recent" class=Label padding="16px 10px 6px"
           if conversations.length == 0
             text "Nothing said yet." font-size="0.875rem" font-style="italic" color="ink.muted" padding="4px 10px"
           for c, i in conversations.slice(0, 3) key=c.id
@@ -1243,6 +1303,71 @@ component ChatEntry
       :hover
         background-color="surface.soft"
       text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+// A routine in the sidebar: its name, its schedule, and a mark while it runs (cobalt) or has a run the person has not
+// read (ink).
+component RoutineEntry
+  props
+    prefix: string
+    index: number
+    routine: Routine
+    selected: bool
+    open: action
+  view
+    button press=open(routine.id) aria-pressed=selected testId=`${prefix}routine-${index}` appearance="none" display="flex"
+      align-items="center" gap=10 padding="8px 10px" border="none" text-align="start" color="ink.strong" min-width=0
+      background-color=(selected ? "surface.soft" : "transparent")
+      :hover
+        background-color="surface.soft"
+      image "symbol:repeat" width=15 height=15 aria-hidden=true
+      column flex=1 min-width=0 gap=1
+        text routine.name font-size="0.9375rem" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          testId=`${prefix}routine-name-${index}`
+        text (routine.paused ? "Paused" : routine.when) font-family="family.mono" font-size="0.6875rem"
+          color="ink.muted" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      if routine.running
+        row width=7 height=7 min-width=7 background-color="AccentColor" aria-label="Running"
+          testId=`${prefix}routine-running-${index}`
+      else if routine.unread
+        row width=7 height=7 min-width=7 background-color="ink.strong" aria-label="New run"
+          testId=`${prefix}routine-unread-${index}`
+
+// Above an open routine's conversation: when it runs, what it does, how its last run went, and the person's controls.
+component RoutineBar
+  props
+    routine: Routine
+    busy: bool
+    run: action
+    pause: action
+    remove: action
+  view
+    row justify-content="center" padding="0 20px" border-bottom="1px solid line.subtle" testId="routine-bar"
+      column width="100%" max-width="46rem" gap=8 padding="14px 0"
+        row align-items="baseline" gap=10 flex-wrap="wrap"
+          text "Routine" class=Label color="ink.strong"
+          text routine.when font-family="family.display" font-size="1.25rem" line-height=1.15 testId="routine-when"
+          row flex=1
+          text routineStatus(routine) class=Label testId="routine-status"
+        text routine.instruction font-size="0.9375rem" color="ink.muted" line-height=1.45 testId="routine-instruction"
+        row align-items="center" gap=8 flex-wrap="wrap"
+          text routineLast(routine) font-size="0.875rem" color=(routine.failed ? "-exact-system-red" : "ink.muted")
+            flex=1 min-width="10rem" testId="routine-last"
+          row gap=8
+            button press=run(routine.id) disabled=(busy or routine.running or routine.asked) testId="routine-run"
+              display="flex" align-items="center" gap=7 padding="7px 10px" border="1px solid ink.strong"
+              background-color="ink.strong" color="surface.page"
+              image "symbol:play" width=12 height=12 aria-hidden=true
+              text "Run now" class=Label color="inherit"
+            button press=pause(routine.id, not routine.paused) disabled=busy testId="routine-pause" padding="7px 10px"
+              border="1px solid line.strong" background-color="transparent" color="ink.strong"
+              :hover
+                background-color="surface.soft"
+              text (routine.paused ? "Resume" : "Pause") class=Label color="inherit"
+            button press=remove disabled=busy testId="routine-delete" padding="7px 10px" border="1px solid line.strong"
+              background-color="transparent" color="-exact-system-red"
+              :hover
+                background-color="danger.soft"
+              text "Delete" class=Label color="inherit"
 
 // The imp's tricks: what each does, on which site, and what it asks for. One asked for starts a message.
 component TrickList

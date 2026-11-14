@@ -27,6 +27,7 @@ import {
   SELF,
   USER,
 } from "./memory-facts.ts";
+import { isRoutineRun } from "./chat.ts";
 import { messageText } from "./message-text.ts";
 
 /** Reflection reads at most this much of one run, newest last. */
@@ -140,7 +141,8 @@ function spoken(entry: EntryRecord): string[] {
   if (entry.kind === "pi.user" && message?.role === "user") {
     const said = messageText(message.content);
 
-    return said ? [`Person: ${said}`] : [];
+    // A routine's run: the host wrote it, not the person.
+    return said && !isRoutineRun(said) ? [`Person: ${said}`] : [];
   }
 
   if (entry.kind === "pi.assistant" && message?.role === "assistant") {
@@ -174,6 +176,11 @@ async function exchange(
     lines.push(...page.items.flatMap(spoken));
     cursor = page.next;
   } while (cursor !== undefined);
+
+  // A run the person said nothing in, such as a routine's, teaches nothing about them.
+  if (!lines.some((line) => line.startsWith("Person: "))) {
+    return "";
+  }
 
   const all = lines.join("\n\n");
 

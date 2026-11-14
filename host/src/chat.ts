@@ -74,6 +74,21 @@ const CONTEXT = /^\[Sent from the chat beside the [^\]\n]+ app\.\]\n\n/;
 export const withAppContext = (text: string, app: AppLabel | undefined) =>
   app ? `[Sent from the chat beside the ${app.name} app.]\n\n${text}` : text;
 
+// A routine's run starts with a line naming the routine and saying the person is away. The transcript shows only the
+// routine's instruction, and memory's reflection skips the run, since the person said nothing in it.
+const ROUTINE = /^\[Routine: [^\]\n]*\]\n\n/;
+
+/** The message that starts a run of a routine. */
+export const routineRun = (name: string, instruction: string) =>
+  `[Routine: ${name.replaceAll(/[\]\n]/g, " ")}. It runs on its schedule while the person is away: do it, then answer with what they should know in a few lines, or say there is nothing new. If it needs them (a key, a choice, anything destructive or irreversible), stop and say what you need.]\n\n${instruction}`;
+
+/** Whether the person's side of a message is a routine's run, which they did not write. */
+export const isRoutineRun = (text: string) => ROUTINE.test(text);
+
+/** What the person reads of a message: without the lines the host added to it. */
+const personText = (text: string) =>
+  text.replace(CONTEXT, "").replace(ROUTINE, "");
+
 /** An app's action: "Todos · Add" and its first text argument, such as the todo's title. */
 function describeAction(args: ToolArgs, apps: readonly AppLabel[]) {
   const app = apps.find((a) => a.id === args.app);
@@ -100,6 +115,8 @@ const KNOWN = new Map<string, readonly [string, string, string]>([
   ["find_app_actions", ["Looked up app actions", "symbol:search", "query"]],
   ["request_secret", ["Asked for a secret", "symbol:lock", "service"]],
   ["sign_in", ["Signed in", "symbol:lock", "secret"]],
+  ["save_routine", ["Saved a routine", "symbol:repeat", "name"]],
+  ["delete_routine", ["Deleted a routine", "symbol:repeat", "name"]],
 ]);
 
 export type ToolUse = {
@@ -220,7 +237,7 @@ function transcript(
     const id = String(entry.id);
 
     if (entry.kind === "pi.user" && message?.role === "user") {
-      const text = messageText(message.content).replace(CONTEXT, "");
+      const text = personText(messageText(message.content));
 
       return [row(id, "user", { text })];
     }
@@ -316,8 +333,22 @@ export async function firstWords(conversation: Conversation, context: Context) {
   const [message] = first?.model ?? [];
 
   return message?.role === "user"
-    ? titleOf(messageText(message.content).replace(CONTEXT, ""))
+    ? titleOf(personText(messageText(message.content)))
     : "";
+}
+
+/** Whether a conversation's last run ended with the model failing. */
+export async function lastFailed(conversation: Conversation, context: Context) {
+  const page = await conversation.entries(
+    { order: "descending" },
+    1,
+    undefined,
+    context
+  );
+
+  const [message] = page.items[0]?.model ?? [];
+
+  return message?.role === "assistant" && Boolean(message.errorMessage);
 }
 
 /** A conversation's name in the sidebar: its first message, on one line. */

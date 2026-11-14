@@ -22,6 +22,8 @@ import { TOPIC as CHAT } from "./chat.ts";
 import { openChats } from "./chats.ts";
 import { type Computer, openComputer } from "./computer.ts";
 import { serveHttp } from "./http.ts";
+import { openRoutines } from "./routines.ts";
+import { routinesExtension } from "./routine-tools.ts";
 import { openTricks } from "./tricks.ts";
 import { Topics } from "./live.ts";
 import type { Machine, MachineProvider } from "./machine.ts";
@@ -34,7 +36,7 @@ import { graphMemory } from "./memory-graph.ts";
 import { screenSockets } from "./screen.ts";
 import { openSecrets, type Secrets } from "./secrets.ts";
 import { shellApi } from "./shell-api.ts";
-import { chatgptAccount } from "./signin.ts";
+import { type ChatGPTAccount, chatgptAccount } from "./signin.ts";
 import { storedApps, studio } from "./studio.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -197,10 +199,16 @@ function openKeeping(
 type Followers = {
   readonly gateway: AppGateway;
   readonly secrets: Secrets;
+  readonly account: ChatGPTAccount;
 };
 
-/** The agent, its conversations and its tricks, which follow the computer when the owner switches it. */
-async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
+/**
+ * The agent, its conversations, its routines and its tricks, which follow the computer when the owner switches it.
+ */
+async function openAgent(
+  parts: Parts,
+  { gateway, secrets, account }: Followers
+) {
   const { options, topics, computer, registry } = parts;
 
   const harness = await Harness.open(
@@ -229,6 +237,16 @@ async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
     agent,
   });
 
+  // What the imp does on a schedule, in conversations of their own, once it is signed in.
+  const routines = openRoutines({
+    dataDir: options.dataDir,
+    topics,
+    chats,
+    ready: async () => await account.usable(),
+  });
+
+  registry.install(routinesExtension(routines));
+
   // The agent's files only: listing the tricks needs none of the owner's secrets.
   const tricks = openTricks({
     env: async () => new RemoteExecutionEnv(place(computer)),
@@ -252,6 +270,7 @@ async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
   });
 
   harness.resume();
+  routines.start();
 
   // While the agent works, its tools use the machine. Once a turn ends, the imp may have learned a trick.
   let working = false;
@@ -272,7 +291,7 @@ async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
     followTurn().catch(report("chat"));
   });
 
-  return { harness, chats, tricks };
+  return { harness, chats, routines, tricks };
 }
 
 export async function startHost(options: HostOptions) {
@@ -333,9 +352,10 @@ export async function startHost(options: HostOptions) {
   const apps = openStudio(parts, gateway, stored.drafts);
   const account = chatgptAccount(options.models, topics);
 
-  const { harness, chats, tricks } = await openAgent(parts, {
+  const { harness, chats, routines, tricks } = await openAgent(parts, {
     gateway,
     secrets,
+    account,
   });
 
   // Load every app now. A machine that is down is retried by the first call that needs it.
@@ -354,6 +374,7 @@ export async function startHost(options: HostOptions) {
     api: shellApi({
       account,
       chats,
+      routines,
       tricks,
       computer,
       memory,
@@ -387,6 +408,7 @@ export async function startHost(options: HostOptions) {
       computer.close();
       secrets.close();
       backup.close();
+      routines.close();
       await chats.close();
       await harness.close(context);
     },

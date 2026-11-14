@@ -33,6 +33,9 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   in an editor. The imp writes to it with tools while it works, and after every answer a background task asks the
   model what the exchange taught it, so it remembers without being told to. Another memory system implements
   `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()` as `memory`.
+- **Routines.** Ask the imp to do something on a schedule ("every weekday at 8, check my pull requests") and it keeps
+  a routine: cron on your time zone, run by the host once the agent is idle, in a conversation of its own that the
+  sidebar lists and you can reply in (`host/src/routines.ts`). Runs teach the memory nothing, since you said nothing.
 - **Secrets.** API keys you add in Settings (GitHub, OpenAI, Anthropic, Linear, or any HTTPS API) work on the imp's
   computer without the imp or its computer holding them. They live in an [OpenBao](https://openbao.org) the host runs
   in its data directory (`host/src/vault.ts`); the computer gets a stand-in such as `GITHUB_TOKEN=imp-secret-github`,

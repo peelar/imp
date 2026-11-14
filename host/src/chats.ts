@@ -1,7 +1,9 @@
 // The person's conversations with the imp. The host keeps their list, the one open in the shell, and each one's title
 // (its first message) in `conversations.json` in its data directory; a host from before there were several adopts its
-// one conversation, the harness's root. A new chat stays out of the sidebar until something is said in it. chat.ts
-// draws one conversation; this module decides which.
+// one conversation, the harness's root. A new chat stays out of the sidebar until something is said in it. Each
+// routine's conversation is kept here too, named by the routine, so it can be shown, written in and counted as busy
+// like any other, but the sidebar lists it under Routines (routines.ts), not under Recent. chat.ts draws one
+// conversation; this module decides which.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Context } from "@earendil-works/chord/context";
@@ -11,10 +13,20 @@ import type {
   ConversationWatch,
   Harness,
 } from "@earendil-works/pi-durable";
-import { arr, compile, int, num, obj, str } from "@earendil-works/pi-schema";
+import {
+  arr,
+  bool,
+  compile,
+  int,
+  num,
+  obj,
+  opt,
+  str,
+} from "@earendil-works/pi-schema";
 import {
   type AppLabel,
   conversationState,
+  lastFailed,
   firstWords,
   liveState,
   TOPIC,
@@ -25,8 +37,13 @@ import type { Topics } from "./live.ts";
 
 type Id = Conversation["id"];
 
-/** A conversation in the sidebar: what it is about and when it was last written in. */
-type Stored = { readonly id: Id; title: string; updated: number };
+/** A conversation in the sidebar: what it is about, when it was last written in, and whether a routine runs in it. */
+type Stored = {
+  readonly id: Id;
+  title: string;
+  updated: number;
+  routine?: boolean;
+};
 
 type Index = { current: Id; list: Stored[] };
 
@@ -36,7 +53,10 @@ const stored = compile(
     {
       current: int(),
       list: arr(
-        obj({ id: int(), title: str(), updated: num() }, { open: true })
+        obj(
+          { id: int(), title: str(), updated: num(), routine: opt(bool()) },
+          { open: true }
+        )
       ),
     },
     { open: true }
@@ -141,6 +161,104 @@ function watched(options: ChatsOptions) {
   };
 }
 
+type Shared = {
+  readonly options: ChatsOptions;
+  readonly index: Index;
+  readonly save: () => void;
+  readonly conversation: (id: Id) => Promise<Conversation>;
+};
+
+/** The conversations routines run in (routines.ts): made, renamed and dropped with their routine, and run in. */
+function routineConversations({ options, index, save, conversation }: Shared) {
+  const { harness, topics, context, agent } = options;
+
+  /** A routine's conversation, by the id the routine keeps. */
+  const routineOf = (id: string) =>
+    index.list.find((c) => String(c.id) === id && c.routine);
+
+  return {
+    /** A conversation for a routine, named by it, which the sidebar lists with the routines; answers its id. */
+    async addRoutine(name: string) {
+      const made = await harness.createConversation(
+        { ownership: { kind: "ownerless" }, agent: agent() },
+        context
+      );
+
+      index.list.push({
+        id: made.id,
+        title: name,
+        updated: Date.now(),
+        routine: true,
+      });
+      save();
+      await conversation(made.id);
+
+      return String(made.id);
+    },
+    /** A routine was renamed. */
+    renameRoutine(id: string, name: string) {
+      const kept = routineOf(id);
+
+      if (kept) {
+        kept.title = name;
+        save();
+        topics.changed(TOPIC);
+      }
+    },
+    /** A routine was deleted: its conversation leaves the list, and the open chat moves to the latest one if it was. */
+    dropRoutine(id: string) {
+      index.list = index.list.filter((c) => String(c.id) !== id || !c.routine);
+
+      if (!index.list.some((c) => c.id === index.current)) {
+        const [latest] = index.list
+          .filter((c) => !c.routine)
+          .toSorted((a, b) => b.updated - a.updated);
+
+        if (latest) {
+          index.current = latest.id;
+        }
+      }
+
+      save();
+      topics.changed(TOPIC);
+    },
+    /** Starts a routine's run in its conversation; resolves once the run is over. */
+    async runRoutine(id: string, text: string) {
+      const kept = routineOf(id);
+
+      if (!kept) {
+        throw new Error("That routine's conversation is gone.");
+      }
+
+      const home = await conversation(kept.id);
+
+      kept.updated = Date.now();
+      save();
+      await home.submit(
+        { type: "input", content: text, whenBusy: "followUp" },
+        context
+      );
+      await home.waitForIdle(context);
+    },
+    /** Waits for a run in a routine's conversation that started before the host did. */
+    async settled(id: string) {
+      const kept = routineOf(id);
+
+      if (kept) {
+        await (await conversation(kept.id)).waitForIdle(context);
+      }
+    },
+    /** Whether the last run in a conversation ended with the model failing. */
+    async failed(id: string) {
+      const kept = index.list.find((c) => String(c.id) === id);
+
+      return kept
+        ? await lastFailed(await conversation(kept.id), context)
+        : false;
+    },
+  };
+}
+
 export async function openChats(options: ChatsOptions) {
   const { harness, topics, context, agent } = options;
   const file = path.join(options.dataDir, "conversations.json");
@@ -181,13 +299,23 @@ export async function openChats(options: ChatsOptions) {
         context,
       });
 
+      const open = index.list.find((c) => c.id === index.current);
+
       const conversations = index.list
-        .filter((c) => c.title !== "")
+        .filter((c) => c.title !== "" && !c.routine)
         .toSorted((a, b) => b.updated - a.updated)
         .map(({ id, title }) => ({ id: String(id), title }));
 
-      return { ...shown, current: String(index.current), conversations };
+      return {
+        ...shown,
+        current: String(index.current),
+        // The routine whose conversation is open, by name; "" for a chat.
+        routine: open?.routine ? open.title : "",
+        conversations,
+      };
     },
+    /** The open conversation's id. */
+    current: () => String(index.current),
     /** Whether the imp is at work in any conversation. */
     busy: conversations.busy,
     /** The person writes in the open conversation; its first message names it in the sidebar. */
@@ -241,6 +369,7 @@ export async function openChats(options: ChatsOptions) {
       await conversation(blank.id);
       showing(blank.id);
     },
+    ...routineConversations({ options, index, save, conversation }),
     /** The model or machine changed: every conversation in use runs with it from its next start. */
     configure: conversations.configure,
     close: conversations.close,

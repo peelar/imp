@@ -1,6 +1,6 @@
 // What the shell reads and changes, by name. Each read is a live source (live.ts) and each change answers a Reply,
-// `{ ok, error }`. The shell's own names start with one of a few words (account, chat, apps, build, version,
-// computer, memory, secrets, backup), which no app may take as its id (app-folders.ts); every other name goes to the
+// `{ ok, error }`. The shell's own names start with one of a few words (account, chat, routines, apps, build,
+// version, computer, memory, secrets, backup), which no app may take as its id (app-folders.ts); every other name goes to the
 // app that owns it, such as `todosSetDone` to the todos app's `setDone`.
 import type { Json } from "../../sdk/app.ts";
 import type { AppGateway } from "./apps.ts";
@@ -12,6 +12,7 @@ import { type AppBackup, TOPIC as BACKUP } from "./backup.ts";
 import { TOPIC as MEMORY, type MemoryProvider } from "./memory.ts";
 import { TOPIC as SECRETS, type Secrets } from "./secrets.ts";
 import { TOPIC as ACCOUNT, type ChatGPTAccount } from "./signin.ts";
+import { TOPIC as ROUTINES, type Routines } from "./routines.ts";
 import { TOPIC as TRICKS, type Tricks } from "./tricks.ts";
 import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio.ts";
 import { appTopic } from "./app-folders.ts";
@@ -20,6 +21,8 @@ export type ShellApiOptions = {
   readonly account: ChatGPTAccount;
   /** The person's conversations: the open one, which their messages go to, and the rest. */
   readonly chats: Chats;
+  /** What the imp does on a schedule. */
+  readonly routines: Routines;
   /** What the imp learned to do in the browser. */
   readonly tricks: Tricks;
   readonly computer: Computer;
@@ -66,6 +69,7 @@ export function shellApi(options: ShellApiOptions) {
   const calls = new Map<string, Call>([
     ...accountCalls(options),
     ...chatCalls(options),
+    ...routineCalls(options),
     ...studioCalls(options),
     ...computerCalls(options),
     ...memoryCalls(options),
@@ -123,6 +127,7 @@ function shellSources(options: ShellApiOptions) {
     chats,
     computer,
     memory,
+    routines,
     secrets,
     studio,
     tricks,
@@ -140,13 +145,14 @@ function shellSources(options: ShellApiOptions) {
     secrets: secrets.state(),
     backup: backup.state(),
     tricks: tricks.list(),
+    routines: routines.state(),
   });
 
   return new Map<string, LiveSource>([
     [
       "account",
       {
-        topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS, BACKUP, TRICKS],
+        topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS, BACKUP, TRICKS, ROUTINES],
         load: whole,
       },
     ],
@@ -247,6 +253,51 @@ function chatCalls(options: ShellApiOptions): Calls {
           return refused(why(error));
         }
       },
+    ],
+  ];
+}
+
+/** The person's routines, from the sidebar: open one's conversation, run it now, pause or resume it, delete it. */
+function routineCalls({ routines }: ShellApiOptions): Calls {
+  const onRoutine =
+    (
+      change: (id: string, args: readonly Json[]) => Promise<void> | void
+    ): Call =>
+    async (args) => {
+      try {
+        await change(text(args, 0), args);
+
+        return ok;
+      } catch (error) {
+        return refused(why(error));
+      }
+    };
+
+  return [
+    [
+      "routinesOpen",
+      onRoutine(async (id) => {
+        await routines.open(id);
+      }),
+    ],
+    [
+      "routinesRun",
+      onRoutine((id) => {
+        routines.runNow(id);
+      }),
+    ],
+    // The second argument is whether to pause (true) or resume (false).
+    [
+      "routinesPause",
+      onRoutine((id, args) => {
+        routines.pause(id, args[1] === true);
+      }),
+    ],
+    [
+      "routinesDelete",
+      onRoutine((id) => {
+        routines.delete(id);
+      }),
     ],
   ];
 }
