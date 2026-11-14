@@ -19,9 +19,15 @@ case "$(uname -m)" in
 	*) echo "Imp machines need an x86_64 or arm64 CPU, not $(uname -m)" >&2; exit 1 ;;
 esac
 
-if [ "$(/usr/local/bin/node --version 2>/dev/null || true)" != "v$NODE_VERSION" ]; then
+# Node's own npm and corepack are removed first: unpacked over another version's, their files mix and npm fails. The
+# marker says this machine's npm came whole from this Node; a machine set up before it gets Node unpacked again.
+NODE_MARKER=/usr/local/lib/node_modules/npm/.imp-node
+if [ "$(/usr/local/bin/node --version 2>/dev/null || true)" != "v$NODE_VERSION" ] ||
+	[ "$(cat "$NODE_MARKER" 2>/dev/null || true)" != "$NODE_VERSION" ]; then
+	rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
 	curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$arch.tar.xz" |
 		tar -xJ -C /usr/local --strip-components=1 --exclude CHANGELOG.md --exclude README.md --exclude LICENSE
+	echo "$NODE_VERSION" > "$NODE_MARKER"
 fi
 
 # The computer's screen: a virtual display with a light desktop. The agent's programs open their windows there, and
