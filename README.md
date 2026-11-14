@@ -24,6 +24,8 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   name the app's operations) and its server code (`server.ts`, which declares those operations and runs in a worker
   on the agent's computer). The agent finds and runs any app's operations through two tools.
 - **`sdk/`** is the typed surface an app's server code is written against.
+- **`docs/`** is the website: a landing page and the docs for people who host their own Imp, built with
+  [Blume](https://useblume.dev). `npm run dev -w @imp/docs` serves it.
 - **Memory.** The imp remembers what it learns about you, and about itself (a name you give it, how it should
   speak), across conversations, and Settings lists all of it with a way to forget each fact. The default is the Model
   Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory)
@@ -40,8 +42,8 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   (`host/src/tools.ts`). Settings lists each key's latest uses, and OpenBao's audit log (`vault/audit.log`) records
   every read. When the imp needs a key it does not have, it asks for it in Settings, never in the chat.
 
-The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces: `host/` and `client/` are its
-packages, and one `npm ci` at the root installs them all with the lint and type tooling. `npm run build`,
+The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces: `host/`, `client/` and `docs/` are
+its packages, and one `npm ci` at the root installs them all with the lint and type tooling. `npm run build`,
 `npm run dev` and `npm test` run each package's script of that name through turbo.
 
 ## Apps the imp builds
@@ -113,10 +115,11 @@ fixes the agent's computer to a directory on this one, with no isolation; `host/
 ```sh
 npm run check   # oxlint (Ultracite's core and anti-slop rules, type-aware), the lint policy probes, oxfmt, tsc
 npm test        # the host's HTTP API against a host with a fake model and a local machine
+npx turbo run build --filter=@imp/docs   # the docs site
 cd client && bun exact.mjs test web   # the client against the same host
 ```
 
-`.github/workflows/ci.yml` runs the first two on every push and pull request. `AGENTS.md` says what the rules ask of
+`.github/workflows/ci.yml` runs the first three on every push and pull request. `AGENTS.md` says what the rules ask of
 new code.
 
 ## Credits

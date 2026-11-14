@@ -1,0 +1,30 @@
+---
+title: Run from a checkout
+description: Run the host and build the client from the repository, for development.
+---
+
+You need Node 24+, Bun, a checkout of [Exact](https://github.com/expo/exact) next to this repository (or set `EXACT` to its path), and the Rust toolchains its web build pins. `bun exact.mjs setup --check` in `client/` names what is missing. The host needs all of this because it rebuilds the web client whenever the imp previews an app.
+
+The repository is an npm workspace monorepo: `host/`, `client/` and `docs/` are its packages, and one `npm ci` at the root installs them all, with the lint and type tooling.
+
+```sh
+npm ci
+cd client && API_BASE_URL= bun exact.mjs web-build --out dist
+cd ../host && node src/server.ts   # http://localhost:8787
+```
+
+Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local` instead fixes the agent's computer to a directory on this one, with no isolation.
+
+## Checks
+
+| Command | Where | What it checks |
+| --- | --- | --- |
+| `npm run check` | root | Lint, the lint policy, formatting and types. CI runs it. |
+| `npm test` | root | The host's HTTP API tests, each against its own host with a scripted model. CI runs it. |
+| `npx turbo run build --filter=@imp/docs` | root | This documentation site. CI runs it. |
+| `bun exact.mjs test web` | `client/` | The client against a host with a fake model. |
+| `node scripts/smoke-machine.ts` | `host/` | One machine adapter on its own. |
+
+`npm run dev -w @imp/docs` serves these docs with hot reload.
+
+After you change an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.

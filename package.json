@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "host",
-    "client"
+    "client",
+    "docs"
   ],
   "type": "module",
   "scripts": {
@@ -11,11 +12,11 @@
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "npm run lint:code && npm run lint:policy && npm run format:check",
-    "lint:code": "oxlint --type-aware --deny-warnings --report-unused-disable-directives-severity error host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts",
+    "lint:code": "oxlint --type-aware --deny-warnings --report-unused-disable-directives-severity error host/src host/scripts host/test host/machine sdk client/apps scripts docs/blume.config.ts docs/content oxlint.config.ts oxfmt.config.ts",
     "lint:policy": "node scripts/lint-policy.ts",
     "lint:fix": "npm run lint:code -- --fix; npm run format",
-    "format": "oxfmt -c oxfmt.config.ts --write host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
-    "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
+    "format": "oxfmt -c oxfmt.config.ts --write host/src host/scripts host/test host/machine sdk client/apps scripts docs/blume.config.ts docs/content oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json docs/package.json",
+    "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts docs/blume.config.ts docs/content oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json docs/package.json",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck",
     "changeset": "changeset",

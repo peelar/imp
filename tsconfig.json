@@ -23,6 +23,8 @@
     "sdk",
     "client/apps/*/server.ts",
     "scripts/*.ts",
-    "*.config.ts"
+    "*.config.ts",
+    "docs/blume.config.ts",
+    "docs/content/**/meta.ts"
   ]
 }

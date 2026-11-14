@@ -1,13 +1,14 @@
 # Imp
 
-The repository is a Turborepo monorepo on npm workspaces (`turbo.json`, the root `package.json`): `host/` and `client/` are its packages. `host/` is the host: Node runs its TypeScript directly, so there is no build step and only erasable syntax (no enums, namespaces or parameter properties). `sdk/app.ts` is the contract an app's `server.ts` is written against. `client/` is the Exact shell and has its own `AGENTS.md`; `client/apps/<id>/` holds one app per folder.
+The repository is a Turborepo monorepo on npm workspaces (`turbo.json`, the root `package.json`): `host/`, `client/` and `docs/` are its packages. `host/` is the host: Node runs its TypeScript directly, so there is no build step and only erasable syntax (no enums, namespaces or parameter properties). `sdk/app.ts` is the contract an app's `server.ts` is written against. `client/` is the Exact shell and has its own `AGENTS.md`; `client/apps/<id>/` holds one app per folder. `docs/` is the website and the self-hosting docs, a [Blume](https://useblume.dev) site: Markdown in `docs/content`, the landing page in `docs/pages/index.astro`.
 
 ## Checks
 
 - Install once: `npm ci` at the root installs every workspace's dependencies and the lint, format and type tooling into one `node_modules`. Add a dependency to the package that uses it (`npm install <name> -w @imp/host`), never to the root unless it is tooling.
-- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (`turbo run test`: the host's API tests, about a minute) at the root. CI runs the same two.
+- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (`turbo run test`: the host's API tests, about a minute) at the root. CI runs the same two, then builds the docs (`npx turbo run build --filter=@imp/docs`).
 - `npm run lint:fix` formats and applies the automatic fixes. Run it before fixing diagnostics by hand; some fixes only apply on a second run.
 - After a change to the client, or to what the host sends it, also run `cd client && bun exact.mjs test web` (needs Bun and Exact; see `client/AGENTS.md`).
+- After a change to the host's behavior, settings or files, update the page in `docs/content` that describes it. Write callouts as `<Callout>` components, not `:::` directives, which oxfmt folds onto one line.
 - A new behavior of the host's HTTP API gets a test in `host/test/`, in the file for its part of the API (`api.test.ts`, `secrets.test.ts`, `backup.test.ts`). Each file starts its own host with a scripted model (`host/test/harness.ts`, `host/scripts/test-host.ts`). The host's `test` script runs the files one at a time, because the hosts share one folder of downloaded programs (OpenBao, mitmproxy).
 
 ## Lint policy

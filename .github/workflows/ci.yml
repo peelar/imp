@@ -1,4 +1,4 @@
-# Every push to main and every pull request: the lint policy, formatting, types, and the host's API tests.
+# Every push to main and every pull request: the lint policy, formatting, types, the host's API tests, and the docs build.
 name: CI
 
 on:
@@ -26,7 +26,8 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: package-lock.json
-      # One install for the workspaces (host, client) and the root's lint and type tooling.
+      # One install for the workspaces (host, client, docs) and the root's lint and type tooling.
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: npx turbo run build --filter=@imp/docs

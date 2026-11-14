@@ -1,0 +1,44 @@
+---
+title: Memory
+description: What the imp remembers about you and itself, where it keeps it, and how to plug in another memory system.
+---
+
+The imp remembers what it learns about you, and about itself (a name you give it, how it should speak), across conversations. **Settings** lists all of it, with a way to forget each fact.
+
+## The default: a knowledge graph
+
+The default memory is the Model Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory), used as a library (`host/src/memory-graph.ts`). What the imp knows is a graph of **entities** (a person, a project, a place), the **facts** it observed about each, and **relations** between them.
+
+It lives in one file, `DATA_DIR/memory.jsonl`, one JSON object per line, which you can open in any editor. Two entities are the imp's own: `user`, the person it works for, and `imp`, itself.
+
+The imp writes to it two ways:
+
+1. **With tools, while it works:** `remember`, `relate`, `recall` and `forget`.
+2. **By reflecting, after every answer:** a background task reads the run and asks the model what is worth keeping. So it remembers without being told to, and without depending on the agent to call a tool.
+
+Every conversation starts with a prompt section that holds what it already knows about you and itself, and names a handful of other entities. It recalls the rest when it needs them.
+
+## The contract
+
+A memory system implements `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()` as `memory`. Mem0, Letta, Graphiti or a folder of Markdown notes would each fit. Nothing else in the host knows which one runs.
+
+```ts
+interface MemoryProvider {
+  readonly name: string; // what Settings calls it, such as "Knowledge graph"
+  readonly location: string; // where it keeps what it knows, in words for the person
+  readonly extension: Extension; // the agent's tools, prompt section and hooks
+  inspect(): Promise<MemoryEntry[]>; // everything remembered, as the person reads it
+  forget(entry: string, fact?: string): Promise<void>;
+}
+
+type MemorySystem = (options: {
+  dataDir: string;
+  changed: () => void;
+}) => MemoryProvider;
+```
+
+Every memory system guarantees three things:
+
+1. What it keeps stays with the host, in `dataDir` or a service only the host reaches, **never on the agent's computer**.
+2. `changed()` is called after every write, by the agent or by the person, so open views refresh.
+3. Everything it keeps is listed by `inspect()` and can be removed with `forget()`. You see what your imp knows, and you have the last word on it.

@@ -1,0 +1,105 @@
+---
+title: The secrets vault
+description: How the imp uses your API keys without ever holding them, with OpenBao on the host and an egress proxy that adds keys to requests as they leave the computer.
+---
+
+<Callout type="note" title="What ships today">
+  API keys added to the imp's HTTPS requests. Logins and handing a key to one
+  command are planned, and listed at the end.
+</Callout>
+
+The imp often needs your keys: a GitHub token to open a pull request, an API key to call a service. The vault lets it use them **without the key ever reaching its computer.**
+
+## Why the host is the vault
+
+The agent has root on its computer. The setup gives the `imp` user passwordless sudo, and E2B runs the setup as root. So a value written anywhere on the computer, even in a root-only file or a helper process's memory, can be read by the agent, and by anything that tricks the agent through a prompt injection.
+
+Scoping can't be enforced on the computer, so the boundary is the one the [machine contract](/docs/how-it-works/machines) already draws: provider credentials stay on the host. Your secrets get the same rule. **The computer only ever gets a stand-in.**
+
+## What the imp sees
+
+For each secret, the imp's commands get a stand-in in the variables that service's tools read:
+
+```sh
+$ echo $GITHUB_TOKEN
+imp-secret-github
+```
+
+The imp uses it like the real token (`gh pr create`, `curl -H "Authorization: Bearer $GITHUB_TOKEN" …`). The stand-in is worthless anywhere else, so if it leaks into a log or a page, nothing is lost. The imp's prompt lists each secret's name, variables and hosts, and tells it never to ask you for a value in the chat.
+
+## How a key reaches the request
+
+```txt
+ agent's computer                              host
+ ────────────────                              ────
+ curl / gh / node
+   │ HTTPS_PROXY=127.0.0.1:7071
+   ▼
+ agentd CONNECT proxy ──(host on a rule?)──no──▶ straight out to the internet
+   │ yes
+   ▼
+ /egress WebSocket (opened by the host) ─────▶ mitmdump + inject.py
+                                                 │ ends TLS with Imp's CA
+                                                 │ reads the value from OpenBao
+                                                 │ swaps the stand-in, sets the header
+                                                 │ scrubs the value from the response
+                                                 ▼
+                                               api.github.com
+```
+
+1. agentd runs an HTTPS (CONNECT) proxy on the computer's loopback, `127.0.0.1:7071`. Every command the agent runs gets `HTTPS_PROXY`, the stand-ins, and the variables that make common tools trust Imp's CA (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`).
+2. A request to a host that has a secret goes to the Imp host through the `/egress` WebSocket, which the host opened. The computer can't reach the host (it listens on localhost behind Tailscale), but the host can reach agentd on every kind of computer, the same way it reaches `/apps`. Every other host connects directly.
+3. On the host, [mitmproxy](https://mitmproxy.org) (`mitmdump` with a small addon, `host/egress/inject.py`) ends TLS with Imp's own CA, reads the value from the vault, swaps the stand-in for it or sets the configured header, and forwards the request. It removes the value from response headers and bodies before they go back, which covers endpoints that echo what they were sent.
+4. Each use is logged: in OpenBao's audit log, and as a row in **Settings → Secrets → Recent use**.
+
+Chrome on the computer is started without the proxy, so a web page the imp opens never gets a key.
+
+## OpenBao, run by the host
+
+The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp Vault, which the host runs itself in `DATA_DIR/vault`. There is nothing to install or unlock: on first use the host downloads a pinned build, checks its SHA-256, and starts it (`host/src/vault.ts`, `host/src/tools.ts`). mitmproxy is fetched the same way.
+
+|  |  |
+| --- | --- |
+| Storage | Raft, in `vault/data`, with a key-value engine at `secret/`. A value is at `secret/data/imp/<name>`. Its hosts, variables and stand-in are metadata beside it. |
+| Encryption | OpenBao encrypts its storage, and unseals itself on start from `vault/seal.key` (32 random bytes, mode 0600). |
+| Who reads what | The host signs in as `imp-admin`, which can add, replace, delete and list secrets, but **cannot read a value back**. Only the egress proxy's token, `imp-egress`, can read values. It is replaced every 30 minutes, and the old one is revoked. |
+| Listeners | A unix socket, `vault/bao.sock` (0600), plus TCP on 127.0.0.1, which Raft needs. Both require a token. |
+| Audit | Every request is written to `vault/audit.log`. |
+
+<Callout type="warning" title="What OpenBao does and does not protect">
+  At rest, the vault protects your secrets about as well as a 0600 file: the
+  seal key sits next to the data, so someone with the host's user account has
+  both. What OpenBao adds is the split between who can write and who can read,
+  short-lived read tokens, versions, and an audit log of every read. **Back up
+  `DATA_DIR/vault/seal.key` with the rest of `DATA_DIR`. Losing it loses every
+  secret.**
+</Callout>
+
+## Adding a key
+
+**Settings → Secrets** lists your secrets, with the hosts each one works for and when it was last used. A saved value is never shown again; you can only **Replace** or **Delete** it.
+
+**Add a key** has presets that fill in the hosts and variables:
+
+| Service | Hosts | Variables |
+| --- | --- | --- |
+| GitHub | `api.github.com`, `uploads.github.com` (Bearer), `github.com` (Basic, for git) | `GITHUB_TOKEN`, `GH_TOKEN` |
+| OpenAI | `api.openai.com` | `OPENAI_API_KEY` |
+| Anthropic | `api.anthropic.com` (`x-api-key`) | `ANTHROPIC_API_KEY` |
+| Linear | `api.linear.app` | `LINEAR_API_KEY` |
+| Other | the hosts you enter | `<NAME>_API_KEY` |
+
+A new key reaches the imp's next command.
+
+When the imp needs a key you have not added, it calls `request_secret` with the service and why. The request shows at the top of Settings → Secrets with **Add** and **Dismiss**. The imp never gets a field to paste a value into, so you never send a secret through the chat.
+
+## Limits
+
+- **Injection gives use, not reading.** Anything on the computer can still use a key against that key's own hosts. Keep rule hosts to API hosts, and watch Recent use.
+- **Clients that pin their own CA** won't trust Imp's, and fail with a TLS error on hosts that have a secret.
+- **Response bodies over 1 MB** stream through without being scrubbed.
+
+## Planned
+
+- **Logins.** The host types a username, password and one-time code into the page Chrome has open, over the DevTools protocol, after checking that the page's origin matches the secret's site. The codes come from OpenBao's TOTP engine.
+- **Hand a key to one command**, for what a proxy can't inject: SSH keys, database passwords, request signing. Off by default, per secret, and it asks you each time unless you turn that off.
