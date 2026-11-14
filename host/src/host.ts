@@ -12,6 +12,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { appGateway } from "./apps.ts";
+import { appBackup, TOPIC as BACKUP } from "./backup.ts";
 import { homeChat, TOPIC as CHAT, withAppContext } from "./chat.ts";
 import { type LiveSource, serveLive, Topics } from "./live.ts";
 import { openComputer, TOPIC as COMPUTER } from "./computer.ts";
@@ -56,6 +57,8 @@ export interface HostOptions {
 	readonly cloudKey?: string;
 	/** Where the programs the host downloads are kept (tools.ts). Default: DATA_DIR/tools. */
 	readonly toolsDir?: string;
+	/** The GitHub CLI the backup signs in and creates its repository with (backup.ts). Default: gh on PATH. */
+	readonly gh?: string;
 }
 
 export async function startHost(options: HostOptions) {
@@ -106,6 +109,15 @@ export async function startHost(options: HostOptions) {
 	// The owner's secrets, which the agent's commands use without holding them.
 	const secrets = openSecrets({ dataDir: DATA, toolsDir: options.toolsDir ?? join(DATA, "tools"), topics, registry, machine });
 	secrets.start();
+
+	// Every live app's code, versioned on the host and pushed to GitHub once connected.
+	const backup = appBackup({
+		dataDir: DATA,
+		topics,
+		gh: options.gh,
+		apps: () => gateway.apps().flatMap((app) => gateway.version(app.id) ?? []),
+	});
+	backup.start();
 
 	const account = chatgptAccount(options.models, topics);
 	// Built for each tool call, so a switch reaches the agent's next one, and so does a secret added in Settings.
@@ -165,16 +177,17 @@ export async function startHost(options: HostOptions) {
 
 	/** What the shell reads. Each is streamed live; app sources are routed to their app. */
 	function live(source: string, args: unknown[]): LiveSource | undefined {
-		// The shell's streams are few (see Account in client/app.contract), so the computer's state and what the imp
-		// remembers come with the account.
+		// The shell's streams are few (see Account in client/app.contract), so the computer's state, what the imp
+		// remembers, the secrets and the backup come with the account.
 		if (source === "account") {
 			return {
-				topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS],
+				topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS, BACKUP],
 				load: async () => ({
 					...account.state(),
 					computer: await computer.load(),
 					memory: { name: memory.name, location: memory.location, entries: await memory.inspect() },
 					secrets: secrets.state(),
+					backup: backup.state(),
 				}),
 			};
 		}
@@ -229,13 +242,26 @@ export async function startHost(options: HostOptions) {
 			case "appsUndo": {
 				const id = String(args[0] ?? "");
 				const run = source === "appsSave" ? apps.save : source === "appsDiscard" ? apps.discard : apps.undo;
+				const name = gateway.apps().find((app) => app.id === id)?.name ?? id;
 				try {
 					await run(id);
+					// A save or an undo changes the live code; a discard only drops a preview.
+					if (source === "appsSave") backup.record(`Save ${name}`);
+					if (source === "appsUndo") backup.record(`Undo the last save of ${name}`);
 					return ok;
 				} catch (error) {
 					return refused(error instanceof Error ? error.message : String(error));
 				}
 			}
+			case "backupConnect":
+				backup.connect();
+				return ok;
+			case "backupCancel":
+				backup.cancel();
+				return ok;
+			case "backupDisconnect":
+				await backup.disconnect();
+				return ok;
 			case "computerRefresh":
 				return computer.refresh();
 			case "computerRetry":
@@ -330,6 +356,7 @@ export async function startHost(options: HostOptions) {
 			gateway.close();
 			computer.close();
 			secrets.close();
+			backup.close();
 			await chat.close();
 			await harness.close(context);
 		},

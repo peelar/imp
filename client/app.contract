@@ -45,6 +45,7 @@ shape Account
   computer: Computer
   memory: Memory
   secrets: Secrets
+  backup: Backup
 
 // A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
 shape ChatMessage
@@ -162,6 +163,19 @@ shape Secrets
   uses: SecretUse[]
   services: SecretService[]
 
+// Where the apps' code is kept: every version in a history on the host (`git` is false when the host has no git to
+// keep it), and on GitHub once connected. `status` is GitHub's: "off", "starting", "waiting" (for the person to enter
+// `code` at `url`) or "on" (pushing to `repo`, which has the newest version when `synced`).
+shape Backup
+  git: bool
+  status: string
+  code: string
+  url: string
+  repo: string
+  error: string
+  versions: number
+  synced: bool
+
 shape Reply
   ok: bool
   error: string
@@ -254,6 +268,9 @@ component App
   mutation secretSaved as shape Reply then afterSecretSaved
   mutation secretDeleted as shape Reply queue
   mutation secretDismissed as shape Reply queue
+  mutation backupStarted as shape Reply
+  mutation backupCancelled as shape Reply
+  mutation backupDisconnected as shape Reply
   derive still = media.prefersReducedMotion
   // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
   derive wide = media.width >= 960
@@ -282,6 +299,7 @@ component App
   derive secrets = account.secrets
   derive secretError = match secretSaved { case some(r) => r.error, case none => "" }
   derive secretDeleteError = match secretDeleted { case some(r) => r.error, case none => "" }
+  derive backup = account.backup
   derive switchError = match computerSwitched { case some(r) => r.error, case none => "" }
   derive keyError = match computerKeySaved { case some(r) => r.error, case none => "" }
 
@@ -408,6 +426,14 @@ component App
     send secretDeleted = secretsDelete(name)
   action dismissSecret(id: string)
     send secretDismissed = secretsDismiss(id)
+  action connectBackup
+    send backupStarted = backupConnect()
+  action cancelBackup
+    send backupCancelled = backupCancel()
+  action disconnectBackup
+    send backupDisconnected = backupDisconnect()
+  action copyBackupCode
+    copyText(backup.code)
 
   view
     main navigationKey=`${top(nav).id}` navigate=follow testId="app" width="100%" height="100%"
@@ -566,6 +592,8 @@ component App
                         for r in [secretRound] key=`${r}`
                           SecretSettings(secrets=secrets, saving=pending(secretSaved), error=secretError,
                             deleteError=secretDeleteError, save=saveSecret, remove=deleteSecret, dismiss=dismissSecret)
+                        BackupSettings(backup=backup, busy=(pending(backupStarted) or pending(backupDisconnected)),
+                          connect=connectBackup, cancel=cancelBackup, disconnect=disconnectBackup, copyCode=copyBackupCode)
                         column
                           row padding-bottom=10 border-bottom="1px solid ink.strong"
                             text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
@@ -991,6 +1019,90 @@ component MemorySettings
       if memory.name != ""
         text `${memory.name}, kept on your host at ${memory.location}.` font-size="0.8125rem" font-style="italic"
           color="ink.faint" padding-top=10 overflow-wrap="anywhere"
+
+// Where the apps' code is kept besides the host: every version in the host's history, and a private GitHub repository
+// the host pushes each one to, connected with a device code like the ChatGPT sign-in.
+component BackupSettings
+  props
+    backup: Backup
+    busy: bool
+    connect: action
+    cancel: action
+    disconnect: action
+    copyCode: action
+  view
+    column testId="backup"
+      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+        text "Backup" class=Label color="ink.strong" role="heading" aria-level=2
+        text `${numbered(backup.versions)} ${backup.versions == 1 ? "version" : "versions"}` class=Label testId="backup-versions"
+      text (backup.git ? "Your host keeps every version of your apps' code. Connect GitHub to keep a copy there too, in a private repository. Your apps' data stays on your host." : "Your host keeps no versions of your apps' code yet: it needs git. Install git on it, then restart Imp.")
+        font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
+      if backup.status == "on"
+        row gap=14 align-items="center" padding="16px 0" margin-top=12 border-top="1px solid line.subtle"
+          border-bottom="1px solid line.subtle"
+          column flex=1 min-width=0 gap=4 align-items="flex-start"
+            text backup.repo font-family="family.display" font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere"
+              testId="backup-repo"
+            row gap=8 align-items="center"
+              row width=6 height=6 aria-hidden=true background-color=(backup.synced ? "-exact-system-green" : "ink.faint")
+              text (backup.synced ? "Up to date" : "Not backed up yet") class=Label testId="backup-state"
+          link href=`https://github.com/${backup.repo}` testId="backup-open-repo" display="flex" align-items="center" gap=8
+            padding="8px 12px" border="1px solid line.strong" color="ink.strong" font-family="family.mono"
+            font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase" text-decoration-line="none"
+            :hover
+              background-color="surface.soft"
+            text "Open"
+            text "↗" aria-hidden=true
+        button press=disconnect disabled=busy testId="backup-disconnect" align-self="flex-start" padding="10px 0"
+          border="none" background-color="transparent" color="ink.muted"
+          :hover
+            color="-exact-system-red"
+          text "Disconnect GitHub" class=Label color="inherit"
+      else if backup.status == "waiting"
+        column gap=10 padding-top=18 testId="backup-waiting"
+          Step(number="01", title="Open GitHub's sign-in page")
+          link href=backup.url testId="backup-open" display="flex" align-items="center" justify-content="center"
+            gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
+            font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
+            text-decoration-line="none"
+            text "Open GitHub"
+            image "symbol:open-app" width=14 height=14 aria-hidden=true
+          Step(number="02", title="Enter this code")
+          row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
+            text backup.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
+              letter-spacing="0.18em" user-select="all" testId="backup-code"
+            button press=copyCode testId="backup-copy" display="flex" align-items="center" gap=6
+              padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
+              font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+              :hover
+                background-color="surface.soft"
+              image "symbol:copy" width=13 height=13 aria-hidden=true
+              text "Copy"
+          row gap=10 align-items="center" padding-top=2
+            progress aria-label="Waiting for approval"
+            text "Waiting for you to approve…" font-style="italic" color="ink.muted"
+          button press=cancel testId="backup-cancel" align-self="flex-start" padding="4px 0" border="none"
+            background-color="transparent" color="ink.muted"
+            :hover
+              color="ink.strong"
+            text "Cancel" class=Label color="inherit"
+      else if backup.status == "starting"
+        row gap=10 align-items="center" padding-top=18 testId="backup-starting"
+          progress aria-label="Loading"
+          text "Asking GitHub for a code…" font-style="italic" color="ink.muted"
+      else
+        button press=connect disabled=(not backup.git or busy) testId="backup-connect" align-self="flex-start"
+          margin-top=16 padding="10px 14px" border="none" background-color="AccentColor" color="ink.on-fill"
+          font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+          :disabled
+            background-color="surface.soft"
+            color="ink.faint"
+          text "Connect GitHub"
+      if backup.error != ""
+        row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
+          border-left="2px solid -exact-system-red"
+          image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+          text backup.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="backup-error"
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
 // An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a

@@ -49,6 +49,11 @@ version as a preview, on a copy of the data, with Save and Discard; open pages r
 Save touches the real data, and the version before it can be undone for 48 hours. The host keeps the apps it holds
 and their history in `DATA_DIR` (`host/studio/GUIDE.md` is what the imp reads about the format).
 
+Every save and undo also commits the apps' code to a git repository in `DATA_DIR/backup`, so every version is kept.
+**Backup** in Settings connects GitHub with a device code, like the ChatGPT sign-in, and the host then pushes each
+version to a private `imp-apps` repository of yours (`host/src/backup.ts`). Only code is backed up; the apps' data
+stays on the host. This needs `git` on the host, and the [GitHub CLI](https://cli.github.com) (`gh`) for GitHub.
+
 After changing an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.
 
 There is no login page. Put the host behind [Tailscale](https://tailscale.com) (`tailscale serve`), which decides who

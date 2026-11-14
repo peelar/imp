@@ -1,7 +1,7 @@
 // The host the client's Exact tests start (app.json "commands.server"): the real host with a scripted model in place
 // of ChatGPT, a sign-in that approves itself a moment after it shows its code, and the local machine adapter, so the
-// apps run in real workers. When the user asks to add "todo: <title>", the model runs the todos app's add action, then
-// says "Done."
+// apps run in real workers, and a GitHub CLI (fake-gh.mjs) whose repositories are folders in the data directory. When
+// the user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,5 +79,6 @@ await startHost({
 	appsDir: join(import.meta.dirname, "..", "..", "client", "apps"),
 	// OpenBao and mitmproxy, downloaded once for every test run.
 	toolsDir: join(tmpdir(), "imp-tools"),
+	gh: join(import.meta.dirname, "fake-gh.mjs"),
 	port: Number(process.env.PORT ?? 8787),
 });
