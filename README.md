@@ -7,130 +7,63 @@ Your own imp: a self-hosted assistant that runs errands in your apps and builds 
 Chat is home. Ask for something, and the imp does it on a Linux computer of its own. Ask for a tool, and it builds
 an app that stays: a screen you keep using, which the imp can also operate for you.
 
-> Early prototype. Expect everything to change.
+> [!WARNING]
+> Imp is an early prototype. Expect everything to change.
 
-## How it fits together
+## Features
 
-- **`host/`** is the server. It runs the agent on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable),
-  signs in to ChatGPT (your Plus or Pro plan is the model), keeps each app's data in SQLite, and serves the client.
-  The agent's computer is durable (its home directory survives suspends, reboots and host restarts), and you pick it
-  in Settings: Imp cloud (an [E2B](https://e2b.dev) sandbox, on its free plan) or a Linux computer of yours on your
-  tailnet, which the host reaches over Tailscale SSH. Both sit behind one adapter contract (`host/src/machine.ts`),
-  and wherever it runs, the host decides what is installed: `host/machine/setup.sh`. The computer has a desktop with
-  Chrome on it; open **Computer** in the app to watch your imp work there, or take over (`host/src/screen.ts`).
-- **`client/`** is the app, written in [Exact](https://github.com/expo/exact)'s Contract language. It runs on the web
-  today and keeps iOS and macOS in reach.
-- **`client/apps/<id>/`** holds each app: `app.json`, its screen (`app.contract`, a `component Screen` whose props
-  name the app's operations) and its server code (`server.ts`, which declares those operations and runs in a worker
-  on the agent's computer). The agent finds and runs any app's operations through two tools.
-- **`sdk/`** is the typed surface an app's server code is written against.
-- **`docs/`** is the website: a landing page and the docs for people who host their own Imp, built with
-  [Blume](https://useblume.dev). `npm run dev -w @imp/docs` serves it.
-- **Memory.** The imp remembers what it learns about you, and about itself (a name you give it, how it should
-  speak), across conversations, and Settings lists all of it with a way to forget each fact. The default is the Model
-  Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory)
-  used as a library: a knowledge graph in one JSONL file, `memory.jsonl` in the data directory, that you can also open
-  in an editor. The imp writes to it with tools while it works, and after every answer a background task asks the
-  model what the exchange taught it, so it remembers without being told to. Another memory system implements
-  `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()` as `memory`.
-- **Routines.** Ask the imp to do something on a schedule ("every weekday at 8, check my pull requests") and it keeps
-  a routine: cron on your time zone, run by the host once the agent is idle, in a conversation of its own that the
-  sidebar lists and you can reply in (`host/src/routines.ts`). Runs teach the memory nothing, since you said nothing.
-- **Secrets.** API keys you add in Settings (GitHub, OpenAI, Anthropic, Linear, or any HTTPS API) work on the imp's
-  computer without the imp or its computer holding them. They live in an [OpenBao](https://openbao.org) the host runs
-  in its data directory (`host/src/vault.ts`); the computer gets a stand-in such as `GITHUB_TOKEN=imp-secret-github`,
-  and its HTTPS requests to a key's hosts go through agentd to a [mitmproxy](https://mitmproxy.org) on the host, which
-  puts the key on them and takes it out of the response (`host/src/egress.ts`). It works the same on Imp cloud and on
-  your own computer. The host downloads pinned, checksummed builds of both the first time it needs them
-  (`host/src/tools.ts`). Settings lists each key's latest uses, and OpenBao's audit log (`vault/audit.log`) records
-  every read. When the imp needs a key it does not have, it asks for it in Settings, never in the chat.
-  Website logins work the same way: you add a site, username, password and optionally the key its one-time codes come
-  from, and when the imp calls `sign_in`, the host types them into the page Chrome has open on that site over Chrome's
-  DevTools protocol, never into a page of another site (`host/src/chrome.ts`, `host/src/secret-logins.ts`).
+- **A computer of its own.** The imp works on a durable Linux machine with a desktop and Chrome, either an
+  [E2B](https://e2b.dev) sandbox or a computer of yours on your tailnet. You can watch it work there, or take over.
+- **Apps it builds for you.** New apps open as a preview on a copy of their data, with Save, Discard and Undo. Every
+  version of their code is kept, and can be backed up to a private GitHub repository.
+- **Memory.** It remembers what it learns about you and about itself, and Settings lets you forget any of it.
+- **Routines.** Ask for something on a schedule, and it runs in a conversation of its own.
+- **Secrets it never holds.** API keys and website logins live in a vault on the host, and are added to the imp's
+  requests on their way out, so neither the imp nor its computer ever sees them.
+- **Yours to host.** Your ChatGPT plan is the model, your data stays on your machine, and Tailscale decides who gets
+  in.
 
-The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces: `host/`, `client/` and `docs/` are
-its packages, and one `npm ci` at the root installs them all with the lint and type tooling. `npm run build`,
-`npm run dev` and `npm test` run each package's script of that name through turbo.
+## Install
 
-## Apps the imp builds
-
-Ask for an app and the imp writes its folder on its own computer, then calls `preview_app`. The host takes only that
-folder, tries the server code on a copy of the app's data, writes the shell's wiring for the app's screen
-(`host/src/shell.ts`) and rebuilds the web client, which takes a few seconds. The app's tab then shows the new
-version as a preview, on a copy of the data, with Save and Discard; open pages reload into it by themselves. Only
-Save touches the real data, and the version before it can be undone for 48 hours. The host keeps the apps it holds
-and their history in `DATA_DIR` (`host/studio/GUIDE.md` is what the imp reads about the format).
-
-Every save and undo also commits the apps' code to a git repository in `DATA_DIR/backup`, so every version is kept.
-**Backup** in Settings connects GitHub with a device code, like the ChatGPT sign-in, and the host then pushes each
-version to a private `imp-apps` repository of yours (`host/src/backup.ts`). Only code is backed up; the apps' data
-stays on the host. This needs `git` on the host, and the [GitHub CLI](https://cli.github.com) (`gh`) for GitHub.
-
-After changing an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.
-
-There is no login page. Put the host behind [Tailscale](https://tailscale.com) (`tailscale serve`), which decides who
-gets in; `OWNER_LOGIN` narrows it to one person.
-
-## Installing it
-
-On the machine that will run your Imp (Linux with systemd, or macOS), with Node 24+:
+On the machine that will run your Imp (Linux with systemd, or macOS), with Node 24+ and Tailscale:
 
 ```sh
 curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
 ```
 
-It installs the latest release in `~/.imp` as a service, serves it on your tailnet (`tailscale serve`), and prints one
-link. Open it, sign in with ChatGPT, and give your imp a computer in Settings: paste an E2B key for Imp cloud, or pick
-a Linux computer on your tailnet (Settings shows the one command to run on it and the policy rule to add). Then, if you
-want the Mac app:
+It installs Imp as a service, serves it on your tailnet and prints one link. Open it, sign in with ChatGPT, and give
+your imp a computer in Settings. The host keeps itself at the latest release.
+[Install](docs/content/docs/self-hosting/install.mdx) covers the details, and the optional Mac app, which installs from
+your host with one command.
 
-```sh
-curl -fsSL https://<your host>.ts.net/install-mac.sh | sh
-```
-
-That puts Imp in `~/Applications`, already connected to that host. `sh install-mac.sh --uninstall` removes it.
-
-Both keep themselves at the latest release. The host checks every hour, and restarts into a new release once the
-agent is idle; open pages then reload. Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to stop that. The Mac app checks at
-login and every hour, and replaces itself (quitting and reopening if it is running). It is not signed with an Apple
-Developer ID; macOS opens it because curl doesn't quarantine what it downloads.
-
-**Releasing.** A commit that changes what Imp does carries a changeset (`npm run changeset`, a patch or minor bump
-for `@imp/host`). Pushing it to `main` releases it: `.github/workflows/release.yml` bumps the version, writes
-`host/CHANGELOG.md`, commits both to `main`, builds the host and web client on Linux and the Mac app on macOS
-(`scripts/package.sh`), and publishes them as a GitHub release. See `.changeset/README.md`.
-
-## Running it from a checkout
+## Development
 
 With Node 24+ and git:
 
 ```sh
-npm run setup   # Bun, Rust, Exact at the pinned commit, npm ci, and the web client; a few minutes the first time
+npm run setup   # Bun, Rust, Exact and the dependencies, then a build of the web client
 npm start       # http://localhost:8787
+npm run check   # lint, formatting and types
+npm test        # the host's API tests
 ```
 
-`npm run setup:mac` sets up the Mac app's build too (on macOS), after which `cd client && bun exact.mjs mac` builds it.
+[Run from a checkout](docs/content/docs/self-hosting/from-source.mdx) explains setup, the repository's layout and the
+other checks. [`AGENTS.md`](AGENTS.md) holds the conventions code in this repository follows, and
+[`.changeset/README.md`](.changeset/README.md) explains how a change is released.
 
-Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local npm start`
-instead fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the
-rest. `node scripts/smoke-machine.ts` in `host/` checks a machine adapter on its own.
+## Documentation
 
-The host rebuilds the web client with [Exact](https://github.com/expo/exact) whenever the imp previews an app, which is
-why a checkout needs it. `scripts/setup.sh` puts it where the client looks for it, `../../tools/exact` from this
-repository (`~/tools/exact` for a checkout in `~/code/imp`), unless you set `EXACT`. Run setup again after a pull that
-moves `client/exact-rev`.
+The [docs](docs/content/docs) cover hosting your own Imp and how it works inside:
 
-**Checks.** After `npm run setup` (or just `npm ci` for the first three):
-
-```sh
-npm run check   # oxlint (Ultracite's core and anti-slop rules, type-aware), the lint policy probes, oxfmt, tsc
-npm test        # the host's HTTP API against a host with a fake model and a local machine
-npx turbo run build --filter=@imp/docs   # the docs site
-cd client && bun exact.mjs test web   # the client against the same host
-```
-
-`.github/workflows/ci.yml` runs the first three on every push and pull request. `AGENTS.md` says what the rules ask of
-new code.
+- **Self-hosting:** [install](docs/content/docs/self-hosting/install.mdx),
+  [the imp's computer](docs/content/docs/self-hosting/computer.mdx),
+  [configuration](docs/content/docs/self-hosting/configuration.mdx),
+  [updates](docs/content/docs/self-hosting/updates.mdx)
+- **How it works:** [architecture](docs/content/docs/how-it-works/architecture.mdx),
+  [apps](docs/content/docs/how-it-works/apps.mdx), [machines](docs/content/docs/how-it-works/machines.mdx),
+  [memory](docs/content/docs/how-it-works/memory.mdx), [routines](docs/content/docs/how-it-works/routines.mdx),
+  [the secrets vault](docs/content/docs/how-it-works/vault.mdx), [security](docs/content/docs/how-it-works/security.mdx)
+- **[Building apps](docs/content/docs/building-apps/index.mdx)** by hand
 
 ## Credits
 

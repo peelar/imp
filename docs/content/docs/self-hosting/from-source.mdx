@@ -14,6 +14,22 @@ Setup installs Bun and Rust when they are missing, puts [Exact](https://github.c
 
 Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local npm start` instead fixes the agent's computer to a directory on this one, with no isolation.
 
+## The repository
+
+The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces. `npm run build`, `npm run dev` and `npm test` at the root run each package's script of that name through turbo.
+
+| Path | What it holds |
+| --- | --- |
+| `host/` | The host: the agent, the app gateway, the studio, memory, the vault and the HTTP API. Node runs its TypeScript directly. |
+| `host/machine/` | What runs on the agent's computer: agentd and `setup.sh`, which decides what is installed there. |
+| `client/` | The app you open, in [Exact](https://github.com/expo/exact)'s Contract language. |
+| `client/apps/<id>/` | One app per folder: `app.json`, its screen (`app.contract`) and its server code (`server.ts`). |
+| `sdk/` | The typed surface an app's server code is written against. |
+| `docs/` | This site, built with [Blume](https://useblume.dev). |
+| `scripts/` | Setup, packaging, the host and Mac installers, and the lint policy's probes. |
+
+`AGENTS.md` holds the conventions code in the repository follows, and `.agents/setup` sets up an [Amp](https://ampcode.com) orb with `npm run setup`.
+
 ## Checks
 
 | Command | Where | What it checks |
