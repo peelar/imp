@@ -17,6 +17,9 @@ const BRIDGE_CLIENT = path.join(here, "bridge-client.ts");
 
 export const AGENTD_PORT = 7070;
 
+/** Where agentd takes the agent's HTTPS requests that may need a secret (egress.ts), on the machine's loopback. */
+export const EGRESS_PORT = 7071;
+
 /** Where a machine records the digest of the setup it last ran. */
 export const SETUP_MARKER = "/var/lib/imp/setup";
 
@@ -60,7 +63,7 @@ export const runtimePattern = (runtimeDir: string) =>
 
 /**
  * Every file agentd needs, for a machine of this platform. The machine runs plain JavaScript with no packages but
- * ws, so agentd and the worker ship with their types stripped.
+ * ws, so agentd, the worker and the egress proxy ship with their types stripped.
  */
 export async function runtime(platform: {
   platform: "linux" | "darwin";
@@ -76,6 +79,7 @@ export async function runtime(platform: {
     })),
     stripped("agentd"),
     stripped("worker"),
+    stripped("egress"),
     shipped("screen.sh", path.join(MACHINE_SOURCES, "screen.sh")),
     ...wsFiles.map(
       async (file) =>
@@ -122,14 +126,14 @@ const shipped = async (to: string, from: string): Promise<RuntimeFile> => ({
   data: await readFile(from),
 });
 
-/** machine/<name>.ts as <name>.mjs. */
+/** machine/<name>.ts as <name>.mjs: its types stripped, and its imports of the other machine files renamed with them. */
 const stripped = async (name: string): Promise<RuntimeFile> => ({
   path: `${name}.mjs`,
   data: Buffer.from(
     stripTypeScriptTypes(
       await readFile(path.join(MACHINE_SOURCES, `${name}.ts`), "utf-8"),
       { mode: "strip" }
-    )
+    ).replaceAll(/(from "\.\/[\w-]+)\.ts"/g, '$1.mjs"')
   ),
 });
 
@@ -140,6 +144,8 @@ export function agentdEnv(options: {
   runtimeDir: string;
   home: string;
   host?: string | undefined;
+  /** Where the egress proxy listens, when machines share a loopback and each takes a free port. */
+  egressPort?: number | undefined;
 }) {
   const env = {
     AGENTD_TOKEN: options.token,
@@ -147,6 +153,8 @@ export function agentdEnv(options: {
     AGENTD_PORT: String(AGENTD_PORT),
     PI_ENV_PATH: path.join(options.runtimeDir, "pi-env"),
     MACHINE_HOME: options.home,
+    EGRESS_PORT: String(options.egressPort ?? EGRESS_PORT),
+    EGRESS_DIR: egressDir(options.home),
   };
 
   return options.host === undefined
@@ -155,30 +163,31 @@ export function agentdEnv(options: {
 }
 
 /** Where agentd keeps the egress proxy's CA certificate, and a CA bundle with it added. */
-const egressDir = (home: string) => join(home, ".cache", "imp");
+const egressDir = (home: string) => path.join(home, ".cache", "imp");
 
 /**
  * What a command needs on the machine for its HTTPS requests to go through agentd's egress proxy, where the host puts
  * the owner's secrets on them: the proxy, and the host's CA certificate, which the proxy's TLS is signed with.
  */
-export function egressEnv(home: string, port = EGRESS_PORT): Record<string, string> {
-	const proxy = `http://127.0.0.1:${port}`;
-	const noProxy = "localhost,127.0.0.1,::1";
-	const bundle = join(egressDir(home), "ca-bundle.pem");
-	return {
-		HTTPS_PROXY: proxy,
-		https_proxy: proxy,
-		NO_PROXY: noProxy,
-		no_proxy: noProxy,
-		// Node's fetch and https use the proxy only when asked to.
-		NODE_USE_ENV_PROXY: "1",
-		NODE_EXTRA_CA_CERTS: join(egressDir(home), "egress-ca.pem"),
-		// OpenSSL, Python, curl, git and Go read these instead of the system bundle; agentd's bundle is that plus the CA.
-		SSL_CERT_FILE: bundle,
-		REQUESTS_CA_BUNDLE: bundle,
-		CURL_CA_BUNDLE: bundle,
-		GIT_SSL_CAINFO: bundle,
-	};
+export function egressEnv(home: string, port = EGRESS_PORT) {
+  const proxy = `http://127.0.0.1:${port}`;
+  const noProxy = "localhost,127.0.0.1,::1";
+  const bundle = path.join(egressDir(home), "ca-bundle.pem");
+
+  return {
+    HTTPS_PROXY: proxy,
+    https_proxy: proxy,
+    NO_PROXY: noProxy,
+    no_proxy: noProxy,
+    // Node's fetch and https use the proxy only when asked to.
+    NODE_USE_ENV_PROXY: "1",
+    NODE_EXTRA_CA_CERTS: path.join(egressDir(home), "egress-ca.pem"),
+    // OpenSSL, Python, curl, git and Go read these instead of the system bundle; agentd's bundle is that plus the CA.
+    SSL_CERT_FILE: bundle,
+    REQUESTS_CA_BUNDLE: bundle,
+    CURL_CA_BUNDLE: bundle,
+    GIT_SSL_CAINFO: bundle,
+  };
 }
 
 /** Each machine's token: derived from the host secret, so the host needs to store nothing per machine. */
@@ -206,6 +215,8 @@ export function agentdEndpoints(
     ],
     appSocket: { url: `${ws}/apps?token=${token}`, headers: base.headers },
     screen: { url: `${ws}/screen?token=${token}`, headers: base.headers },
+    /** The egress proxy's control socket; a stream socket adds `&stream=<id>`. */
+    egress: { url: `${ws}/egress?token=${token}`, headers: base.headers },
   };
 }
 

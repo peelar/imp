@@ -1,8 +1,10 @@
 // The host the client's Exact tests start (app.json "commands.server"): the real host with a scripted model in place
-// of ChatGPT, a sign-in that approves itself a moment after it shows its code, and the local machine adapter, so the
-// apps run in real workers. When the user asks to add "todo: <title>", the model runs the todos app's add action, then
-// says "Done."; "remember: <fact>", "app code: <id>" and "preview app: <id>" make it call the memory's and the studio's
-// tools the same way. TEST_DATA_DIR names the host's data directory, for a test that starts the host again on it.
+// of ChatGPT, a sign-in that approves itself a moment after it shows its code, the local machine adapter, so the apps
+// run in real workers, and a GitHub CLI (fake-gh.ts) whose repositories are folders in the data directory. When the
+// user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
+// "app code: <id>", "preview app: <id>", "ask for a key: <service>" and "run: <command>" make it call the memory's,
+// the studio's, the secrets' and the shell tools the same way. TEST_DATA_DIR names the host's data directory, for a
+// test that starts the host again on it.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -25,6 +27,15 @@ const isText = (content: Content | undefined): content is string =>
 
 /** The tool calls a message can ask for; the first pattern it matches wins, called with what the pattern captured. */
 const TOOL_CALLS = [
+  {
+    pattern: /ask for a key: ([a-z]+)/,
+    call: (service: string) =>
+      fauxToolCall("request_secret", { service, why: "To read your issues." }),
+  },
+  {
+    pattern: /run: ([^"\\]+)/,
+    call: (command: string) => fauxToolCall("bash", { command }),
+  },
   {
     pattern: /todo: ([^"\\]+)/,
     call: (title: string) =>
@@ -62,7 +73,11 @@ const respond: FauxResponseFactory = (context) => {
   const last = context.messages.findLast(({ role }) => role !== "system");
 
   if (last?.role === "toolResult") {
-    return fauxAssistantMessage("Done.");
+    // What a command printed, when it printed a secret's stand-in: the test checks the agent saw no more than that.
+    const [seen] =
+      /imp-secret-[a-z0-9-]+/.exec(JSON.stringify(last.content)) ?? [];
+
+    return fauxAssistantMessage(seen ? `I see ${seen}.` : "Done.");
   }
 
   const text = isText(last?.content)
@@ -190,5 +205,8 @@ await startHost({
     localProvider({ secret, dir: path.join(dataDir, "machines") }),
   dataDir,
   appsDir: path.join(import.meta.dirname, "..", "..", "client", "apps"),
+  // OpenBao and mitmproxy, downloaded once for every test run.
+  toolsDir: path.join(tmpdir(), "imp-tools"),
+  gh: path.join(import.meta.dirname, "fake-gh.ts"),
   port: Number(process.env.PORT ?? 8787),
 });

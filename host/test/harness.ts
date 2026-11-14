@@ -209,3 +209,21 @@ export const settledChat =
 
     return messages && accept(messages) ? messages : undefined;
   };
+
+/**
+ * Sends the agent a message that makes it call a tool, and answers the transcript's row for the call once the agent
+ * is done: the message, that row and the model's "Done." are then the last three.
+ */
+export async function toolRow(message: string) {
+  assert.deepEqual(await call("chatSend", [message, ""]), done);
+
+  const messages = await until(
+    "chat",
+    settledChat((all) => all.at(-3)?.text === message),
+    60_000
+  );
+
+  const { title, text, failed } = messages.at(-2) ?? {};
+
+  return { title, text, failed };
+}

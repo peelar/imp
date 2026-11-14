@@ -10,7 +10,7 @@
     "format": "oxfmt -c oxfmt.config.ts --write host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts package.json tsconfig.json host/package.json",
     "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts package.json tsconfig.json host/package.json",
     "typecheck": "tsc --noEmit",
-    "test": "node --test 'host/test/*.test.ts'",
+    "test": "node --test --test-concurrency=1 'host/test/*.test.ts'",
     "check": "npm run lint && npm run typecheck"
   },
   "devDependencies": {

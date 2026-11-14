@@ -17,11 +17,12 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type AppGateway, appGateway } from "./apps.ts";
+import { appBackup } from "./backup.ts";
 import { homeChat, TOPIC as CHAT } from "./chat.ts";
 import { type Computer, openComputer } from "./computer.ts";
 import { serveHttp } from "./http.ts";
 import { Topics } from "./live.ts";
-import type { MachineProvider } from "./machine.ts";
+import type { Machine, MachineProvider } from "./machine.ts";
 import {
   TOPIC as MEMORY,
   type MemoryProvider,
@@ -29,6 +30,7 @@ import {
 } from "./memory.ts";
 import { graphMemory } from "./memory-graph.ts";
 import { screenSockets } from "./screen.ts";
+import { openSecrets, type Secrets } from "./secrets.ts";
 import { shellApi } from "./shell-api.ts";
 import { chatgptAccount } from "./signin.ts";
 import { storedApps, studio } from "./studio.ts";
@@ -64,6 +66,10 @@ export type HostOptions = {
   readonly macInstaller?: string | undefined;
   /** An E2B API key for Imp cloud machines; the owner can also enter one in Settings. Default: E2B_API_KEY. */
   readonly cloudKey?: string | undefined;
+  /** Where the programs the host downloads are kept (tools.ts). Default: DATA_DIR/tools. */
+  readonly toolsDir?: string | undefined;
+  /** The GitHub CLI the backup signs in and creates its repository with (backup.ts). Default: gh on PATH. */
+  readonly gh?: string | undefined;
 };
 
 /** Reports a failure of something nobody waits for, in the host's log. */
@@ -115,44 +121,24 @@ type Parts = {
   readonly registry: Registry;
 };
 
-/** The agent's files and commands on its current computer. Built for each use, so a switch reaches the next one. */
-const environment =
-  (computer: Computer) =>
-  ({ cwd }: { readonly cwd?: string | undefined }) =>
-    new RemoteExecutionEnv({
-      connection: computer.connection(),
-      id: computer.id(),
-      cwd: cwd ?? computer.workspace(),
-    });
+/** Where the agent's files and commands are now. Read for each use, so a switch of computer reaches the next one. */
+const place = (computer: Computer, cwd?: string) => ({
+  connection: computer.connection(),
+  id: computer.id(),
+  cwd: cwd ?? computer.workspace(),
+});
 
-/** The apps: the gateway that runs them, and the studio the agent builds them in. */
-function openApps({ options, topics, computer, registry }: Parts) {
-  const { dataDir, appsDir } = options;
+/** The studio the agent builds apps in, which builds the shell for the apps the gateway runs. */
+function openStudio(
+  { options, topics, computer, registry }: Parts,
+  gateway: AppGateway,
+  drafts: Parameters<typeof studio>[0]["drafts"]
+) {
+  const clientSource = path.resolve(options.appsDir, "..");
 
-  const stored = storedApps(dataDir, appsDir, (message) => {
-    console.error(message);
-  });
-
-  const gateway = appGateway({
-    apps: stored.live,
-    dataDir,
-    topics,
-    registry,
-    machine: async () => {
-      const machine = await computer.machine();
-
-      computer.touch();
-
-      return machine;
-    },
-  });
-
-  const clientSource = path.resolve(appsDir, "..");
-  const env = environment(computer);
-
-  const apps = studio({
-    dataDir,
-    repoAppsDir: appsDir,
+  return studio({
+    dataDir: options.dataDir,
+    repoAppsDir: options.appsDir,
     clientDir: clientSource,
     exact:
       options.exact ??
@@ -161,22 +147,67 @@ function openApps({ options, topics, computer, registry }: Parts) {
     gateway,
     topics,
     registry,
-    files: () => env({}),
+    // The agent's files only: nothing the studio runs needs the owner's secrets.
+    files: () => new RemoteExecutionEnv(place(computer)),
     workspace: computer.workspace,
     context,
-    drafts: stored.drafts,
+    drafts,
   });
-
-  return { gateway, apps };
 }
 
+/** What the host keeps for the owner beside the apps' data: their secrets, and every version of the apps' code. */
+function openKeeping(
+  { options, topics, registry }: Parts,
+  gateway: AppGateway,
+  machine: () => Promise<Machine>
+) {
+  const { dataDir } = options;
+
+  // The owner's secrets, which the agent's commands use without holding them.
+  const secrets = openSecrets({
+    dataDir,
+    toolsDir: options.toolsDir ?? path.join(dataDir, "tools"),
+    topics,
+    registry,
+    machine,
+  });
+
+  secrets.start();
+
+  // Every live app's code, versioned on the host and pushed to GitHub once connected.
+  const backup = appBackup({
+    dataDir,
+    topics,
+    gh: options.gh,
+    apps: () => gateway.apps().flatMap((app) => gateway.version(app.id) ?? []),
+  });
+
+  backup.start();
+
+  return { secrets, backup };
+}
+
+type Followers = {
+  readonly gateway: AppGateway;
+  readonly secrets: Secrets;
+};
+
 /** The agent and its home conversation, which follow the computer when the owner switches it. */
-async function openAgent(parts: Parts, gateway: AppGateway) {
+async function openAgent(parts: Parts, { gateway, secrets }: Followers) {
   const { options, topics, computer, registry } = parts;
 
   const harness = await Harness.open(
     await openNodeSqliteStorage(path.join(options.dataDir, "harness.sqlite")),
-    { models: options.models, registry, env: environment(computer) },
+    {
+      models: options.models,
+      registry,
+      // Built for each tool call, so a switch reaches the agent's next one, and so does a secret added in Settings.
+      env: async ({ cwd }: { readonly cwd?: string | undefined }) =>
+        new RemoteExecutionEnv({
+          ...place(computer, cwd),
+          shellEnv: await secrets.shellEnv(),
+        }),
+    },
     context
   );
 
@@ -188,6 +219,7 @@ async function openAgent(parts: Parts, gateway: AppGateway) {
   await home.configure(agent(), context);
   computer.onSwitch(async () => {
     gateway.disconnect();
+    secrets.switched();
     await home.configure(agent(), context);
     gateway.start().catch(report("apps"));
   });
@@ -247,9 +279,33 @@ export async function startHost(options: HostOptions) {
     registry: agentRegistry(computer, memory),
   };
 
-  const { gateway, apps } = openApps(parts);
+  const { registry } = parts;
+
+  const stored = storedApps(dataDir, options.appsDir, (message) => {
+    console.error(message);
+  });
+
+  /** The agent's machine, for something that is about to use it. */
+  const machine = async () => {
+    const running = await computer.machine();
+
+    computer.touch();
+
+    return running;
+  };
+
+  const gateway = appGateway({
+    apps: stored.live,
+    dataDir,
+    topics,
+    registry,
+    machine,
+  });
+
+  const { secrets, backup } = openKeeping(parts, gateway, machine);
+  const apps = openStudio(parts, gateway, stored.drafts);
   const account = chatgptAccount(options.models, topics);
-  const { harness, home, chat } = await openAgent(parts, gateway);
+  const { harness, home, chat } = await openAgent(parts, { gateway, secrets });
 
   // Load every app now. A machine that is down is retried by the first call that needs it.
   const loadApps = async () => {
@@ -269,6 +325,8 @@ export async function startHost(options: HostOptions) {
       chat,
       computer,
       memory,
+      secrets,
+      backup,
       studio: apps,
       gateway,
       home,
@@ -297,6 +355,8 @@ export async function startHost(options: HostOptions) {
       http.close();
       gateway.close();
       computer.close();
+      secrets.close();
+      backup.close();
       await chat.close();
       await harness.close(context);
     },

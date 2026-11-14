@@ -1,7 +1,7 @@
 // What the shell reads and changes, by name. Each read is a live source (live.ts) and each change answers a Reply,
 // `{ ok, error }`. The shell's own names start with one of a few words (account, chat, apps, build, version,
-// computer, memory), which no app may take as its id (app-folders.ts); every other name goes to the app that owns
-// it, such as `todosSetDone` to the todos app's `setDone`.
+// computer, memory, secrets, backup), which no app may take as its id (app-folders.ts); every other name goes to the
+// app that owns it, such as `todosSetDone` to the todos app's `setDone`.
 import type { Context } from "@earendil-works/chord/context";
 import type { Conversation } from "@earendil-works/pi-durable";
 import type { Json } from "../../sdk/app.ts";
@@ -9,7 +9,9 @@ import type { AppGateway } from "./apps.ts";
 import { TOPIC as CHAT, type HomeChat, withAppContext } from "./chat.ts";
 import { TOPIC as COMPUTER, type Computer } from "./computer.ts";
 import type { Answer, LiveSource } from "./live.ts";
+import { type AppBackup, TOPIC as BACKUP } from "./backup.ts";
 import { TOPIC as MEMORY, type MemoryProvider } from "./memory.ts";
+import { TOPIC as SECRETS, type Secrets } from "./secrets.ts";
 import { TOPIC as ACCOUNT, type ChatGPTAccount } from "./signin.ts";
 import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio.ts";
 import { appTopic } from "./app-folders.ts";
@@ -19,6 +21,9 @@ export type ShellApiOptions = {
   readonly chat: HomeChat;
   readonly computer: Computer;
   readonly memory: MemoryProvider;
+  readonly secrets: Secrets;
+  /** The apps' code, kept in git and pushed to GitHub. */
+  readonly backup: AppBackup;
   /** The app studio: drafts, saved versions and the shell's builds. */
   readonly studio: ReturnType<typeof studio>;
   readonly gateway: AppGateway;
@@ -64,6 +69,8 @@ export function shellApi(options: ShellApiOptions) {
     ...studioCalls(options),
     ...computerCalls(options),
     ...memoryCalls(options),
+    ...secretsCalls(options),
+    ...backupCalls(options),
   ]);
 
   /** The change an app owns under the shell's name, if any; a write that fails says why. */
@@ -110,7 +117,8 @@ export function shellApi(options: ShellApiOptions) {
  * host), so what Settings shows comes with the account.
  */
 function shellSources(options: ShellApiOptions) {
-  const { account, chat, computer, memory, studio, version } = options;
+  const { account, backup, chat, computer, memory, secrets, studio, version } =
+    options;
 
   const whole = async (): Promise<Answer> => ({
     ...account.state(),
@@ -120,10 +128,15 @@ function shellSources(options: ShellApiOptions) {
       location: memory.location,
       entries: await memory.inspect(),
     },
+    secrets: secrets.state(),
+    backup: backup.state(),
   });
 
   return new Map<string, LiveSource>([
-    ["account", { topics: [ACCOUNT, COMPUTER, MEMORY], load: whole }],
+    [
+      "account",
+      { topics: [ACCOUNT, COMPUTER, MEMORY, SECRETS, BACKUP], load: whole },
+    ],
     ["chat", { topics: [CHAT], load: async () => await chat.state() }],
     ["apps", { topics: [APPS_TOPIC], load: async () => studio.state() }],
     [
@@ -213,12 +226,16 @@ function chatCalls(options: ShellApiOptions): Calls {
 }
 
 /** The person's decisions on an app's draft and its saved versions; a decision that cannot be made says why. */
-function studioCalls({ studio }: ShellApiOptions): Calls {
+function studioCalls({ studio, gateway, backup }: ShellApiOptions): Calls {
   const decision =
-    (decide: (id: string) => Promise<void>): Call =>
+    (decide: (id: string, name: string) => Promise<void>): Call =>
     async (args) => {
+      const id = text(args, 0);
+      // Read before the decision: an undo can remove the app.
+      const name = gateway.apps().find((app) => app.id === id)?.name ?? id;
+
       try {
-        await decide(text(args, 0));
+        await decide(id, name);
 
         return ok;
       } catch (error) {
@@ -229,8 +246,10 @@ function studioCalls({ studio }: ShellApiOptions): Calls {
   return [
     [
       "appsSave",
-      decision(async (id) => {
+      // A save or an undo changes the live code, which the backup keeps; a discard only drops a preview.
+      decision(async (id, name) => {
         await studio.save(id);
+        backup.record(`Save ${name}`);
       }),
     ],
     [
@@ -241,8 +260,9 @@ function studioCalls({ studio }: ShellApiOptions): Calls {
     ],
     [
       "appsUndo",
-      decision(async (id) => {
+      decision(async (id, name) => {
         await studio.undo(id);
+        backup.record(`Undo the last save of ${name}`);
       }),
     ],
   ];
@@ -284,6 +304,58 @@ function memoryCalls({ memory }: ShellApiOptions): Calls {
         const fact = text(args, 1);
 
         await memory.forget(text(args, 0), fact === "" ? undefined : fact);
+
+        return ok;
+      },
+    ],
+  ];
+}
+
+/** The owner's keys: added, replaced and deleted in Settings, never through the chat. */
+function secretsCalls({ secrets }: ShellApiOptions): Calls {
+  return [
+    [
+      "secretsPut",
+      async (args) =>
+        await secrets.put({
+          name: text(args, 0),
+          service: text(args, 1),
+          value: text(args, 2),
+          hosts: text(args, 3),
+          header: text(args, 4),
+          prefix: text(args, 5),
+          envName: text(args, 6),
+        }),
+    ],
+    ["secretsDelete", async (args) => await secrets.remove(text(args, 0))],
+    // The owner turns down a key the imp asked for.
+    ["secretsDismiss", (args) => secrets.dismiss(text(args, 0))],
+  ];
+}
+
+/** The backup's GitHub connection, made and dropped in Settings. */
+function backupCalls({ backup }: ShellApiOptions): Calls {
+  return [
+    [
+      "backupConnect",
+      () => {
+        backup.connect();
+
+        return ok;
+      },
+    ],
+    [
+      "backupCancel",
+      () => {
+        backup.cancel();
+
+        return ok;
+      },
+    ],
+    [
+      "backupDisconnect",
+      async () => {
+        await backup.disconnect();
 
         return ok;
       },

@@ -20,6 +20,8 @@ const RESERVED = new Set([
   "version",
   "settings",
   "memory",
+  "secrets",
+  "backup",
 ]);
 
 /** App ids: lowercase letters and digits, so `todosSetDone` splits into the app and its operation. */

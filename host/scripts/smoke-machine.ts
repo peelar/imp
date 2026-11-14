@@ -1,18 +1,20 @@
 // Smoke test for a machine adapter: prepare the image, ensure the machine, reach it through pi-env, run a command,
-// write and read a file, load an app on the app socket and call one of its operations, and reach the screen.
+// write and read a file, load an app on the app socket and call one of its operations, use a secret through the egress
+// proxy, and reach the screen.
 //
 //   MACHINE=e2b node scripts/smoke-machine.ts                      (needs E2B_API_KEY; MACHINE_CPUS, MACHINE_MEMORY_MB)
 //   MACHINE=ssh MACHINE_SSH=imp@homelab[:port] [MACHINE_SSH_KEY=~/.ssh/key] node scripts/smoke-machine.ts
 //   MACHINE=local node scripts/smoke-machine.ts
 import { once } from "node:events";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createRegistry } from "@earendil-works/pi-durable";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type RawData, WebSocket } from "ws";
-import type { MachineProvider } from "../src/machine.ts";
 import { Topics } from "../src/live.ts";
+import type { MachineProvider } from "../src/machine.ts";
 import { e2bProvider } from "../src/machine-e2b.ts";
 import { localProvider } from "../src/machine-local.ts";
 import { machineImage } from "../src/machine-runtime.ts";
@@ -22,6 +24,7 @@ import {
   fromAgentdCheck,
   type ToAgentd,
 } from "../src/protocol.ts";
+import { openSecrets } from "../src/secrets.ts";
 
 const started = Date.now();
 
@@ -189,28 +192,55 @@ ws.close();
 // A secret for httpbin.org's basic-auth check: the request from the machine gets 200 only with the real value, which
 // the host's egress proxy adds; the machine holds only the stand-in, in its environment and nowhere else.
 const value = Buffer.from("imp:smoke-pass").toString("base64");
+
 const secrets = openSecrets({
-	dataDir: mkdtempSync(join(tmpdir(), "imp-smoke-secrets-")),
-	toolsDir: join(tmpdir(), "imp-tools"),
-	topics: new Topics(),
-	registry: createRegistry(),
-	machine: async () => machine,
+  dataDir: mkdtempSync(path.join(tmpdir(), "imp-smoke-secrets-")),
+  toolsDir: path.join(tmpdir(), "imp-tools"),
+  topics: new Topics(),
+  registry: createRegistry(),
+  machine: async () => machine,
 });
-const added = await secrets.put({ name: "smoke", service: "other", value, hosts: "httpbin.org", header: "Authorization", prefix: "Basic ", envName: "SMOKE_KEY" });
-if (!added.ok) throw new Error(`adding the secret: ${added.error}`);
-const withSecrets = new RemoteExecutionEnv({ connection, id: "machine:smoke", cwd: workspace, shellEnv: await secrets.shellEnv() });
+
+const added = await secrets.put({
+  name: "smoke",
+  service: "other",
+  value,
+  hosts: "httpbin.org",
+  header: "Authorization",
+  prefix: "Basic ",
+  envName: "SMOKE_KEY",
+});
+
+if (!added.ok) {
+  throw new Error(`adding the secret: ${added.error}`);
+}
+
+const withSecrets = new RemoteExecutionEnv({
+  connection,
+  id: "machine:smoke",
+  cwd: workspace,
+  shellEnv: await secrets.shellEnv(),
+});
+
 out = "";
+
 await withSecrets.exec(
-	[
-		"curl -sS -o /dev/null -w 'curl %{http_code}\\n' https://httpbin.org/basic-auth/imp/smoke-pass",
-		`node -e "fetch('https://httpbin.org/basic-auth/imp/smoke-pass').then((r) => console.log('fetch', r.status))"`,
-		"echo stand-in $SMOKE_KEY",
-		`echo copies of the value: $( (grep -rl '${value}' ~ /proc/*/environ 2>/dev/null || true) | wc -l)`,
-	].join("; "),
-	{ onOutput: (text: string) => void (out += text) },
-	BACKGROUND_CONTEXT,
+  [
+    "curl -sS -o /dev/null -w 'curl %{http_code}\\n' https://httpbin.org/basic-auth/imp/smoke-pass",
+    `node -e "fetch('https://httpbin.org/basic-auth/imp/smoke-pass').then((r) => console.log('fetch', r.status))"`,
+    "echo stand-in $SMOKE_KEY",
+    `echo copies of the value: $( (grep -rl '${value}' ~ /proc/*/environ 2>/dev/null || true) | wc -l)`,
+  ].join("; "),
+  {
+    onOutput: (text: string) => {
+      out += text;
+    },
+  },
+  BACKGROUND_CONTEXT
 );
+
 lap(`egress:\n${out.trim()}\nuses: ${JSON.stringify(secrets.state().uses)}`);
+
 secrets.close();
 
 // The screen answers with the VNC (RFB) server's greeting, such as "RFB 003.008".
@@ -221,7 +251,6 @@ const greeting = await nextFrame(vnc, "the screen");
 lap(`screen: ${greeting.trim()}`);
 
 vnc.close();
-
 
 connection.close();
 

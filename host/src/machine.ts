@@ -66,11 +66,21 @@ export type Machine = {
    * the headers it needs. It closes with a reason when the machine has no screen.
    */
   readonly screen: (signal?: AbortSignal) => Promise<Endpoint>;
+  /**
+   * The machine's egress proxy: the control socket the host opens to it (agentd's `/egress`), and what a command on
+   * the machine needs in its environment for its HTTPS requests to go through it.
+   */
+  readonly egress: (signal?: AbortSignal) => Promise<MachineEgress>;
   /** An endpoint the host can reach that forwards to `port` on the machine, with the headers it needs. */
   readonly expose: (port: number, signal?: AbortSignal) => Promise<Endpoint>;
   /** The host is using the machine: postpone the idle suspend by another `idleSuspendMs`. */
   readonly keepAlive: (signal?: AbortSignal) => Promise<void>;
   readonly suspend: (signal?: AbortSignal) => Promise<void>;
+};
+
+export type MachineEgress = {
+  readonly socket: Endpoint;
+  readonly env: Readonly<Record<string, string>>;
 };
 
 export type Endpoint = {

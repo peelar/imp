@@ -4,11 +4,17 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { Machine, MachineProvider, MachineSpec } from "./machine.ts";
+import type {
+  Machine,
+  MachineEgress,
+  MachineProvider,
+  MachineSpec,
+} from "./machine.ts";
 import {
   agentdEndpoints,
   agentdEnv,
   agentdToken,
+  egressEnv,
   healthFor,
   runtime,
   type Runtime,
@@ -26,6 +32,7 @@ export type LocalProviderOptions = {
 type Agentd = {
   readonly child: ChildProcess;
   readonly port: number;
+  readonly egressPort: number;
   readonly token: string;
 };
 
@@ -82,22 +89,28 @@ export function localProvider(options: LocalProviderOptions): MachineProvider {
         await mkdir(path.join(home(spec.key), "workspace"), {
           recursive: true,
         });
-        const port = await freePort();
+        // Every local machine shares the host's loopback, so each takes free ports.
+        const [port, egressPort] = await Promise.all([freePort(), freePort()]);
 
         const child = spawnAgentd({
           runtimeDir,
           home: home(spec.key),
           port,
+          egressPort,
           token,
           digest,
         });
 
-        current = { child, port, token };
+        current = { child, port, egressPort, token };
         running.set(spec.key, current);
         await started(port, expected);
       }
 
-      return localMachine(spec.key, current.port, token);
+      return localMachine(spec.key, {
+        port: current.port,
+        token,
+        egress: egressEnv(home(spec.key), current.egressPort),
+      });
     },
 
     async destroy(key: string) {
@@ -121,15 +134,23 @@ function spawnAgentd(options: {
   readonly runtimeDir: string;
   readonly home: string;
   readonly port: number;
+  readonly egressPort: number;
   readonly token: string;
   readonly digest: string;
 }): ChildProcess {
-  const { runtimeDir, home, port, token, digest } = options;
+  const { runtimeDir, home, port, egressPort, token, digest } = options;
 
   return spawn(process.execPath, [path.join(runtimeDir, "agentd.mjs")], {
     env: {
       ...process.env,
-      ...agentdEnv({ token, digest, runtimeDir, home, host: "127.0.0.1" }),
+      ...agentdEnv({
+        token,
+        digest,
+        runtimeDir,
+        home,
+        host: "127.0.0.1",
+        egressPort,
+      }),
       AGENTD_PORT: String(port),
       HOME: home,
     },
@@ -152,10 +173,17 @@ async function started(port: number, expected: string): Promise<void> {
   throw new Error("agentd did not start on the local machine");
 }
 
-function localMachine(key: string, agentdPort: number, token: string): Machine {
+/** How to reach a machine's agentd on this computer, and what its commands need for the egress proxy. */
+type LocalAgentd = {
+  readonly port: number;
+  readonly token: string;
+  readonly egress: MachineEgress["env"];
+};
+
+function localMachine(key: string, agentd: LocalAgentd): Machine {
   const endpoints = agentdEndpoints(
-    { url: `http://127.0.0.1:${agentdPort}`, headers: {} },
-    token
+    { url: `http://127.0.0.1:${agentd.port}`, headers: {} },
+    agentd.token
   );
 
   return {
@@ -163,6 +191,7 @@ function localMachine(key: string, agentdPort: number, token: string): Machine {
     daemonCommand: async () => endpoints.daemonCommand,
     appSocket: async () => endpoints.appSocket,
     screen: async () => endpoints.screen,
+    egress: async () => ({ socket: endpoints.egress, env: agentd.egress }),
     expose: async (port) => ({
       url: `http://127.0.0.1:${port}`,
       headers: {},

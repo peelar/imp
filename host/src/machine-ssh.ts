@@ -24,6 +24,7 @@ import {
   agentdEndpoints,
   agentdEnv,
   agentdToken,
+  egressEnv,
   healthFor,
   runtime,
   runtimePattern,
@@ -421,6 +422,10 @@ function sshMachine(
     daemonCommand: async () => (await endpoints()).daemonCommand,
     appSocket: async () => (await endpoints()).appSocket,
     screen: async () => (await endpoints()).screen,
+    egress: async () => ({
+      socket: (await endpoints()).egress,
+      env: egressEnv(remote.target.home),
+    }),
     expose: async (remotePort) => ({
       url: `http://127.0.0.1:${(await tunnels.to(remotePort)).port}`,
       headers: {},

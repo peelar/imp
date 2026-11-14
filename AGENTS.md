@@ -5,10 +5,10 @@
 ## Checks
 
 - Install twice: `npm ci` at the root (lint, format and type tooling) and `npm ci` in `host/` (the host's own dependencies).
-- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (the host's API tests, about 10 seconds) at the root. CI runs the same two.
+- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (the host's API tests, about a minute) at the root. CI runs the same two.
 - `npm run lint:fix` formats and applies the automatic fixes. Run it before fixing diagnostics by hand; some fixes only apply on a second run.
 - After a change to the client, or to what the host sends it, also run `cd client && bun exact.mjs test web` (needs Bun and Exact; see `client/AGENTS.md`).
-- A new behavior of the host's HTTP API gets a test in `host/test/api.test.ts`, which drives a real host with a scripted model (`host/scripts/test-host.ts`).
+- A new behavior of the host's HTTP API gets a test in `host/test/`, in the file for its part of the API (`api.test.ts`, `secrets.test.ts`, `backup.test.ts`). Each file starts its own host with a scripted model (`host/test/harness.ts`, `host/scripts/test-host.ts`). `npm test` runs the files one at a time, because the hosts share one folder of downloaded programs (OpenBao, mitmproxy).
 
 ## Lint policy
 
@@ -28,10 +28,13 @@ What the rules ask for, where the answer is a design choice:
 ## Module boundaries in `host/src`
 
 - `host.ts` only composes. What the shell reads and changes is in `shell-api.ts`; how it is served is in `http.ts`.
-- `protocol.ts` is the one definition of the messages between the host, agentd and each app's worker. `host/machine/*.ts` runs on the agent's machine with its types stripped and no packages except `ws`: import types only there, and nothing from `host/src` at runtime.
+- `protocol.ts` is the one definition of the messages between the host, agentd, each app's worker and agentd's egress proxy. `host/machine/*.ts` runs on the agent's machine with its types stripped and no packages except `ws`: import types only there, and nothing from `host/src` at runtime.
 - `apps.ts` is the app gateway and composes `app-folders.ts`, `app-manifest.ts`, `app-data.ts`, `app-machine.ts` and `app-tools.ts`. An app's data stays on the host; only `app-data.ts` touches its SQLite file.
+- `secrets.ts` composes the vault (`vault.ts`, `vault-server.ts`, `vault-files.ts`), the egress proxy (`egress.ts`, `egress-proxy.ts`) and the `secret-*.ts` modules. A secret's value goes into the vault and is read back only by mitmproxy's addon (`host/egress/inject.py`): nothing in `host/src` reads, logs or shows a value, and none goes to the agent's machine, which gets stand-ins.
+- `backup.ts` composes `backup-history.ts` (the git repository of the apps' code) and `backup-github.ts` (the sign-in and the repository on GitHub). Both run git and gh only through `backup-commands.ts`, which keeps the host's GitHub sign-in in its data directory and drops GitHub tokens from the environment.
+- A program the host starts and must not leave behind registers with `killOnExit` in `children.ts`.
 - Only `computer-machines.ts` names a machine provider. Everything else reaches the agent's machine through the `Machine` contract in `machine.ts`.
-- The shell opens at most five live streams, because a browser allows six connections per host and a sixth stream makes calls hang. New shell state rides on an existing stream, as the computer and memory ride on `account`.
+- The shell opens at most five live streams, because a browser allows six connections per host and a sixth stream makes calls hang. New shell state rides on an existing stream, as the computer, memory, secrets and backup ride on `account`.
 - A name the shell's API starts with (such as `memory`) is added to `RESERVED` in `app-folders.ts`, so no app can take it as its id.
 
 ## Generated and shipped files

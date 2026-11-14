@@ -6,12 +6,13 @@
 // /pi-env   carries a pi-env daemon's stdin and stdout over a WebSocket. Frames to the host start with one byte: 1 for
 //           stdout, 2 for stderr. Frames from the host are the daemon's stdin.
 // /screen   the computer's screen: a VNC (RFB) stream over a WebSocket, bridged to x11vnc's socket (see screen.sh).
+// /egress   the egress proxy's control socket (see egress.ts), and with `&stream=<id>` one tunnel.
 // /apps     the app daemon: the host loads each app's server code, and agentd runs it in a worker of its own, so a
 //           new version replaces the old worker and terminating it frees everything. One host connection at a time;
 //           workers keep running when it drops, and the host loads every app again when it reconnects.
 //
 // The host strips this file's types and installs it on the machine as agentd.mjs (src/machine-runtime.ts), beside
-// worker.mjs and the ws package. Import only types, Node's own modules and ws.
+// worker.mjs, egress.mjs and the ws package. Import only types, Node's own modules and ws.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
@@ -28,6 +29,7 @@ import type {
   ToAgentd,
   ToWorker,
 } from "../src/protocol.ts";
+import { egressProxy } from "./egress.ts";
 
 type Outcome = { ok: true; value: Json } | { ok: false; error: string };
 
@@ -63,6 +65,12 @@ const server = createServer((req, res) => {
     .end(req.url === "/health" ? tokenHash : "");
 });
 
+// Where the agent's commands send their HTTPS requests, so the host can put the owner's secrets on them.
+const egress = egressProxy({
+  port: Number(process.env.EGRESS_PORT ?? 7071),
+  dir: process.env.EGRESS_DIR ?? path.join(home, ".cache", "imp"),
+});
+
 const wss = new WebSocketServer({
   noServer: true,
   maxPayload: 64 * 1024 * 1024,
@@ -73,7 +81,7 @@ server.on("upgrade", (req, socket, head) => {
 
   if (
     url.searchParams.get("token") !== token ||
-    !["/pi-env", "/apps", "/screen"].includes(url.pathname)
+    !["/pi-env", "/apps", "/screen", "/egress"].includes(url.pathname)
   ) {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
 
@@ -90,6 +98,8 @@ server.on("upgrade", (req, socket, head) => {
       servePiEnv(ws, daemon, args);
     } else if (url.pathname === "/screen") {
       serveScreen(ws);
+    } else if (url.pathname === "/egress") {
+      egress.serve(ws, url.searchParams.get("stream"));
     } else {
       serveApps(ws);
     }
@@ -468,6 +478,8 @@ function call(message: Extract<ToAgentd, { t: "call" }>) {
 server.listen(port, process.env.AGENTD_HOST ?? "0.0.0.0", () => {
   console.log(`agentd listening on ${port}`);
 });
+
+egress.listen();
 
 // The screen starts with the machine, so the agent's programs have a display before anyone opens it.
 console.log(

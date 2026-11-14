@@ -1,225 +1,269 @@
 // A copy of the apps' code away from the host's own folders. Every save and undo commits the live apps' code to a git
-// repository in DATA_DIR/backup, a folder per app, so every version is kept for good (Undo's history, which also holds
-// the data, lasts 48 hours). Connected in Settings, the host also pushes each commit to a private GitHub repository of
-// the person's, imp-apps. It signs in with the GitHub CLI's device code flow, as the ChatGPT sign-in does (signin.ts),
-// and keeps that sign-in in DATA_DIR/gh beside the host's other credentials. Only code is backed up: the apps' data
+// repository in DATA_DIR/backup, a folder per app, so every version is kept for good (backup-history.ts; Undo's
+// history, which also holds the data, lasts 48 hours). Connected in Settings, the host also pushes each commit to a
+// private GitHub repository of the person's, imp-apps (backup-github.ts). Only code is backed up: the apps' data
 // stays on the host.
 //
 // The host needs git for the history and the GitHub CLI (gh) for GitHub; Settings says which one is missing.
-import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { APP_FILES, type AppInfo } from "./apps.ts";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { compile, obj, str } from "@earendil-works/pi-schema";
+import type { AppInfo } from "./app-folders.ts";
+import { backupCommands } from "./backup-commands.ts";
+import { githubSignIn, type Remote } from "./backup-github.ts";
+import { type BackupHistory, backupHistory } from "./backup-history.ts";
 import type { Topics } from "./live.ts";
 
 export const TOPIC = "backup";
-/** The repository the apps go to, under the person's GitHub account. */
-const REPO_NAME = "imp-apps";
 
-export interface Backup {
-	/** Whether the host has git, which keeps the versions. */
-	git: boolean;
-	/** GitHub: "off", "starting", "waiting" (for the person to enter `code` at `url`) or "on" (pushing to `repo`). */
-	status: string;
-	code: string;
-	url: string;
-	/** "owner/imp-apps" while on. */
-	repo: string;
-	/** Why connecting or the last push failed; "" when neither did. */
-	error: string;
-	/** How many versions the history keeps. */
-	versions: number;
-	/** Whether GitHub has the newest one. */
-	synced: boolean;
+export type Backup = {
+  /** Whether the host has git, which keeps the versions. */
+  readonly git: boolean;
+  /** GitHub: "off", "starting", "waiting" (for the person to enter `code` at `url`) or "on" (pushing to `repo`). */
+  readonly status: string;
+  readonly code: string;
+  readonly url: string;
+  /** "owner/imp-apps" while on. */
+  readonly repo: string;
+  /** Why connecting or the last push failed; "" when neither did. */
+  readonly error: string;
+  /** How many versions the history keeps. */
+  readonly versions: number;
+  /** Whether GitHub has the newest one. */
+  readonly synced: boolean;
+};
+
+export type BackupOptions = {
+  readonly dataDir: string;
+  readonly topics: Topics;
+  /** The live apps, whose code is backed up. */
+  readonly apps: () => readonly AppInfo[];
+  /** The GitHub CLI to run. Default: gh on PATH. */
+  readonly gh?: string | undefined;
+  readonly log?: ((message: string) => void) | undefined;
+};
+
+export type AppBackup = ReturnType<typeof appBackup>;
+
+const remoteJson = compile(obj({ repo: str(), url: str() }));
+
+const why = (cause: unknown) =>
+  cause instanceof Error ? cause.message : String(cause);
+
+/** A promise that settles when `work` does and never rejects. */
+const ended = async (work: Promise<unknown>) => {
+  try {
+    await work;
+  } catch {
+    // Whoever asked for the work hears of its failure; the queue only waits for it.
+  }
+};
+
+/** One piece of work at a time, in the order it was asked for. */
+function oneAtATime() {
+  let queue = Promise.resolve();
+
+  return async <T>(work: () => Promise<T>): Promise<T> => {
+    // The queue never rejects (see `ended`), so the work runs whether the one before it worked or failed.
+    const next = queue.then(work);
+
+    queue = ended(next);
+
+    return await next;
+  };
 }
 
-export interface BackupOptions {
-	readonly dataDir: string;
-	readonly topics: Topics;
-	/** The live apps, whose code is backed up. */
-	readonly apps: () => readonly AppInfo[];
-	/** The GitHub CLI to run. Default: gh on PATH. */
-	readonly gh?: string;
-	readonly log?: (message: string) => void;
+/** Where the host pushes to, kept in DATA_DIR/backup.json while GitHub is connected. */
+function keptRemote(file: string) {
+  /** As the host wrote it; none when the file is missing or says anything else. */
+  const read = (): Remote | undefined => {
+    if (!existsSync(file)) {
+      return undefined;
+    }
+
+    const kept: unknown = JSON.parse(readFileSync(file, "utf-8"));
+
+    return remoteJson.check(kept) ? kept : undefined;
+  };
+
+  let remote = read();
+
+  return {
+    current: () => remote,
+    keep: (next: Remote) => {
+      remote = next;
+      writeFileSync(file, JSON.stringify(next));
+    },
+    forget: () => {
+      remote = undefined;
+      rmSync(file, { force: true });
+    },
+  };
 }
 
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const NOT_CONNECTED = { status: "off", code: "", url: "", repo: "" };
+
+type KeptRemote = ReturnType<typeof keptRemote>;
+
+/** What Settings shows of the backup, which every change tells the shell about. */
+function backupState(topics: Topics, remote: KeptRemote) {
+  let state: Backup = {
+    ...NOT_CONNECTED,
+    git: false,
+    status: remote.current() ? "on" : "off",
+    repo: remote.current()?.repo ?? "",
+    error: "",
+    versions: 0,
+    synced: false,
+  };
+
+  return {
+    now: () => state,
+    set: (next: Partial<Backup>) => {
+      state = { ...state, ...next };
+      topics.changed(TOPIC);
+    },
+  };
+}
+
+type Keeping = {
+  readonly history: BackupHistory;
+  readonly remote: KeptRemote;
+  readonly state: ReturnType<typeof backupState>;
+  readonly log: (message: string) => void;
+};
+
+/** Keeping the versions: each one committed to the history, then pushed to GitHub when it is connected. */
+function versionKeeper({ history, remote, state, log }: Keeping) {
+  // One change at a time: commits and pushes.
+  const serial = oneAtATime();
+
+  /** Whether the history can be kept: the host has git, and the repository is there. */
+  const ready = serial(async () => {
+    try {
+      await history.open();
+      state.set({ git: true, versions: await history.count() });
+
+      return true;
+    } catch (cause) {
+      log(`backup: no history of the apps' versions: ${why(cause)}`);
+
+      return false;
+    }
+  });
+
+  /** Pushes what GitHub does not have yet; a failure is shown in Settings, and the next save tries again. */
+  const push = async () => {
+    const to = remote.current();
+
+    if (!to || !(await ready) || state.now().versions === 0) {
+      return;
+    }
+
+    try {
+      await history.push(to.url);
+      state.set({ synced: true, error: "" });
+    } catch (cause) {
+      state.set({
+        synced: false,
+        error: `Could not back up to ${to.repo}: ${why(cause)}`,
+      });
+    }
+  };
+
+  return {
+    serial,
+    push,
+    /** Keeps the apps' code as it is now, and pushes it. */
+    record: (summary: string) => {
+      serial(async () => {
+        if (!(await ready)) {
+          return;
+        }
+
+        if (await history.commit(summary)) {
+          state.set({ versions: await history.count(), synced: false });
+        }
+
+        await push();
+      }).catch((cause: unknown) => {
+        log(`backup: ${why(cause)}`);
+      });
+    },
+  };
+}
 
 export function appBackup(options: BackupOptions) {
-	const log = options.log ?? ((line) => console.error(line));
-	const dir = join(options.dataDir, "backup");
-	const ghDir = join(options.dataDir, "gh");
-	const remoteFile = join(options.dataDir, "backup.json");
-	const gh = options.gh ?? "gh";
-	// The host's own GitHub sign-in, never a token from its environment; no browser opens on the host.
-	const env: NodeJS.ProcessEnv = { ...process.env, GH_CONFIG_DIR: ghDir, BROWSER: "true", GH_NO_UPDATE_NOTIFIER: "1", GIT_TERMINAL_PROMPT: "0" };
-	for (const name of ["GH_TOKEN", "GITHUB_TOKEN", "GH_HOST", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]) delete env[name];
+  const commands = backupCommands(options);
+  const github = githubSignIn(commands);
+  const remote = keptRemote(path.join(options.dataDir, "backup.json"));
+  const state = backupState(options.topics, remote);
 
-	let remote = existsSync(remoteFile) ? (JSON.parse(readFileSync(remoteFile, "utf8")) as { repo: string; url: string }) : undefined;
-	let state: Backup = { git: false, status: remote ? "on" : "off", code: "", url: "", repo: remote?.repo ?? "", error: "", versions: 0, synced: false };
-	const set = (next: Partial<Backup>) => {
-		state = { ...state, ...next };
-		options.topics.changed(TOPIC);
-	};
+  const keeper = versionKeeper({
+    history: backupHistory({ commands, apps: options.apps }),
+    remote,
+    state,
+    log:
+      options.log ??
+      ((line) => {
+        console.error(line);
+      }),
+  });
 
-	const run = (command: string, args: readonly string[], cwd?: string) =>
-		new Promise<string>((resolve, reject) => {
-			execFile(command, args, { cwd, env, timeout: 120_000 }, (error, stdout, stderr) => {
-				if (!error) return resolve(String(stdout).trim());
-				if ((error as NodeJS.ErrnoException).code === "ENOENT") return reject(new Error(`${command} is not installed on the host.`));
-				reject(new Error(String(stderr).trim() || error.message));
-			});
-		});
-	// Git as the host uses it, whatever the machine's own git settings say. Pushes sign in through the host's gh.
-	const git = (...args: string[]) =>
-		run(
-			"git",
-			[
-				"-c", "user.name=Imp",
-				"-c", "user.email=imp@localhost",
-				"-c", "commit.gpgsign=false",
-				"-c", "core.hooksPath=/dev/null",
-				"-c", "credential.helper=",
-				"-c", `credential.helper=!'${gh}' auth git-credential`,
-				...args,
-			],
-			dir,
-		);
+  /** After the sign-in: the person's repository is where the versions go, starting with the ones there are. */
+  const finish = async () => {
+    const found = await github.repository();
 
-	// One change at a time: commits and pushes.
-	let queue: Promise<unknown> = Promise.resolve();
-	const serial = <T>(work: () => Promise<T>): Promise<T> => {
-		const next = queue.then(work, work);
-		queue = next.catch(() => undefined);
-		return next;
-	};
+    remote.keep(found);
+    state.set({ status: "on", repo: found.repo, code: "", url: "", error: "" });
+    await keeper.push();
+  };
 
-	const count = async () => Number(await git("rev-list", "--count", "HEAD").catch(() => "0"));
+  const fail = (error: string) => {
+    state.set({ ...NOT_CONNECTED, error });
+  };
 
-	const ready = serial(async () => {
-		try {
-			await run("git", ["--version"]);
-			mkdirSync(dir, { recursive: true });
-			if (!existsSync(join(dir, ".git"))) await git("init", "--quiet", "--initial-branch=main");
-			set({ git: true, versions: await count() });
-			return true;
-		} catch (error) {
-			log(`backup: no history of the apps' versions: ${message(error)}`);
-			return false;
-		}
-	});
+  return {
+    state: state.now,
+    record: keeper.record,
+    /** Keeps the apps as the host starts with them, and pushes what GitHub does not have yet. */
+    start: () => {
+      keeper.record("Keep the apps as the host started with them");
+    },
+    /** GitHub's device code sign-in: the code shows in Settings, and the person approves on any device. */
+    connect: () => {
+      if (state.now().status !== "off") {
+        return;
+      }
 
-	/** Commits the live apps as they are now, when that differs from the last version. */
-	async function commit(summary: string) {
-		for (const entry of readdirSync(dir)) if (entry !== ".git") rmSync(join(dir, entry), { recursive: true, force: true });
-		for (const app of options.apps()) {
-			mkdirSync(join(dir, app.id));
-			for (const name of APP_FILES) writeFileSync(join(dir, app.id, name), app.files[name]);
-		}
-		await git("add", "--all");
-		if (!(await git("status", "--porcelain"))) return;
-		await git("commit", "--quiet", "--message", summary);
-		set({ versions: await count(), synced: false });
-	}
+      state.set({ status: "starting", code: "", url: "", error: "" });
+      github.start({
+        onCode: (code, url) => {
+          if (state.now().status === "starting") {
+            state.set({ status: "waiting", code, url });
+          }
+        },
+        onSignedIn: () => {
+          keeper.serial(finish).catch((cause: unknown) => {
+            fail(`Signed in to GitHub, but ${why(cause)}`);
+          });
+        },
+        onFailed: fail,
+      });
+    },
+    cancel: () => {
+      github.stop();
 
-	async function push() {
-		if (!remote || state.versions === 0) return;
-		try {
-			await git("push", "--quiet", remote.url, "HEAD:refs/heads/main");
-			set({ synced: true, error: "" });
-		} catch (error) {
-			set({ synced: false, error: `Could not back up to ${remote.repo}: ${message(error)}` });
-		}
-	}
-
-	/** Keeps the apps' code as it is now, and pushes it. */
-	function record(summary: string) {
-		serial(async () => {
-			if (!(await ready)) return;
-			await commit(summary);
-			await push();
-		}).catch((error) => log(`backup: ${message(error)}`));
-	}
-
-	/** After the sign-in: the person's imp-apps repository, made private if it is not there yet. */
-	async function finish() {
-		const owner = await run(gh, ["api", "user", "--jq", ".login"]);
-		const repo = `${owner}/${REPO_NAME}`;
-		const view = () => run(gh, ["repo", "view", repo, "--json", "url", "--jq", ".url"]);
-		const url = await view().catch(async () => {
-			await run(gh, ["repo", "create", repo, "--private", "--description", "My Imp apps' code, backed up by my Imp host."]);
-			return view();
-		});
-		remote = { repo, url };
-		writeFileSync(remoteFile, JSON.stringify(remote));
-		set({ status: "on", repo, code: "", url: "", error: "" });
-		if (await ready) await push();
-	}
-
-	let login: ChildProcess | undefined;
-	const stopLogin = () => {
-		const child = login;
-		login = undefined;
-		child?.kill();
-	};
-
-	return {
-		state: () => state,
-		record,
-		/** Keeps the apps as the host starts with them, and pushes what GitHub does not have yet. */
-		start: () => record("Keep the apps as the host started with them"),
-
-		/** GitHub's device code sign-in: the code shows in Settings, and the person approves on any device. */
-		connect() {
-			if (state.status !== "off") return;
-			mkdirSync(ghDir, { recursive: true, mode: 0o700 });
-			set({ status: "starting", code: "", url: "", error: "" });
-			// --insecure-storage keeps the token in DATA_DIR/gh, as the ChatGPT one is in DATA_DIR, not in a keychain
-			// that a background service may not reach.
-			const child = spawn(
-				gh,
-				["auth", "login", "--hostname", "github.com", "--web", "--git-protocol", "https", "--skip-ssh-key", "--insecure-storage"],
-				{ env, stdio: ["ignore", "pipe", "pipe"] },
-			);
-			login = child;
-			let output = "";
-			const read = (chunk: Buffer) => {
-				output += chunk.toString("utf8");
-				const code = output.match(/one-time code: ([A-Z0-9]{4}-[A-Z0-9]{4})/)?.[1];
-				const url = output.match(/https:\/\/\S+\/login\/device/)?.[0];
-				if (code && url && login === child && state.status === "starting") set({ status: "waiting", code, url });
-			};
-			child.stdout.on("data", read);
-			child.stderr.on("data", read);
-			const fail = (error: string) => set({ status: "off", code: "", url: "", error });
-			child.on("error", (error) => {
-				if (login !== child) return;
-				login = undefined;
-				fail((error as NodeJS.ErrnoException).code === "ENOENT" ? "The host needs the GitHub CLI: install gh (cli.github.com) on it, then connect again." : error.message);
-			});
-			child.on("close", (exit) => {
-				if (login !== child) return;
-				login = undefined;
-				if (exit !== 0) return fail(output.trim().split("\n").at(-1) || `GitHub's sign-in stopped (${exit}).`);
-				serial(finish).catch((error) => fail(`Signed in to GitHub, but ${message(error)}`));
-			});
-		},
-
-		cancel() {
-			stopLogin();
-			if (state.status !== "on") set({ status: "off", code: "", url: "", error: "" });
-		},
-
-		/** Stops pushing and signs the host out of GitHub. The repository on GitHub stays. */
-		async disconnect() {
-			stopLogin();
-			await run(gh, ["auth", "logout", "--hostname", "github.com"]).catch(() => undefined);
-			rmSync(ghDir, { recursive: true, force: true });
-			rmSync(remoteFile, { force: true });
-			remote = undefined;
-			set({ status: "off", code: "", url: "", repo: "", error: "", synced: false });
-		},
-
-		close: stopLogin,
-	};
+      if (state.now().status !== "on") {
+        fail("");
+      }
+    },
+    /** Stops pushing and signs the host out of GitHub. The repository on GitHub stays. */
+    disconnect: async () => {
+      await github.signOut();
+      remote.forget();
+      state.set({ ...NOT_CONNECTED, error: "", synced: false });
+    },
+    close: github.stop,
+  };
 }

@@ -29,20 +29,22 @@ import {
   settledChat,
   startTestHost,
   stopTestHost,
+  toolRow,
   until,
 } from "./harness.ts";
 
 const todoTitles = (answer: Json) => rows(answer).map((todo) => todo.title);
 
-/** The account once it has this status, without the computer and the memory that ride on the same stream. */
-const withStatus = (status: string) => (answer: Json) => {
-  const {
-    computer: _computer,
-    memory: _memory,
-    ...account
-  } = isRow(answer) ? answer : {};
+/**
+ * The account once it has this status: the sign-in's own fields, without the computer, the memory, the secrets and
+ * the backup that ride on the same stream.
+ */
+const withStatus = (wanted: string) => (answer: Json) => {
+  const { status, code, url, error, email, plan } = isRow(answer) ? answer : {};
 
-  return account.status === status ? account : undefined;
+  return status === wanted
+    ? { status, code, url, error, email, plan }
+    : undefined;
 };
 
 /** What the imp remembers, once `accept` takes its entries; it rides on the account stream. */
@@ -327,24 +329,6 @@ let previews = 0;
 const inNotes = (name: string) =>
   readFileSync(path.join(notesDir, name), "utf-8");
 
-/**
- * Sends the agent a message that makes it call a tool, and answers the transcript's row for the call once the agent
- * is done: the message, that row and the model's "Done." are then the last three.
- */
-async function toolRow(message: string) {
-  assert.deepEqual(await call("chatSend", [message, ""]), done);
-
-  const messages = await until(
-    "chat",
-    settledChat((all) => all.at(-3)?.text === message),
-    60_000
-  );
-
-  const { title, text, failed } = messages.at(-2) ?? {};
-
-  return { title, text, failed };
-}
-
 /** Writes the starter's server.ts with one change into the workspace and has the agent preview it. */
 async function preview(from: string, to: string) {
   const changed = starter.replace(from, to);
@@ -417,6 +401,12 @@ it("only a draft is saved or discarded and only a save undone; Save makes the dr
   assert.deepEqual(await call("appsSave", ["notes"]), done);
   // What was tried in the draft went with it. Undoing the save that made the app would remove the app.
   assert.deepEqual(await notes(), saved("remove"));
+  // The save is a version of the apps' code the backup keeps, after the one the host started with.
+  await until("account", (answer) =>
+    isRow(answer) && isRow(answer.backup) && answer.backup.versions === 2
+      ? answer
+      : undefined
+  );
   assert.deepEqual(await call("notesAddNote", ["Kept"]), done);
 });
 
