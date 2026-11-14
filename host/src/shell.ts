@@ -13,7 +13,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, relative } from "node:path";
+import path from "node:path";
 import type { AppFiles } from "./app-folders.ts";
 import type { Operation } from "./protocol.ts";
 
@@ -33,7 +33,7 @@ const SKIP = new Set([
   "app.contract.d.ts",
 ]);
 
-const pascal = (name: string) => name[0].toUpperCase() + name.slice(1);
+const pascal = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
 
 const CONTRACT_TYPE = {
   string: "string",
@@ -43,11 +43,17 @@ const CONTRACT_TYPE = {
   enum: "string",
 } as const;
 
+type ScreenProp = { readonly name: string; readonly type: string };
+
+/** The prop a line of a `props` block declares, as `name: type`; none when the line is something else. */
+const propIn = (line: string): ScreenProp[] => {
+  const [, name, type] = /^(\w+)\s*:\s*(.+)$/.exec(line.trim()) ?? [];
+
+  return name === undefined || type === undefined ? [] : [{ name, type }];
+};
+
 /** The props of the app's `component Screen`, in order. */
-export function screenProps(
-  id: string,
-  contract: string
-): { name: string; type: string }[] {
+export function screenProps(id: string, contract: string): ScreenProp[] {
   const lines = contract.split("\n");
   const start = lines.findIndex((line) => /^component Screen\s*$/.test(line));
 
@@ -57,7 +63,7 @@ export function screenProps(
     );
   }
 
-  const props: { name: string; type: string }[] = [];
+  const props: ScreenProp[] = [];
   let inProps = false;
 
   for (const line of lines.slice(start + 1)) {
@@ -84,107 +90,152 @@ export function screenProps(
       continue;
     }
 
-    const prop = /^(\w+)\s*:\s*(.+)$/.exec(line.trim());
-
-    if (prop) {
-      props.push({ name: prop[1], type: prop[2] });
-    }
+    props.push(...propIn(line));
   }
 
   return props;
+}
+
+type ShellOperation = ShellApp["operations"][number];
+
+/** What one prop of an app's Screen adds to the root. */
+type PropWiring = {
+  readonly members: readonly string[];
+  readonly refresh: readonly string[];
+  readonly mutations: readonly string[];
+  /** The prop, bound to what the root feeds it. */
+  readonly binding: string;
+  /** The app's Contract types the prop's type names, which the root imports under the app's name. */
+  readonly typeNames: readonly string[];
+};
+
+type Wired =
+  | { readonly ok: true; readonly wiring: PropWiring }
+  | { readonly ok: false; readonly problem: string };
+
+/** A prop of type `action`: a write the screen calls with the write's params in order. */
+function wireAction(
+  id: string,
+  prop: ScreenProp,
+  operation: ShellOperation
+): Wired {
+  if (operation.kind !== "write") {
+    return {
+      ok: false,
+      problem: `Screen's prop ${prop.name} is an action, but ${operation.name} is a read: give the prop its answer's type, such as Item[]`,
+    };
+  }
+
+  const call = `${id}${pascal(operation.name)}`;
+
+  const params = Object.values(operation.params).map(
+    (param, i) => `arg${i + 1}: ${CONTRACT_TYPE[param.type]}`
+  );
+
+  const args = params.map((_, i) => `arg${i + 1}`).join(", ");
+  const action = `${id}Do${pascal(operation.name)}`;
+
+  return {
+    ok: true,
+    wiring: {
+      members: [
+        `  mutation ${id}Wrote${pascal(operation.name)} as shape Reply queue`,
+        `  action ${action}${params.length > 0 ? `(${params.join(", ")})` : ""}`,
+        `    send ${id}Wrote${pascal(operation.name)} = ${call}(${args})`,
+      ],
+      refresh: [],
+      mutations: [`  ${call}: true,`],
+      binding: `${prop.name}=${action}`,
+      typeNames: [],
+    },
+  };
+}
+
+/** Any other prop: a read without params, streamed live. */
+function wireRead(
+  id: string,
+  prop: ScreenProp,
+  operation: ShellOperation
+): Wired {
+  if (operation.kind !== "read") {
+    return {
+      ok: false,
+      problem: `Screen's prop ${prop.name} is a value, but ${operation.name} is a write: make the prop an action`,
+    };
+  }
+
+  if (Object.keys(operation.params).length > 0) {
+    return {
+      ok: false,
+      problem: `Screen's prop ${prop.name}: ${operation.name} takes params, and the screen can only use reads without params (filter in the screen)`,
+    };
+  }
+
+  // The app's types, named for the root by the app: Item is TodosItem there.
+  const exported = /\b[A-Z]\w*\b/g;
+  const type = prop.type.replaceAll(exported, (name) => `${pascal(id)}${name}`);
+  const resource = `${id}Read${pascal(operation.name)}`;
+
+  return {
+    ok: true,
+    wiring: {
+      members: [
+        `  resource ${resource} = ${id}${pascal(operation.name)}() when signedIn as shape ${type} else empty()`,
+        `  derive ${resource}Lost = match failure(${resource}) { case some(f) => true, case none => false }`,
+      ],
+      refresh: [`    if ${resource}Lost`, `      refresh ${resource}`],
+      mutations: [],
+      binding: `${prop.name}=${resource}`,
+      typeNames: prop.type.match(exported) ?? [],
+    },
+  };
+}
+
+function wireProp(app: ShellApp, prop: ScreenProp): Wired {
+  const operation = app.operations.find((o) => o.name === prop.name);
+
+  if (!operation) {
+    return {
+      ok: false,
+      problem: `Screen's prop ${prop.name} names no operation in server.ts (${app.operations.map((o) => o.name).join(", ") || "it has none"})`,
+    };
+  }
+
+  return prop.type === "action"
+    ? wireAction(app.id, prop, operation)
+    : wireRead(app.id, prop, operation);
 }
 
 /** One app's part of the root, or every problem with its Screen's props. */
 function wire(app: ShellApp) {
   const { id } = app;
   const cap = pascal(id);
-  const problems: string[] = [];
-  const shapes = new Set<string>();
-  const members: string[] = [];
-  const refresh: string[] = [];
-  const bindings: string[] = [];
-  const mutations: string[] = [];
 
-  for (const prop of screenProps(id, app.files["app.contract"])) {
-    const operation = app.operations.find((o) => o.name === prop.name);
-    const at = `Screen's prop ${prop.name}`;
+  const wired = screenProps(id, app.files["app.contract"]).map((prop) =>
+    wireProp(app, prop)
+  );
 
-    if (!operation) {
-      problems.push(
-        `${at} names no operation in server.ts (${app.operations.map((o) => o.name).join(", ") || "it has none"})`
-      );
-      continue;
-    }
-
-    const call = `${id}${pascal(operation.name)}`;
-
-    if (prop.type === "action") {
-      if (operation.kind !== "write") {
-        problems.push(
-          `${at} is an action, but ${operation.name} is a read: give the prop its answer's type, such as Item[]`
-        );
-        continue;
-      }
-
-      const params = Object.values(operation.params).map(
-        (param, i) => `arg${i + 1}: ${CONTRACT_TYPE[param.type]}`
-      );
-
-      const args = params.map((_, i) => `arg${i + 1}`).join(", ");
-      const action = `${id}Do${pascal(operation.name)}`;
-      members.push(
-        `  mutation ${id}Wrote${pascal(operation.name)} as shape Reply queue`,
-        `  action ${action}${params.length ? `(${params.join(", ")})` : ""}`,
-        `    send ${id}Wrote${pascal(operation.name)} = ${call}(${args})`
-      );
-      mutations.push(`  ${call}: true,`);
-      bindings.push(`${prop.name}=${action}`);
-    } else {
-      if (operation.kind !== "read") {
-        problems.push(
-          `${at} is a value, but ${operation.name} is a write: make the prop an action`
-        );
-        continue;
-      }
-
-      if (Object.keys(operation.params).length > 0) {
-        problems.push(
-          `${at}: ${operation.name} takes params, and the screen can only use reads without params (filter in the screen)`
-        );
-        continue;
-      }
-
-      // The app's shapes, named for the root by the app: Item is TodosItem there.
-      const type = prop.type.replaceAll(
-        /\b[A-Z]\w*\b/g,
-        (shape) => (shapes.add(shape), `${cap}${shape}`)
-      );
-
-      const resource = `${id}Read${pascal(operation.name)}`;
-      members.push(
-        `  resource ${resource} = ${call}() when signedIn as shape ${type} else empty()`,
-        `  derive ${resource}Lost = match failure(${resource}) { case some(f) => true, case none => false }`
-      );
-      refresh.push(`    if ${resource}Lost`, `      refresh ${resource}`);
-      bindings.push(`${prop.name}=${resource}`);
-    }
-  }
+  const problems = wired.flatMap((prop) => (prop.ok ? [] : [prop.problem]));
 
   if (problems.length > 0) {
     throw new Error(`apps/${id}/app.contract: ${problems.join("; ")}.`);
   }
 
+  const props = wired.flatMap((prop) => (prop.ok ? [prop.wiring] : []));
+  // Each type once, in the order the props name them.
+  const typeNames = [...new Set(props.flatMap((prop) => prop.typeNames))];
+
   return {
-    use: `use Screen as ${cap}Screen${[...shapes].map((shape) => `, ${shape} as ${cap}${shape}`).join("")} from "./apps/${id}/app.contract"`,
+    use: `use Screen as ${cap}Screen${typeNames.map((name) => `, ${name} as ${cap}${name}`).join("")} from "./apps/${id}/app.contract"`,
     tab: `  tab ${id} "/${id}"`,
-    members,
-    refresh,
+    members: props.flatMap((prop) => prop.members),
+    refresh: props.flatMap((prop) => prop.refresh),
     screen: [
       `                  if e.name == "${id}"`,
       `                    AppPage(id="${id}", draft=hasDraft("${id}", apps), undo=undoKind("${id}", apps), save=saveApp, discard=discardApp, undoSave=undoApp)`,
-      `                      ${cap}Screen(${bindings.join(", ")})`,
+      `                      ${cap}Screen(${props.map((prop) => prop.binding).join(", ")})`,
     ],
-    mutations,
+    mutations: props.flatMap((prop) => prop.mutations),
   };
 }
 
@@ -263,38 +314,79 @@ export type BuildOptions = {
   readonly version: string;
 };
 
+/** Assembles the shell's source in the work directory: the client's own files, each app's folder, and the root's parts. */
+function assemble(options: BuildOptions) {
+  rmSync(options.workDir, { recursive: true, force: true });
+  cpSync(options.clientDir, options.workDir, {
+    recursive: true,
+    filter: (source) =>
+      !SKIP.has(
+        path.relative(options.clientDir, source).split(/[\\/]/)[0] ?? ""
+      ),
+  });
+
+  for (const app of options.apps) {
+    const dir = path.join(options.workDir, "apps", app.id);
+
+    mkdirSync(dir, { recursive: true });
+
+    for (const [name, content] of Object.entries(app.files)) {
+      writeFileSync(path.join(dir, name), content);
+    }
+  }
+
+  const read = (name: string) =>
+    readFileSync(path.join(options.workDir, name), "utf-8");
+
+  const { contract, ts } = generate(
+    { contract: read("app.contract"), ts: read("app.ts") },
+    options.apps,
+    options.version
+  );
+
+  writeFileSync(path.join(options.workDir, "app.contract"), contract);
+  writeFileSync(path.join(options.workDir, "app.ts"), ts);
+}
+
+/** Runs Exact's web build on the assembled shell; answers its exit code and everything it printed. */
+async function webBuild(options: BuildOptions) {
+  return await new Promise<{ code: number | null; output: string }>(
+    (resolve) => {
+      // API_BASE_URL empty: the page asks the origin it was served from (see client/app.ts).
+      const child = spawn(
+        "sh",
+        ["exact.mjs", "web-build", "--out", options.outDir],
+        {
+          cwd: options.workDir,
+          env: { ...process.env, EXACT: options.exact, API_BASE_URL: "" },
+          stdio: ["ignore", "pipe", "pipe"],
+        }
+      );
+
+      let output = "";
+
+      const printed = (chunk: Buffer) => {
+        output += chunk.toString();
+      };
+
+      child.stdout.on("data", printed);
+      child.stderr.on("data", printed);
+      child.on("close", (code) => {
+        resolve({ code, output });
+      });
+      child.on("error", (error) => {
+        resolve({ code: -1, output: String(error) });
+      });
+    }
+  );
+}
+
 /** Assembles the shell with these apps and builds it for the web; a failure names what the compiler said. */
 export async function buildShell(
   options: BuildOptions
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    rmSync(options.workDir, { recursive: true, force: true });
-    cpSync(options.clientDir, options.workDir, {
-      recursive: true,
-      filter: (source) =>
-        !SKIP.has(relative(options.clientDir, source).split(/[\\/]/)[0] ?? ""),
-    });
-
-    for (const app of options.apps) {
-      const dir = join(options.workDir, "apps", app.id);
-      mkdirSync(dir, { recursive: true });
-
-      for (const [name, content] of Object.entries(app.files)) {
-        writeFileSync(join(dir, name), content);
-      }
-    }
-
-    const read = (name: string) =>
-      readFileSync(join(options.workDir, name), "utf-8");
-
-    const { contract, ts } = generate(
-      { contract: read("app.contract"), ts: read("app.ts") },
-      options.apps,
-      options.version
-    );
-
-    writeFileSync(join(options.workDir, "app.contract"), contract);
-    writeFileSync(join(options.workDir, "app.ts"), ts);
+    assemble(options);
   } catch (error) {
     return {
       ok: false,
@@ -304,31 +396,7 @@ export async function buildShell(
 
   rmSync(options.outDir, { recursive: true, force: true });
 
-  const { code, output } = await new Promise<{
-    code: number | null;
-    output: string;
-  }>((resolve) => {
-    // API_BASE_URL empty: the page asks the origin it was served from (see client/app.ts).
-    const child = spawn(
-      "sh",
-      ["exact.mjs", "web-build", "--out", options.outDir],
-      {
-        cwd: options.workDir,
-        env: { ...process.env, EXACT: options.exact, API_BASE_URL: "" },
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    );
-
-    let output = "";
-    child.stdout.on("data", (chunk) => (output += chunk));
-    child.stderr.on("data", (chunk) => (output += chunk));
-    child.on("close", (code) => {
-      resolve({ code, output });
-    });
-    child.on("error", (error) => {
-      resolve({ code: -1, output: String(error) });
-    });
-  });
+  const { code, output } = await webBuild(options);
 
   if (code === 0) {
     return { ok: true };
