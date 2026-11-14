@@ -25,12 +25,8 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            host/package-lock.json
-      # The lint and type tooling lives at the root; the host's own dependencies in host/.
+          cache-dependency-path: package-lock.json
+      # One install for the workspaces (host, client) and the root's lint and type tooling.
       - run: npm ci
-      - run: npm ci
-        working-directory: host
       - run: npm run check
       - run: npm test

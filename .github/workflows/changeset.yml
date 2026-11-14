@@ -1,4 +1,4 @@
-# Every pull request adds a changeset that bumps imp, or carries the skip changeset label (.changeset/README.md).
+# Every pull request adds a changeset that bumps @imp/host, or carries the skip changeset label (.changeset/README.md).
 # The release PR that Release opens is exempt: it consumes the changesets.
 name: Changeset
 
@@ -27,7 +27,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Require a new changeset that bumps imp
+      - name: Require a new changeset that bumps @imp/host
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -38,8 +38,8 @@ jobs:
           npx changeset status --since "$BASE_SHA" --output "$RUNNER_TEMP/changeset-status.json"
           node -e '
             const status = require(process.env.RUNNER_TEMP + "/changeset-status.json");
-            if (!status.releases.some((release) => release.name === "imp")) {
-              console.error("::error::The changeset must bump imp.");
+            if (!status.releases.some((release) => release.name === "@imp/host")) {
+              console.error("::error::The changeset must bump @imp/host.");
               process.exit(1);
             }
           '

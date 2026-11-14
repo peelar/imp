@@ -1,3 +1,5 @@
 .amp/
 .DS_Store
 node_modules/
+
+.turbo/

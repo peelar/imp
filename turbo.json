@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "build": {
+      "outputs": ["dist/**"],
+      "env": ["API_BASE_URL", "EXACT", "EXACT_VERSION"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/client/assets/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "cache": false
+    }
+  }
+}

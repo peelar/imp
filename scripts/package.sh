@@ -5,7 +5,8 @@
 #                                         web client) and install-host.sh; on Linux or macOS
 #   scripts/package.sh mac <tag> <out>    Imp-macos.zip, the ad-hoc signed Mac app; on macOS
 #
-# Both need Bun and Exact (EXACT, or ../tools/exact beside this repository); host also needs Node and npm.
+# Both need Bun and Exact (EXACT, or ../tools/exact beside this repository); host also needs Node, npm, and `npm ci` at
+# the root for turbo.
 set -eu
 
 fail() { echo "package: $*" >&2; exit 1; }
@@ -30,7 +31,16 @@ host)
 		tar -cf - -T -) | tar -xf - -C "$stage"
 	mkdir -p "$stage/client"
 	cp -R "$root/client/dist" "$stage/client/dist"
-	(cd "$stage/host" && npm ci --omit=dev --no-audit --no-fund)
+	# The host's production dependencies, from the workspace lockfile pruned to the host (turbo prune). The pruned lock
+	# loses npm's dev flags, so `npm prune` drops what only the root's tooling needs. They go in host/node_modules,
+	# where every release has had them; the workspace files are not shipped.
+	(cd "$root" && npx turbo prune @imp/host --out-dir "$stage/.pruned" >/dev/null)
+	cp "$stage/.pruned/package.json" "$stage/.pruned/package-lock.json" "$stage/"
+	rm -rf "$stage/.pruned"
+	(cd "$stage" && npm ci --omit=dev --no-audit --no-fund && npm prune --omit=dev --no-audit --no-fund)
+	rm -rf "$stage/node_modules/@imp" "$stage/package.json" "$stage/package-lock.json"
+	find "$stage/node_modules" -type d -empty -delete
+	mv "$stage/node_modules" "$stage/host/node_modules"
 	echo "$tag" > "$stage/VERSION"
 	tar -czf "$out/imp-host-$tag.tar.gz" -C "$stage" .
 	cp "$root/scripts/install-host.sh" "$out/install-host.sh"

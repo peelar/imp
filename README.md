@@ -40,6 +40,10 @@ an app that stays: a screen you keep using, which the imp can also operate for y
   (`host/src/tools.ts`). Settings lists each key's latest uses, and OpenBao's audit log (`vault/audit.log`) records
   every read. When the imp needs a key it does not have, it asks for it in Settings, never in the chat.
 
+The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces: `host/` and `client/` are its
+packages, and one `npm ci` at the root installs them all with the lint and type tooling. `npm run build`,
+`npm run dev` and `npm test` run each package's script of that name through turbo.
+
 ## Apps the imp builds
 
 Ask for an app and the imp writes its folder on its own computer, then calls `preview_app`. The host takes only that
@@ -83,10 +87,10 @@ agent is idle; open pages then reload. Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` t
 login and every hour, and replaces itself (quitting and reopening if it is running). It is not signed with an Apple
 Developer ID; macOS opens it because curl doesn't quarantine what it downloads.
 
-**Releasing.** Each PR adds a changeset (`npm run changeset`) or carries the `skip changeset` label. On `main`,
-`.github/workflows/release.yml` keeps a release PR open with the next version and its changelog. Merging it builds the
-host and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and publishes them as a GitHub release.
-See `.changeset/README.md`.
+**Releasing.** Each PR adds a changeset (`npm run changeset`, bumping `@imp/host`, whose version is Imp's) or carries
+the `skip changeset` label. On `main`, `.github/workflows/release.yml` keeps a release PR open with the next version
+and its changelog. Merging it builds the host and web client on Linux and the Mac app on macOS (`scripts/package.sh`),
+and publishes them as a GitHub release. See `.changeset/README.md`.
 
 ## Running it from a checkout
 
@@ -95,8 +99,8 @@ toolchains its web build pins (`bun exact.mjs setup --check` in `client/` names 
 the web client whenever the imp previews an app.
 
 ```sh
-cd host && npm install
-cd ../client && API_BASE_URL= bun exact.mjs web-build --out dist
+npm ci
+cd client && API_BASE_URL= bun exact.mjs web-build --out dist
 cd ../host && node src/server.ts   # http://localhost:8787
 ```
 
@@ -104,7 +108,7 @@ Open the app, continue with ChatGPT, enter the code it shows, and pick a compute
 fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the rest.
 `node scripts/smoke-machine.ts` checks a machine adapter on its own.
 
-**Checks.** `npm ci` at the root installs the lint, format and type tooling; then:
+**Checks.** After `npm ci` at the root:
 
 ```sh
 npm run check   # oxlint (Ultracite's core and anti-slop rules, type-aware), the lint policy probes, oxfmt, tsc

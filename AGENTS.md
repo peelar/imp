@@ -1,14 +1,14 @@
 # Imp
 
-`host/` is the host: Node runs its TypeScript directly, so there is no build step and only erasable syntax (no enums, namespaces or parameter properties). `sdk/app.ts` is the contract an app's `server.ts` is written against. `client/` is the Exact shell and has its own `AGENTS.md`; `client/apps/<id>/` holds one app per folder.
+The repository is a Turborepo monorepo on npm workspaces (`turbo.json`, the root `package.json`): `host/` and `client/` are its packages. `host/` is the host: Node runs its TypeScript directly, so there is no build step and only erasable syntax (no enums, namespaces or parameter properties). `sdk/app.ts` is the contract an app's `server.ts` is written against. `client/` is the Exact shell and has its own `AGENTS.md`; `client/apps/<id>/` holds one app per folder.
 
 ## Checks
 
-- Install twice: `npm ci` at the root (lint, format and type tooling) and `npm ci` in `host/` (the host's own dependencies).
-- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (the host's API tests, about a minute) at the root. CI runs the same two.
+- Install once: `npm ci` at the root installs every workspace's dependencies and the lint, format and type tooling into one `node_modules`. Add a dependency to the package that uses it (`npm install <name> -w @imp/host`), never to the root unless it is tooling.
+- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (`turbo run test`: the host's API tests, about a minute) at the root. CI runs the same two.
 - `npm run lint:fix` formats and applies the automatic fixes. Run it before fixing diagnostics by hand; some fixes only apply on a second run.
 - After a change to the client, or to what the host sends it, also run `cd client && bun exact.mjs test web` (needs Bun and Exact; see `client/AGENTS.md`).
-- A new behavior of the host's HTTP API gets a test in `host/test/`, in the file for its part of the API (`api.test.ts`, `secrets.test.ts`, `backup.test.ts`). Each file starts its own host with a scripted model (`host/test/harness.ts`, `host/scripts/test-host.ts`). `npm test` runs the files one at a time, because the hosts share one folder of downloaded programs (OpenBao, mitmproxy).
+- A new behavior of the host's HTTP API gets a test in `host/test/`, in the file for its part of the API (`api.test.ts`, `secrets.test.ts`, `backup.test.ts`). Each file starts its own host with a scripted model (`host/test/harness.ts`, `host/scripts/test-host.ts`). The host's `test` script runs the files one at a time, because the hosts share one folder of downloaded programs (OpenBao, mitmproxy).
 
 ## Lint policy
 
@@ -40,4 +40,4 @@ What the rules ask for, where the answer is a design choice:
 ## Generated and shipped files
 
 - Never edit or format the blocks between `// <apps:…>` and `// </apps:…>` in `client/app.contract` and `client/app.ts`. Regenerate them with `node host/scripts/shell.ts` after changing an app's Screen props or operations.
-- A release ships `host/`, `sdk/` and `client/apps/` (`scripts/package.sh`), and the host installs with `npm ci --omit=dev`. Code under `host/src` and `host/machine` may import only the `dependencies` of `host/package.json`; the root `package.json` is tooling and is not shipped.
+- A release ships `host/`, `sdk/` and `client/apps/` (`scripts/package.sh`). The host's production dependencies come from the lockfile pruned to `@imp/host` (`turbo prune`) and ship in `host/node_modules`. Code under `host/src` and `host/machine` may import only the `dependencies` of `host/package.json`. Workspaces hoist every package into the root `node_modules`, so an undeclared import still resolves in a checkout and fails only in a release. The root `package.json` is tooling and is not shipped.
