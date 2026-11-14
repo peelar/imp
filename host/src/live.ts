@@ -25,16 +25,35 @@ export class Topics {
   }
 
   changed(topic: string): void {
-    for (const listener of [...(this.#listeners.get(topic) ?? [])]) {
+    // A copy: a listener may stop listening while it is told.
+    const listeners = [...(this.#listeners.get(topic) ?? [])];
+
+    for (const listener of listeners) {
       listener();
     }
   }
 }
 
+/** What a source answers: anything JSON writes as it is. */
+export type Answer =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly Answer[]
+  | { readonly [key: string]: Answer };
+
 export type LiveSource = {
   /** The topics whose changes can change this answer. */
   readonly topics: readonly string[];
-  load(): Promise<unknown>;
+  readonly load: () => Promise<Answer>;
+};
+
+export type LiveStream = {
+  readonly req: IncomingMessage;
+  readonly res: ServerResponse;
+  readonly topics: Topics;
+  readonly source: LiveSource;
 };
 
 const HEARTBEAT_MS = 20_000;
@@ -43,12 +62,7 @@ const HEARTBEAT_MS = 20_000;
 const COALESCE_MS = 40;
 
 /** Serves one resource as an event stream until the client goes away. */
-export async function serveLive(
-  req: IncomingMessage,
-  res: ServerResponse,
-  topics: Topics,
-  source: LiveSource
-) {
+export async function serveLive({ req, res, topics, source }: LiveStream) {
   res.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-store",
@@ -61,6 +75,17 @@ export async function serveLive(
   let again = false;
   let timer: NodeJS.Timeout | undefined;
 
+  /** Sends the answer when it differs from the last one sent. */
+  const send = async () => {
+    const value = JSON.stringify(await source.load());
+
+    if (!closed && value !== last) {
+      last = value;
+      res.write(`data: ${value}\n\n`);
+    }
+  };
+
+  /** One load at a time: a change that arrives during a load asks for another when it ends. */
   const push = async () => {
     if (loading) {
       again = true;
@@ -69,41 +94,41 @@ export async function serveLive(
     }
 
     loading = true;
+    again = false;
 
     try {
-      do {
-        again = false;
-        const value = JSON.stringify(await source.load());
-
-        if (!closed && value !== last) {
-          last = value;
-          res.write(`data: ${value}\n\n`);
-        }
-      } while (again && !closed);
+      await send();
     } catch (error) {
+      again = false;
+
       if (!closed) {
         res.write(
-          `event: failure\ndata: ${JSON.stringify(String(error instanceof Error ? error.message : error))}\n\n`
+          `event: failure\ndata: ${JSON.stringify(error instanceof Error ? error.message : String(error))}\n\n`
         );
       }
     } finally {
       loading = false;
+    }
+
+    if (again && !closed) {
+      await push();
     }
   };
 
   const schedule = () => {
     timer ??= setTimeout(() => {
       timer = undefined;
-      void push();
+      push().catch((cause: unknown) => {
+        console.error("live:", cause);
+      });
     }, COALESCE_MS);
   };
 
   const off = source.topics.map((topic) => topics.on(topic, schedule));
 
-  const heartbeat = setInterval(
-    () => res.write(": heartbeat\n\n"),
-    HEARTBEAT_MS
-  );
+  const heartbeat = setInterval(() => {
+    res.write(": heartbeat\n\n");
+  }, HEARTBEAT_MS);
 
   req.on("close", () => {
     closed = true;

@@ -1,8 +1,10 @@
 // The home conversation as the shell shows it: what the person said, what the assistant answered, and what it did
 // along the way (one activity row per tool call, in words, not JSON), plus the reply being written.
 import type { Context } from "@earendil-works/chord/context";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   type Conversation,
+  type EntryRecord,
   type Harness,
   LiveDoc,
 } from "@earendil-works/pi-durable";
@@ -18,7 +20,7 @@ const SHOWN = 80;
  */
 export type ChatMessage = {
   id: string;
-  role: string;
+  role: "user" | "assistant" | "activity" | "error" | "thinking";
   text: string;
   title: string;
   detail: string;
@@ -32,29 +34,38 @@ export type AppLabel = {
   readonly symbol: string;
 };
 
-type Part = {
-  type: string;
-  text?: string;
-  id?: string;
-  name?: string;
-  arguments?: Record<string, unknown>;
+/** A value the model sent or a tool answered. */
+type Value = null | boolean | number | string | readonly Value[] | ToolArgs;
+
+/** A tool call's arguments by name, as the model sent them. */
+type ToolArgs = { readonly [name: string]: Value };
+
+/** A message's content: text, or parts of which the text ones are read. */
+type Content =
+  | string
+  | readonly { readonly type: string; readonly text?: string }[];
+
+const isText = (value: Value | Content | undefined): value is string =>
+  typeof value === "string";
+
+const isNamed = (value: Value | undefined): value is ToolArgs =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const textOf = (content: Content | undefined) => {
+  if (content === undefined || isText(content)) {
+    return content ?? "";
+  }
+
+  return content
+    .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
+    .join("")
+    .trim();
 };
 
-const textOf = (content: unknown): string =>
-  typeof content === "string"
-    ? content
-    : Array.isArray(content)
-      ? (content as Part[])
-          .filter((part) => part.type === "text")
-          .map((part) => part.text ?? "")
-          .join("")
-          .trim()
-      : "";
-
-const oneLine = (value: unknown, max = 90) => {
-  const text = String(value ?? "")
-    .replaceAll(/\s+/g, " ")
-    .trim();
+/** A value on one line of at most `max` characters; a value that is not text is written as JSON. */
+const oneLine = (value: Value | undefined, max = 90) => {
+  const written = isText(value) ? value : JSON.stringify(value ?? "");
+  const text = written.replaceAll(/\s+/g, " ").trim();
 
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 };
@@ -78,101 +89,156 @@ const CONTEXT = /^\[Sent from the chat beside the [^\]\n]+ app\.\]\n\n/;
 export const withAppContext = (text: string, app: AppLabel | undefined) =>
   app ? `[Sent from the chat beside the ${app.name} app.]\n\n${text}` : text;
 
+/** An app's action: "Todos · Add" and its first text argument, such as the todo's title. */
+function describeAction(args: ToolArgs, apps: readonly AppLabel[]) {
+  const app = apps.find((a) => a.id === args.app);
+  const values = isNamed(args.args) ? Object.values(args.args) : [];
+
+  const subject = values.find((value) => isText(value) && !/^\d+$/.test(value));
+
+  return {
+    title: `${app?.name ?? oneLine(args.app)} · ${humanize(oneLine(args.action))}`,
+    detail: subject === undefined ? "" : oneLine(subject),
+    icon: app?.symbol ?? "symbol:layers",
+  };
+}
+
+/** The tools the person reads about in their own words: the title, the icon, and the argument that says which. */
+const KNOWN = new Map<string, readonly [string, string, string]>([
+  ["bash", ["Ran a command", "symbol:icon.terminal", "command"]],
+  ["powershell", ["Ran a command", "symbol:icon.terminal", "command"]],
+  ["read", ["Read a file", "symbol:document", "path"]],
+  ["write", ["Wrote a file", "symbol:compose", "path"]],
+  ["edit", ["Edited a file", "symbol:pencil", "path"]],
+  ["app_code", ["Opened an app's code", "symbol:document", "app"]],
+  ["preview_app", ["Built a preview", "symbol:sparkles", "app"]],
+  ["find_app_actions", ["Looked up app actions", "symbol:search", "query"]],
+]);
+
+export type ToolUse = {
+  readonly name: string;
+  readonly args: ToolArgs;
+  readonly apps: readonly AppLabel[];
+};
+
 /** What a tool call did, in words the person reads at a glance. */
-export function describeTool(
-  name: string,
-  args: Record<string, unknown>,
-  apps: readonly AppLabel[]
-) {
-  switch (name) {
-    case "bash":
-    case "powershell": {
-      return {
-        title: "Ran a command",
-        detail: oneLine(args.command),
-        icon: "symbol:icon.terminal",
-      };
-    }
+export function describeTool({ name, args, apps }: ToolUse) {
+  if (name === "run_app_action") {
+    return describeAction(args, apps);
+  }
 
-    case "read": {
-      return {
-        title: "Read a file",
-        detail: oneLine(args.path),
-        icon: "symbol:document",
-      };
-    }
+  const known = KNOWN.get(name);
 
-    case "write": {
-      return {
-        title: "Wrote a file",
-        detail: oneLine(args.path),
-        icon: "symbol:compose",
-      };
-    }
+  if (!known) {
+    return { title: humanize(name), detail: "", icon: "symbol:sparkles" };
+  }
 
-    case "edit": {
-      return {
-        title: "Edited a file",
-        detail: oneLine(args.path),
-        icon: "symbol:pencil",
-      };
-    }
+  const [title, icon, subject] = known;
 
-    case "app_code": {
-      return {
-        title: "Opened an app's code",
-        detail: oneLine(args.app),
-        icon: "symbol:document",
-      };
-    }
+  return { title, detail: oneLine(args[subject]), icon };
+}
 
-    case "preview_app": {
-      return {
-        title: "Built a preview",
-        detail: oneLine(args.app),
-        icon: "symbol:sparkles",
-      };
-    }
+const row = (
+  id: string,
+  role: ChatMessage["role"],
+  fields: Partial<ChatMessage>
+): ChatMessage => ({
+  id,
+  role,
+  text: "",
+  title: "",
+  detail: "",
+  icon: "",
+  failed: false,
+  ...fields,
+});
 
-    case "find_app_actions": {
-      return {
-        title: "Looked up app actions",
-        detail: oneLine(args.query),
-        icon: "symbol:search",
-      };
-    }
+type Calls = Map<string, { name: string; args: ToolArgs }>;
 
-    case "run_app_action": {
-      // An app's action: "Todos · Add" and its first text argument, such as the todo's title.
-      const app = apps.find((a) => a.id === args.app);
-
-      const values =
-        typeof args.args === "object" && args.args !== null
-          ? Object.values(args.args)
-          : [];
-
-      const subject = values.find(
-        (value) => typeof value === "string" && !/^\d+$/.test(value)
-      );
-
-      return {
-        title: `${app?.name ?? String(args.app)} · ${humanize(String(args.action ?? ""))}`,
-        detail: subject === undefined ? "" : oneLine(subject),
-        icon: app?.symbol ?? "symbol:layers",
-      };
+/** The rows of what the assistant said, remembering its tool calls for their results. */
+function assistantRows(id: string, message: AssistantMessage, calls: Calls) {
+  for (const part of message.content) {
+    if (part.type === "toolCall" && part.id) {
+      calls.set(part.id, { name: part.name, args: part.arguments });
     }
   }
 
-  return { title: humanize(name), detail: "", icon: "symbol:sparkles" };
+  const text = textOf(message.content);
+
+  return [
+    ...(text ? [row(id, "assistant", { text })] : []),
+    ...(message.errorMessage
+      ? [row(`${id}-error`, "error", { text: message.errorMessage })]
+      : []),
+  ];
 }
 
-export async function homeChat(
-  harness: Harness,
-  home: Conversation,
-  topics: Topics,
-  apps: () => readonly AppLabel[],
-  context: Context
+/** The transcript's rows for the conversation's entries, oldest first. */
+function transcript(
+  entries: readonly EntryRecord[],
+  apps: readonly AppLabel[]
 ) {
+  // A tool result names its call; the call, in the assistant message before it, holds the arguments.
+  const calls: Calls = new Map();
+
+  return entries.flatMap((entry): ChatMessage[] => {
+    const [message] = entry.model ?? [];
+    const id = String(entry.id);
+
+    if (entry.kind === "pi.user" && message?.role === "user") {
+      const text = textOf(message.content).replace(CONTEXT, "");
+
+      return [row(id, "user", { text })];
+    }
+
+    if (entry.kind === "pi.assistant" && message?.role === "assistant") {
+      return assistantRows(id, message, calls);
+    }
+
+    if (entry.kind === "pi.tool-result" && message?.role === "toolResult") {
+      const call = calls.get(message.toolCallId);
+
+      const described = describeTool({
+        name: message.toolName || (call?.name ?? "tool"),
+        args: call?.args ?? {},
+        apps,
+      });
+
+      return [
+        row(id, "activity", {
+          ...described,
+          failed: message.isError,
+          text: oneLine(textOf(message.content), 300),
+        }),
+      ];
+    }
+
+    return [];
+  });
+}
+
+export type HomeChatOptions = {
+  readonly harness: Harness;
+  readonly home: Conversation;
+  readonly topics: Topics;
+  /** The apps whose actions the transcript names. */
+  readonly apps: () => readonly AppLabel[];
+  readonly context: Context;
+};
+
+export async function homeChat(options: HomeChatOptions) {
+  const { harness, home, topics, apps, context } = options;
+
+  /** What the agent is doing now: whether it works, and the words of the reply on the way. */
+  async function live() {
+    const doc = await harness.snapshot(LiveDoc, home.id, context);
+
+    return {
+      busy: doc?.run !== undefined,
+      streaming: textOf(doc?.generation?.message?.content),
+    };
+  }
+
   async function state() {
     const page = await home.entries(
       { order: "descending" },
@@ -181,98 +247,8 @@ export async function homeChat(
       context
     );
 
-    const messages: ChatMessage[] = [];
-
-    const row = (
-      id: string,
-      role: string,
-      fields: Partial<ChatMessage>
-    ): ChatMessage => ({
-      id,
-      role,
-      text: "",
-      title: "",
-      detail: "",
-      icon: "",
-      failed: false,
-      ...fields,
-    });
-
-    // A tool result names its call; the call, in the assistant message before it, holds the arguments.
-    const calls = new Map<
-      string,
-      { name: string; args: Record<string, unknown> }
-    >();
-
-    for (const entry of [...page.items].reverse()) {
-      const message = entry.model?.[0] as
-        | {
-            role?: string;
-            content?: unknown;
-            toolCallId?: string;
-            toolName?: string;
-            isError?: boolean;
-            errorMessage?: string;
-          }
-        | undefined;
-
-      if (!message) {
-        continue;
-      }
-
-      const id = String(entry.id);
-
-      if (entry.kind === "pi.user") {
-        messages.push(
-          row(id, "user", {
-            text: textOf(message.content).replace(CONTEXT, ""),
-          })
-        );
-      } else if (entry.kind === "pi.assistant") {
-        for (const part of Array.isArray(message.content)
-          ? (message.content as Part[])
-          : []) {
-          if (part.type === "toolCall" && part.id) {
-            calls.set(part.id, {
-              name: part.name ?? "",
-              args: part.arguments ?? {},
-            });
-          }
-        }
-
-        const text = textOf(message.content);
-
-        if (text) {
-          messages.push(row(id, "assistant", { text }));
-        }
-
-        if (message.errorMessage) {
-          messages.push(
-            row(`${id}-error`, "error", { text: message.errorMessage })
-          );
-        }
-      } else if (entry.kind === "pi.tool-result") {
-        const call = calls.get(message.toolCallId ?? "");
-
-        const described = describeTool(
-          message.toolName ?? call?.name ?? "tool",
-          call?.args ?? {},
-          apps()
-        );
-
-        messages.push(
-          row(id, "activity", {
-            ...described,
-            failed: message.isError === true,
-            text: oneLine(textOf(message.content), 300),
-          })
-        );
-      }
-    }
-
-    const live = await harness.snapshot(LiveDoc, home.id, context);
-    const busy = live?.run !== undefined && live?.run !== null;
-    const streaming = textOf(live?.generation?.message?.content);
+    const messages = transcript(page.items.toReversed(), apps());
+    const { busy, streaming } = await live();
 
     if (busy && streaming) {
       messages.push(row("live", "assistant", { text: streaming }));
@@ -287,17 +263,19 @@ export async function homeChat(
 
   // Every commit to the conversation, including each streamed piece of a reply, refreshes the open chat views.
   const watch = await home.watch(context);
+
   watch.start(async () => {
     topics.changed(TOPIC);
   });
 
   return {
     state,
-    async busy() {
-      return (await state()).busy;
-    },
+    /** Whether the agent is in a turn. */
+    busy: async () => (await live()).busy,
     async close() {
       await watch.stop();
     },
   };
 }
+
+export type HomeChat = Awaited<ReturnType<typeof homeChat>>;
