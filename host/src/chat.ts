@@ -9,6 +9,7 @@ import {
   LiveDoc,
 } from "@earendil-works/pi-durable";
 import type { Topics } from "./live.ts";
+import { messageText } from "./message-text.ts";
 
 export const TOPIC = "chat";
 const SHOWN = 80;
@@ -40,27 +41,11 @@ type Value = null | boolean | number | string | readonly Value[] | ToolArgs;
 /** A tool call's arguments by name, as the model sent them. */
 type ToolArgs = { readonly [name: string]: Value };
 
-/** A message's content: text, or parts of which the text ones are read. */
-type Content =
-  | string
-  | readonly { readonly type: string; readonly text?: string }[];
-
-const isText = (value: Value | Content | undefined): value is string =>
+const isText = (value: Value | undefined): value is string =>
   typeof value === "string";
 
 const isNamed = (value: Value | undefined): value is ToolArgs =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const textOf = (content: Content | undefined) => {
-  if (content === undefined || isText(content)) {
-    return content ?? "";
-  }
-
-  return content
-    .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
-    .join("")
-    .trim();
-};
 
 /** A value on one line of at most `max` characters; a value that is not text is written as JSON. */
 const oneLine = (value: Value | undefined, max = 90) => {
@@ -163,7 +148,7 @@ function assistantRows(id: string, message: AssistantMessage, calls: Calls) {
     }
   }
 
-  const text = textOf(message.content);
+  const text = messageText(message.content);
 
   return [
     ...(text ? [row(id, "assistant", { text })] : []),
@@ -186,7 +171,7 @@ function transcript(
     const id = String(entry.id);
 
     if (entry.kind === "pi.user" && message?.role === "user") {
-      const text = textOf(message.content).replace(CONTEXT, "");
+      const text = messageText(message.content).replace(CONTEXT, "");
 
       return [row(id, "user", { text })];
     }
@@ -208,7 +193,7 @@ function transcript(
         row(id, "activity", {
           ...described,
           failed: message.isError,
-          text: oneLine(textOf(message.content), 300),
+          text: oneLine(messageText(message.content), 300),
         }),
       ];
     }
@@ -235,7 +220,7 @@ export async function homeChat(options: HomeChatOptions) {
 
     return {
       busy: doc?.run !== undefined,
-      streaming: textOf(doc?.generation?.message?.content),
+      streaming: messageText(doc?.generation?.message?.content),
     };
   }
 

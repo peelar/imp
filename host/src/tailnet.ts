@@ -4,7 +4,17 @@
 // with stock `ssh` because it needs its own flags (tunnels), which `tailscale ssh` does not pass through.
 import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
+import {
+  arr,
+  bool,
+  compile,
+  map,
+  nullable,
+  num,
+  obj,
+  opt,
+  str,
+} from "@earendil-works/pi-schema";
 
 /** The tag a computer advertises to be the agent's. */
 export const COMPUTER_TAG = "tag:imp-computer";
@@ -30,47 +40,41 @@ export type Tailnet = {
   readonly devices: readonly TailnetDevice[];
 };
 
-type PeerStatus = {
-  DNSName?: string;
-  HostName?: string;
-  OS?: string;
-  Online?: boolean;
-  TailscaleIPs?: string[];
-  Tags?: string[];
-  sshHostKeys?: string[];
-  UserID?: number;
-};
+// What the host reads of `tailscale status --json`. Tailscale says much more, so every object is open. It also leaves
+// out what it has nothing to say about, and writes null for an empty list or map, so every field may be absent or null.
+const peerStatus = obj(
+  {
+    DNSName: opt(nullable(str())),
+    HostName: opt(nullable(str())),
+    OS: opt(nullable(str())),
+    Online: opt(nullable(bool())),
+    TailscaleIPs: opt(nullable(arr(str()))),
+    Tags: opt(nullable(arr(str()))),
+    sshHostKeys: opt(nullable(arr(str()))),
+    UserID: opt(nullable(num())),
+  },
+  { open: true }
+);
+
+const tailscaleStatus = compile(
+  obj(
+    {
+      BackendState: opt(nullable(str())),
+      Self: opt(nullable(peerStatus)),
+      Peer: opt(nullable(map(peerStatus))),
+      User: opt(
+        nullable(map(obj({ LoginName: opt(nullable(str())) }, { open: true })))
+      ),
+    },
+    { open: true }
+  )
+);
 
 /** The tailnet as the host sees it. Rejects with a plain reason when the host is not on one. */
 export async function readTailnet(
   tailscale = process.env.TAILSCALE ?? "tailscale"
 ): Promise<Tailnet> {
-  let stdout: string;
-
-  try {
-    ({ stdout } = await promisify(execFile)(tailscale, ["status", "--json"], {
-      timeout: 10_000,
-      maxBuffer: 16 * 1024 * 1024,
-    }));
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT")
-      throw new Error(
-        "This host is not on Tailscale: the tailscale command is missing.",
-        { cause: error }
-      );
-    throw new Error(
-      `Tailscale did not answer: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`,
-      { cause: error }
-    );
-  }
-
-  const status = JSON.parse(stdout) as {
-    BackendState?: string;
-    Self?: PeerStatus;
-    Peer?: Record<string, PeerStatus>;
-    User?: Record<string, { LoginName?: string }>;
-  };
+  const status = await readStatus(tailscale);
 
   if (status.BackendState !== "Running") {
     throw new Error(
@@ -102,6 +106,60 @@ export async function readTailnet(
     source,
     devices: devices.filter((d) => d.dnsName !== "" && d.ip !== ""),
   };
+}
+
+/** What `tailscale status --json` says, checked. An answer that is not a status fails like a command that failed. */
+async function readStatus(tailscale: string) {
+  const status: unknown = JSON.parse(await runStatus(tailscale));
+  const checked = tailscaleStatus.validate(status);
+
+  if (!checked.ok) {
+    const problems = checked.errors.map(
+      (error) => `${error.path || "the status"}: ${error.message}`
+    );
+
+    throw new Error(
+      `Tailscale did not answer with a status this host can read: ${problems.join("; ")}`
+    );
+  }
+
+  return checked.value;
+}
+
+/** What `tailscale status --json` printed. Rejects with a plain reason when the command is missing or fails. */
+async function runStatus(tailscale: string): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    execFile(
+      tailscale,
+      ["status", "--json"],
+      { timeout: 10_000, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (!error) {
+          resolve(stdout);
+
+          return;
+        }
+
+        if (error.code === "ENOENT") {
+          reject(
+            new Error(
+              "This host is not on Tailscale: the tailscale command is missing.",
+              { cause: error }
+            )
+          );
+
+          return;
+        }
+
+        // What the command said for itself, or, when it said nothing, how Node describes the failure.
+        const said = stderr.trim() || `${error.name}: ${error.message}`;
+
+        reject(
+          new Error(`Tailscale did not answer: ${said}`, { cause: error })
+        );
+      }
+    );
+  });
 }
 
 /** Writes the device's advertised SSH host keys as a known_hosts file, under its DNS name. */

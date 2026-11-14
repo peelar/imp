@@ -21,22 +21,22 @@ export type SqlValue = null | number | string;
 export type AppContext = {
   readonly id: string;
   readonly db: {
-    all<T = Record<string, SqlValue>>(
+    readonly all: <T = Record<string, SqlValue>>(
       sql: string,
       ...params: SqlValue[]
-    ): Promise<T[]>;
-    get<T = Record<string, SqlValue>>(
+    ) => Promise<T[]>;
+    readonly get: <T = Record<string, SqlValue>>(
       sql: string,
       ...params: SqlValue[]
-    ): Promise<T | null>;
-    run(
+    ) => Promise<T | null>;
+    readonly run: (
       sql: string,
       ...params: SqlValue[]
-    ): Promise<{ changes: number; lastInsertRowid: number }>;
+    ) => Promise<{ changes: number; lastInsertRowid: number }>;
     /** Runs the statements in one transaction: all of them or none. */
-    batch(
+    readonly batch: (
       statements: readonly { sql: string; params?: SqlValue[] }[]
-    ): Promise<{ changes: number; lastInsertRowid: number }[]>;
+    ) => Promise<{ changes: number; lastInsertRowid: number }[]>;
   };
 };
 
@@ -62,6 +62,11 @@ export type AppOperation = {
   readonly params: Readonly<Record<string, Param>>;
   /** `false` keeps the operation from the agent; the screen can still call it. */
   readonly agent?: false;
+  /**
+   * A method on purpose: an app may say more about its arguments than this type does, such as
+   * `run({ title }: { title: string })`, because the host checks every call against `params` first.
+   */
+  // oxlint-disable-next-line typescript/method-signature-style -- a property signature would refuse an app's narrower argument types, which `params` makes true.
   run(args: Record<string, Json>, app: AppContext): Json | Promise<Json>;
 };
 

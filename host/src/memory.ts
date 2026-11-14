@@ -23,9 +23,9 @@ export type MemoryProvider = {
    */
   readonly extension: Extension;
   /** Everything remembered, as the person reads it. */
-  inspect(): Promise<MemoryEntry[]>;
+  readonly inspect: () => Promise<MemoryEntry[]>;
   /** The person forgets an entry, or one of its facts. */
-  forget(entry: string, fact?: string): Promise<void>;
+  readonly forget: (entry: string, fact?: string) => Promise<void>;
 };
 
 export type MemoryEntry = {
