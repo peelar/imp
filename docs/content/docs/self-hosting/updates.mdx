@@ -22,11 +22,7 @@ The Mac app checks at login and every hour, and replaces itself, quitting and re
 
 ## Making a release
 
-Imp is released with [Changesets](https://github.com/changesets/changesets). Its version is the host's, in `host/package.json`.
-
-1. A pull request that changes what Imp does adds a changeset: `npm run changeset`, with a patch or minor bump for `@imp/host`. A change that keeps behavior the same gets the `skip changeset` label instead.
-2. On every push to `main`, `.github/workflows/release.yml` keeps a release pull request open that bumps the version and writes `host/CHANGELOG.md`.
-3. Merging it builds the host and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and publishes them as GitHub release `v<version>`:
+Push a tag: `git tag v0.2.0 && git push origin v0.2.0`. `.github/workflows/release.yml` builds the host and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and publishes them as GitHub release `vX.Y.Z`:
 
 | Asset | What it is |
 | --- | --- |

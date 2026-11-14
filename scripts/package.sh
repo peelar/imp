@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds one part of a release into <out>, as .github/workflows/release.yml does for a new version:
+# Builds one part of a release into <out>, as .github/workflows/release.yml does for a pushed tag:
 #
 #   scripts/package.sh host <tag> <out>   imp-host-<tag>.tar.gz (the host, its production dependencies and the built
 #                                         web client) and install-host.sh; on Linux or macOS
