@@ -1,0 +1,49 @@
+# Publishes the website and docs (docs/) to GitHub Pages, at https://peelar.github.io/imp, whenever main changes them.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      # The site uses the client's fonts (docs/blume.config.ts).
+      - client/assets/fonts/**
+      - package-lock.json
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx turbo run build --filter=@imp/docs
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
