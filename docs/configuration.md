@@ -1,7 +1,4 @@
----
-title: Configuration
-description: The host's environment variables, and what it keeps in its data directory.
----
+# Configuration
 
 Almost everything is set up in the app. The few settings outside it are environment variables, which an installed host reads from `~/.imp/env` at every start. `host/src/server.ts` describes each one.
 
@@ -25,25 +22,21 @@ After you edit `~/.imp/env`, restart the service: `systemctl --user restart imp`
 
 Everything that is yours lives in `DATA_DIR`, on the host. Back it up, and you have backed up your imp.
 
-<FileTree>
-
-- data/
-  - host-secret the secret the host derives machine tokens from (0600)
-  - credentials.sqlite your ChatGPT sign-in (0600)
-  - harness.sqlite the conversation and the agent's durable state
-  - memory.jsonl what the imp remembers, one JSON object per line
-  - computer.json the computer you picked in Settings
-  - e2b-api-key your E2B key, if you use Imp cloud
-  - ssh/ known_hosts for your own computers
-  - apps/ one SQLite database per app (and per draft)
-  - code/ the apps the imp made or changed, with their history
-  - backup/ a git repository with every version of the apps' code
-  - gh/ your GitHub sign-in, for backing apps up to GitHub
-  - builds/ the web client builds the host serves
-  - vault/ the secrets vault (OpenBao)
-  - egress/ the egress proxy's CA and rules
-
-</FileTree>
+- `data/`
+  - `host-secret`: the secret the host derives machine tokens from (0600)
+  - `credentials.sqlite`: your ChatGPT sign-in (0600)
+  - `harness.sqlite`: the conversation and the agent's durable state
+  - `memory.jsonl`: what the imp remembers, one JSON object per line
+  - `computer.json`: the computer you picked in Settings
+  - `e2b-api-key`: your E2B key, if you use Imp cloud
+  - `ssh/`: known_hosts for your own computers
+  - `apps/`: one SQLite database per app (and per draft)
+  - `code/`: the apps the imp made or changed, with their history
+  - `backup/`: a git repository with every version of the apps' code
+  - `gh/`: your GitHub sign-in, for backing apps up to GitHub
+  - `builds/`: the web client builds the host serves
+  - `vault/`: the secrets vault (OpenBao)
+  - `egress/`: the egress proxy's CA and rules
 
 If one of the small JSON files the host keeps there is damaged, say by a full disk, the host still starts: it reads that file as empty and names it in its log. A lost `computer.json` means picking the computer again in Settings.
 

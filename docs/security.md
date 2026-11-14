@@ -1,7 +1,4 @@
----
-title: Security model
-description: Who can reach your Imp, what the agent's computer can and cannot do, and where every credential lives.
----
+# Security model
 
 Imp gives an agent a computer and your accounts. The design keeps one line clear: **the host holds what is yours, and the computer holds nothing it could not lose.**
 
@@ -19,7 +16,7 @@ Assume anything on the computer can be read by the agent, and by whatever manage
 
 - **Provider credentials stay on the host.** The E2B key and Tailscale identity never reach the computer, and nothing on it can call the provider's API.
 - **Your data stays on the host.** App databases are SQLite files on the host. App code on the computer reaches them only through the host, one call at a time.
-- **Your secrets stay on the host.** The computer gets stand-ins. See [The secrets vault](/docs/how-it-works/vault).
+- **Your secrets stay on the host.** The computer gets stand-ins. See [The secrets vault](vault.md).
 - **Memory stays on the host.** It is a guarantee of the memory contract.
 - **agentd requires a token** on every connection. The token is derived from `DATA_DIR/host-secret`, which only the host has.
 - **Nothing on your own computer listens on the network.** The host reaches agentd through SSH tunnels it opened, over Tailscale SSH, as the `imp` user, and the tailnet policy allows only this host to sign in.

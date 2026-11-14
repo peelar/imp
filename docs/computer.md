@@ -1,11 +1,8 @@
----
-title: The agent's computer
-description: Choose where the imp works, Imp cloud on E2B or a Linux computer of yours, and what each one means.
----
+# The agent's computer
 
 The imp works on a Linux computer of its own. Its read, write, edit and bash tools run there, each app's server code runs there in a worker, and it has a desktop with Chrome that you can watch and take over from **Computer** in the app.
 
-You pick the computer in **Settings**. Both kinds sit behind the same [machine adapter contract](/docs/how-it-works/machines), and wherever the computer runs, the host decides what is installed on it.
+You pick the computer in **Settings**. Both kinds sit behind the same [machine adapter contract](machines.md), and wherever the computer runs, the host decides what is installed on it.
 
 ## Imp cloud
 
@@ -25,35 +22,38 @@ The key is kept in `DATA_DIR/e2b-api-key`, readable by the host alone. Nothing o
 
 Any Linux computer on your tailnet: a home lab box, a VM on your laptop (Lima, Multipass, OrbStack, WSL), or a cloud VM you rent. It needs Debian or Ubuntu. Settings shows the two things to do, once:
 
-<Steps>
-  <Step title="Run one command on the computer">
-    It installs Tailscale with Tailscale SSH and the `tag:imp-computer` tag, and creates the user the agent works as,
-    `imp`, with passwordless sudo:
+1. **Run one command on the computer**
 
-    ```sh
-    curl -fsSL https://tailscale.com/install.sh | sh \
-      && sudo tailscale up --ssh --advertise-tags=tag:imp-computer \
-      && (id imp >/dev/null 2>&1 || sudo useradd -m -s /bin/bash imp) \
-      && echo 'imp ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/imp >/dev/null
-    ```
+   It installs Tailscale with Tailscale SSH and the `tag:imp-computer` tag, and creates the user the agent works as, `imp`, with passwordless sudo:
 
-  </Step>
-  <Step title="Add one rule to your tailnet policy">
-    It lets this host, and only this host, sign in to tagged computers as `imp`. Settings fills in the host's own
-    login or tag as `src`:
+   ```sh
+   curl -fsSL https://tailscale.com/install.sh | sh \
+     && sudo tailscale up --ssh --advertise-tags=tag:imp-computer \
+     && (id imp >/dev/null 2>&1 || sudo useradd -m -s /bin/bash imp) \
+     && echo 'imp ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/imp >/dev/null
+   ```
 
-    ```json
-    {
-      "tagOwners": { "tag:imp-computer": ["autogroup:admin"] },
-      "ssh": [{ "action": "accept", "src": ["<this host>"], "dst": ["tag:imp-computer"], "users": ["imp"] }]
-    }
-    ```
+2. **Add one rule to your tailnet policy**
 
-  </Step>
-  <Step title="Pick it in Settings">
-    The host lists the tagged computers on your tailnet. Pick one, and the host sets it up.
-  </Step>
-</Steps>
+   It lets this host, and only this host, sign in to tagged computers as `imp`. Settings fills in the host's own login or tag as `src`:
+
+   ```json
+   {
+     "tagOwners": { "tag:imp-computer": ["autogroup:admin"] },
+     "ssh": [
+       {
+         "action": "accept",
+         "src": ["<this host>"],
+         "dst": ["tag:imp-computer"],
+         "users": ["imp"]
+       }
+     ]
+   }
+   ```
+
+3. **Pick it in Settings**
+
+   The host lists the tagged computers on your tailnet. Pick one, and the host sets it up.
 
 The host reaches the computer with the system `ssh` through Tailscale (`tailscale nc`). Tailscale SSH signs both ends in with their tailnet identities, so there are no keys to make. The host trusts the SSH host keys each device advertises on the tailnet, so you never compare fingerprints.
 

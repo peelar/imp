@@ -1,18 +1,11 @@
----
-title: Build an app
-description: Write an Imp app by hand, its folder, server code, operations and screen, using the Todos app as the example.
----
+# Build an app
 
 The imp builds apps for you when you ask. You can also write one yourself, or change one the imp made. An app is a folder, `client/apps/<id>/`, where `<id>` is lowercase letters and digits, such as `calendar`.
 
-<FileTree>
-
-- client/apps/todos/
-  - app.json the app's name, description and icon
-  - server.ts its data and operations, run in a worker on the agent's computer
-  - app.contract its screen, in Exact's Contract language
-
-</FileTree>
+- `client/apps/todos/`
+  - `app.json`: the app's name, description and icon
+  - `server.ts`: its data and operations, run in a worker on the agent's computer
+  - `app.contract`: its screen, in Exact's Contract language
 
 `host/studio/GUIDE.md` is the guide the imp itself reads, and the most complete reference. This page walks through the same ideas with the Todos app.
 
@@ -132,4 +125,4 @@ node host/scripts/shell.ts
 cd client && API_BASE_URL= bun exact.mjs web-build --out dist
 ```
 
-When the imp changes an app, it does this for you through `preview_app`, and you see a preview with Save and Discard. See [Apps](/docs/how-it-works/apps) for how that works.
+When the imp changes an app, it does this for you through `preview_app`, and you see a preview with Save and Discard. See [Apps](apps.md) for how that works.

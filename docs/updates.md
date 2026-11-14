@@ -1,7 +1,4 @@
----
-title: Updates and releases
-description: How an installed host and the Mac app keep themselves at the latest release, and how a release is made.
----
+# Updates and releases
 
 ## The host updates itself
 

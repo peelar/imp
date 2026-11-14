@@ -1,7 +1,4 @@
----
-title: Architecture
-description: The host, the agent's computer and the client, and how a message, an app call and a screen travel between them.
----
+# Architecture
 
 Imp has three places where things run, and one rule about what lives where: **what is yours stays on the host.** Your data, your credentials, your memories and your secrets are in the host's data directory. The agent's computer is where work happens, and it can be replaced.
 
@@ -29,10 +26,10 @@ Imp has three places where things run, and one rule about what lives where: **wh
 `host/src/host.ts` starts everything and serves one HTTP origin on localhost: the built web client, and its API.
 
 - **The agent** runs on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable), with its conversation in `harness.sqlite`. It survives restarts in the middle of a turn. The model is your ChatGPT account, signed in with ChatGPT's device code flow (`host/src/signin.ts`).
-- **The app gateway** (`host/src/apps.ts`) loads every app's server code onto the computer and keeps each app's SQLite database on the host. See [Apps](/docs/how-it-works/apps).
+- **The app gateway** (`host/src/apps.ts`) loads every app's server code onto the computer and keeps each app's SQLite database on the host. See [Apps](apps.md).
 - **The studio** (`host/src/studio.ts`) is where the imp makes apps: it takes an app folder from the computer, checks it, rebuilds the web client, and shows the result as a preview.
-- **Memory** (`host/src/memory.ts`) is what the imp knows about you and itself. See [Memory](/docs/how-it-works/memory).
-- **The vault** keeps your API keys, and the egress proxy adds them to the imp's requests. See [The secrets vault](/docs/how-it-works/vault).
+- **Memory** (`host/src/memory.ts`) is what the imp knows about you and itself. See [Memory](memory.md).
+- **The vault** keeps your API keys, and the egress proxy adds them to the imp's requests. See [The secrets vault](vault.md).
 
 ## The client
 
@@ -50,8 +47,8 @@ The computer runs one process the host puts there, **agentd** (`host/machine/age
 | `/pi-env` | A [pi-env](https://www.npmjs.com/package/@earendil-works/pi-env) daemon: the agent's file and shell tools. |
 | `/apps` | The app daemon: one worker per app's server code. |
 | `/screen` | The desktop, a VNC stream bridged to x11vnc on a local socket. |
-| `/egress` | The egress proxy's tunnels to the host, which adds your API keys. See [The secrets vault](/docs/how-it-works/vault). |
+| `/egress` | The egress proxy's tunnels to the host, which adds your API keys. See [The secrets vault](vault.md). |
 
 `host/machine/setup.sh` decides what is installed on every computer: a pinned Node, a virtual display with a light desktop, and Chrome. It runs as root whenever the computer has not run this exact version, and every step is safe to run again, because computers are durable and keep what earlier versions installed.
 
-How the host reaches agentd depends on the provider. That is the [machine adapter](/docs/how-it-works/machines)'s job, and nothing else in the host knows which provider runs the computer.
+How the host reaches agentd depends on the provider. That is the [machine adapter](machines.md)'s job, and nothing else in the host knows which provider runs the computer.

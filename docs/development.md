@@ -1,7 +1,4 @@
----
-title: Run from a checkout
-description: Run the host and build the client from the repository, for development.
----
+# Development
 
 You need Node 24+ and git. From the root of the repository:
 
@@ -16,7 +13,7 @@ Open the app, continue with ChatGPT, enter the code it shows, and pick a compute
 
 ## The repository
 
-The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces. `npm run build`, `npm run dev` and `npm test` at the root run each package's script of that name through turbo.
+The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspaces, `host/` and `client/`. `npm run build`, `npm run dev` and `npm test` at the root run each package's script of that name through turbo.
 
 | Path | What it holds |
 | --- | --- |
@@ -25,7 +22,7 @@ The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspace
 | `client/` | The app you open, in [Exact](https://github.com/expo/exact)'s Contract language. |
 | `client/apps/<id>/` | One app per folder: `app.json`, its screen (`app.contract`) and its server code (`server.ts`). |
 | `sdk/` | The typed surface an app's server code is written against. |
-| `docs/` | This site, built with [Blume](https://useblume.dev). |
+| `docs/` | These docs, in plain Markdown. |
 | `scripts/` | Setup, packaging, the host and Mac installers, and the lint policy's probes. |
 
 `AGENTS.md` holds the conventions code in the repository follows, and `.agents/setup` sets up an [Amp](https://ampcode.com) orb with `npm run setup`.
@@ -36,10 +33,7 @@ The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspace
 | --- | --- | --- |
 | `npm run check` | root | Lint, the lint policy, formatting and types. CI runs it. |
 | `npm test` | root | The host's HTTP API tests, each against its own host with a scripted model. CI runs it. |
-| `npx turbo run build --filter=@imp/docs` | root | This documentation site. CI runs it. |
 | `bun exact.mjs test web` | `client/` | The client against a host with a fake model. |
 | `node scripts/smoke-machine.ts` | `host/` | One machine adapter on its own. |
-
-`npm run dev -w @imp/docs` serves these docs with hot reload. Vercel builds them for every push that changes them, publishing `main` and a preview for each pull request (`docs/vercel.json`).
 
 After you change an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.

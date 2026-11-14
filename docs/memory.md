@@ -1,7 +1,4 @@
----
-title: Memory
-description: What the imp remembers about you and itself, where it keeps it, and how to plug in another memory system.
----
+# Memory
 
 The imp remembers what it learns about you, and about itself (a name you give it, how it should speak), across conversations. **Settings** lists all of it, with a way to forget each fact.
 

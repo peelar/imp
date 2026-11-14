@@ -28,13 +28,8 @@ export default defineConfig({
     },
     ...(core.overrides ?? []),
     {
-      // Tool configs, an app's server code and the docs' folder meta are default exports by their loaders' contract
-      // (see sdk/app.ts, and Blume's defineMeta for docs/content).
-      files: [
-        "*.config.ts",
-        "client/apps/*/server.ts",
-        "docs/content/**/meta.ts",
-      ],
+      // Tool configs and an app's server code are default exports by their loaders' contract (see sdk/app.ts).
+      files: ["*.config.ts", "client/apps/*/server.ts"],
       rules: { "import/no-default-export": "off" },
     },
   ],

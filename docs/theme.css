@@ -1,9 +1,0 @@
-/* Instrument Serif is a display face with its tracking built in; Blume's default -0.05em on headings crushes it. */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-	letter-spacing: -0.005em;
-}

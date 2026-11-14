@@ -1,13 +1,7 @@
----
-title: The secrets vault
-description: How the imp uses your API keys without ever holding them, with OpenBao on the host and an egress proxy that adds keys to requests as they leave the computer.
----
+# The secrets vault
 
-<Callout type="note" title="What ships today">
-  API keys added to the imp's HTTPS requests, and website logins the host types
-  into the imp's browser. Handing a key to one command is planned, and listed at
-  the end.
-</Callout>
+> [!NOTE]
+> **What ships today.** API keys added to the imp's HTTPS requests, and website logins the host types into the imp's browser. Handing a key to one command is planned, and listed at the end.
 
 The imp often needs your keys: a GitHub token to open a pull request, an API key to call a service. The vault lets it use them **without the key ever reaching its computer.**
 
@@ -15,7 +9,7 @@ The imp often needs your keys: a GitHub token to open a pull request, an API key
 
 The agent has root on its computer. The setup gives the `imp` user passwordless sudo, and E2B runs the setup as root. So a value written anywhere on the computer, even in a root-only file or a helper process's memory, can be read by the agent, and by anything that tricks the agent through a prompt injection.
 
-Scoping can't be enforced on the computer, so the boundary is the one the [machine contract](/docs/how-it-works/machines) already draws: provider credentials stay on the host. Your secrets get the same rule. **The computer only ever gets a stand-in.**
+Scoping can't be enforced on the computer, so the boundary is the one the [machine contract](machines.md) already draws: provider credentials stay on the host. Your secrets get the same rule. **The computer only ever gets a stand-in.**
 
 ## What the imp sees
 
@@ -67,14 +61,8 @@ The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp V
 | Listeners | A unix socket, `vault/bao.sock` (0600), plus TCP on 127.0.0.1, which Raft needs. Both require a token. |
 | Audit | Every request is written to `vault/audit.log`. |
 
-<Callout type="warning" title="What OpenBao does and does not protect">
-  At rest, the vault protects your secrets about as well as a 0600 file: the
-  seal key sits next to the data, so someone with the host's user account has
-  both. What OpenBao adds is the split between who can write and who can read,
-  short-lived read tokens, versions, and an audit log of every read. **Back up
-  `DATA_DIR/vault/seal.key` with the rest of `DATA_DIR`. Losing it loses every
-  secret.**
-</Callout>
+> [!WARNING]
+> **What OpenBao does and does not protect.** At rest, the vault protects your secrets about as well as a 0600 file: the seal key sits next to the data, so someone with the host's user account has both. What OpenBao adds is the split between who can write and who can read, short-lived read tokens, versions, and an audit log of every read. **Back up `DATA_DIR/vault/seal.key` with the rest of `DATA_DIR`. Losing it loses every secret.**
 
 ## Adding a key
 

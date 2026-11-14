@@ -1,7 +1,4 @@
----
-title: Machines
-description: The machine adapter contract every provider implements, its four guarantees, and how to add a provider.
----
+# Machines
 
 Every provider of the agent's computer implements one interface, `MachineProvider` in `host/src/machine.ts`. Three exist today:
 

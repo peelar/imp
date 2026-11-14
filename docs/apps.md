@@ -1,7 +1,4 @@
----
-title: Apps
-description: How an app runs, where its data lives, and how a new version goes from the imp's workspace to your screen.
----
+# Apps
 
 An app is a folder with three files: `app.json`, a screen (`app.contract`) and server code (`server.ts`). Its server code runs on the agent's computer, its data lives on the host, and both you and the imp use it through the same operations.
 
@@ -26,35 +23,28 @@ Versions run in slots. An app's live version runs in the slot named by its id. A
 
 ## From the imp's workspace to your screen
 
-<Steps>
-  <Step title="The imp writes the folder">
-    `app_code(app)` writes the app's current code into `apps/<id>/` in the imp's workspace (a working starter for a
-    new app), with the build guide, the SDK and Contract's docs. The imp edits the three files.
-  </Step>
-  <Step title="It asks for a preview">
-    `preview_app(app)` makes the host take only that folder from the computer. The host loads the server code, applies
-    its migrations to a copy of your data, writes the shell's wiring for the screen, and rebuilds the web client,
-    which takes a few seconds. If anything fails, the imp gets the error and where it is.
-  </Step>
-  <Step title="You try it">
-    The app's tab shows the new version as a preview, on a copy of your data, with **Save** and **Discard**. Open pages
-    reload into it by themselves.
-  </Step>
-  <Step title="Only you save">
-    Save makes the draft live and keeps the version before it. **Undo** restores it for 48 hours.
-  </Step>
-</Steps>
+1. **The imp writes the folder**
+
+   `app_code(app)` writes the app's current code into `apps/<id>/` in the imp's workspace (a working starter for a new app), with the build guide, the SDK and Contract's docs. The imp edits the three files.
+
+2. **It asks for a preview**
+
+   `preview_app(app)` makes the host take only that folder from the computer. The host loads the server code, applies its migrations to a copy of your data, writes the shell's wiring for the screen, and rebuilds the web client, which takes a few seconds. If anything fails, the imp gets the error and where it is.
+
+3. **You try it**
+
+   The app's tab shows the new version as a preview, on a copy of your data, with **Save** and **Discard**. Open pages reload into it by themselves.
+
+4. **Only you save**
+
+   Save makes the draft live and keeps the version before it. **Undo** restores it for 48 hours.
 
 On disk, under `DATA_DIR/code/<id>/`:
 
-<FileTree>
-
-- live/ the live version the imp made or changed (else `client/apps/<id>/`)
-- draft/ the draft being previewed
-- history/
-  - 1794639291602/ a saved-over version: its code, data.sqlite, and meta.json
-
-</FileTree>
+- `live/`: the live version the imp made or changed (else `client/apps/<id>/`)
+- `draft/`: the draft being previewed
+- `history/`
+  - `1794639291602/`: a saved-over version: its code, data.sqlite, and meta.json
 
 The host keeps the last three web builds in `DATA_DIR/builds/`, and `builds/current.json` names the one it serves.
 
@@ -66,4 +56,4 @@ Undo's history, which holds the data too, lasts 48 hours. The code lasts longer:
 
 Only code is backed up. The apps' data stays on the host, so back up `DATA_DIR` for that. The host needs `git` for the history and `gh` for GitHub, and Settings says which one is missing.
 
-To write an app yourself, see [Build an app](/docs/building-apps).
+To write an app yourself, see [Build an app](building-apps.md).

@@ -7,8 +7,6 @@ Your own imp: a self-hosted assistant that runs errands in your apps and builds 
 Chat is home. Ask for something, and the imp does it on a Linux computer of its own. Ask for a tool, and it builds
 an app that stays: a screen you keep using, which the imp can also operate for you.
 
-**[Website](https://peelar.github.io/imp)** · **[Docs](https://peelar.github.io/imp/docs)** · **[Install](https://peelar.github.io/imp/docs/self-hosting/install)**
-
 > [!WARNING]
 > Imp is an early prototype. Expect everything to change.
 
@@ -34,9 +32,8 @@ curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.s
 ```
 
 It installs Imp as a service, serves it on your tailnet and prints one link. Open it, sign in with ChatGPT, and give
-your imp a computer in Settings. The host keeps itself at the latest release.
-[Install](https://peelar.github.io/imp/docs/self-hosting/install) covers the details, and the optional Mac app, which installs
-from your host with one command.
+your imp a computer in Settings. The host keeps itself at the latest release. [Install](docs/install.md) covers the
+details, and the optional Mac app, which installs from your host with one command.
 
 ## Development
 
@@ -49,26 +46,20 @@ npm run check   # lint, formatting and types
 npm test        # the host's API tests
 ```
 
-[Run from a checkout](https://peelar.github.io/imp/docs/self-hosting/from-source) explains setup, the repository's
-layout and the other checks. [`AGENTS.md`](AGENTS.md) holds the conventions code in this repository follows, and
+[Development](docs/development.md) explains setup, the repository's layout and the other checks.
+[`AGENTS.md`](AGENTS.md) holds the conventions code in this repository follows, and
 [`.changeset/README.md`](.changeset/README.md) explains how a change is released.
 
 ## Documentation
 
-The [docs](https://peelar.github.io/imp/docs) cover hosting your own Imp and how it works inside:
+The [docs](docs/README.md) cover hosting your own Imp and how it works inside:
 
-- **Self-hosting:** [install](https://peelar.github.io/imp/docs/self-hosting/install),
-  [the imp's computer](https://peelar.github.io/imp/docs/self-hosting/computer),
-  [configuration](https://peelar.github.io/imp/docs/self-hosting/configuration),
-  [updates](https://peelar.github.io/imp/docs/self-hosting/updates)
-- **How it works:** [architecture](https://peelar.github.io/imp/docs/how-it-works/architecture),
-  [apps](https://peelar.github.io/imp/docs/how-it-works/apps),
-  [machines](https://peelar.github.io/imp/docs/how-it-works/machines),
-  [memory](https://peelar.github.io/imp/docs/how-it-works/memory),
-  [routines](https://peelar.github.io/imp/docs/how-it-works/routines),
-  [the secrets vault](https://peelar.github.io/imp/docs/how-it-works/vault),
-  [security](https://peelar.github.io/imp/docs/how-it-works/security)
-- **[Building apps](https://peelar.github.io/imp/docs/building-apps)** by hand
+- **Self-hosting:** [install](docs/install.md), [the imp's computer](docs/computer.md),
+  [configuration](docs/configuration.md), [updates](docs/updates.md)
+- **How it works:** [architecture](docs/architecture.md), [apps](docs/apps.md), [machines](docs/machines.md),
+  [memory](docs/memory.md), [routines](docs/routines.md), [the secrets vault](docs/vault.md),
+  [security](docs/security.md)
+- **[Building apps](docs/building-apps.md)** by hand
 
 ## Credits
 

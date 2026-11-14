@@ -1,7 +1,4 @@
----
-title: Routines
-description: What the imp does on a schedule while you are away, where each run happens, and how the host decides when.
----
+# Routines
 
 A routine is an instruction the imp carries out on a schedule, such as "every weekday at 8, check my pull requests and put what needs me in my Todos". You ask for one in the chat. The imp saves it with its `save_routine` tool (`host/src/routine-tools.ts`), and the sidebar lists it under **Routines**.
 
@@ -11,7 +8,7 @@ Each routine has a conversation of its own, which the sidebar opens. Every run a
 
 A routine marks itself in the sidebar while it runs (cobalt) and when it has a run you have not opened yet (ink). The imp is told the run happens while you are away. If a run needs something from you (a key, a choice, or anything destructive or irreversible), it stops and says so in that conversation rather than guessing.
 
-A run teaches the [memory](/docs/how-it-works/memory) nothing, since you said nothing in it. A reply you write in a routine's conversation teaches it as any chat does.
+A run teaches the [memory](memory.md) nothing, since you said nothing in it. A reply you write in a routine's conversation teaches it as any chat does.
 
 ## When it runs
 
@@ -24,8 +21,5 @@ The host keeps the routines in `DATA_DIR/routines.json` and their conversations 
 
 A routine due while the host was down runs once when it is back, not once for every time it missed. A run the host restarted in the middle of carries on, since the agent is durable. A paused routine misses its times; resumed, it runs at its next one from then.
 
-<Callout type="note" title="Changing a routine">
-  To change a routine, ask the imp: saving one with the same name replaces its
-  schedule and instruction. To stop one for a while, pause it in its
-  conversation.
-</Callout>
+> [!NOTE]
+> **Changing a routine.** To change a routine, ask the imp: saving one with the same name replaces its schedule and instruction. To stop one for a while, pause it in its conversation.
