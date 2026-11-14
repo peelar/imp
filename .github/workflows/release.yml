@@ -1,17 +1,23 @@
-# A pushed tag vX.Y.Z publishes a GitHub release that installed hosts and Mac apps update themselves to:
+# Every push to main runs Changesets (.changeset/README.md). While changesets are pending, it opens or updates the
+# release PR, which bumps package.json and writes CHANGELOG.md. Merging that PR leaves none pending and a version with
+# no release yet, so the same run publishes GitHub release v<version>, which installed hosts and Mac apps update to:
 #   imp-host-vX.Y.Z.tar.gz   the host, its production dependencies and the built web client (host/src/update.ts)
 #   Imp-macos.zip            the ad-hoc signed Mac app (scripts/install-mac.sh)
 #   install-host.sh          the host installer
-#
-#   git tag v0.2.0 && git push origin v0.2.0
+# The release is built here, not by a tag push, because a tag pushed with GITHUB_TOKEN starts no workflow.
 name: Release
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
 
 env:
   # The Exact checkout the client builds with. Move it when the client moves to a newer Exact.
@@ -19,7 +25,42 @@ env:
   EXACT_REV: fe917faa7f5b1f4eb3178b8c4473b88bd6053f5e
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.unreleased.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - id: changesets
+        uses: changesets/action@v1
+        with:
+          version: npm run changeset:version
+          title: Release Imp
+          commit: Release Imp
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - id: unreleased
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$tag is already released"
+          else
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
   package:
+    needs: version
+    if: needs.version.outputs.tag != ''
     strategy:
       matrix:
         include:
@@ -53,20 +94,25 @@ jobs:
           git checkout -q FETCH_HEAD
           bun scripts/exact.mjs setup
           echo "EXACT=$RUNNER_TEMP/exact" >> "$GITHUB_ENV"
-      - run: scripts/package.sh ${{ matrix.part }} "$GITHUB_REF_NAME" out
+      - run: scripts/package.sh ${{ matrix.part }} "${{ needs.version.outputs.tag }}" out
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.part }}
           path: out/
 
   release:
-    needs: package
+    needs: [version, package]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
-      - run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+      # The notes are this version's section of CHANGELOG.md; the tag is created at the commit that was built.
+      - run: |
+          awk -v heading="## ${TAG#v}" '$0 == heading { found = 1; next } found && /^## / { exit } found' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
         env:
+          TAG: ${{ needs.version.outputs.tag }}
           GH_TOKEN: ${{ github.token }}

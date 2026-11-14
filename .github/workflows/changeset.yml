@@ -1,0 +1,45 @@
+# Every pull request adds a changeset that bumps imp, or carries the skip changeset label (.changeset/README.md).
+# The release PR that Release opens is exempt: it consumes the changesets.
+name: Changeset
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changeset:
+    name: Require changeset
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ !contains(github.event.pull_request.labels.*.name, 'skip changeset') &&
+      (github.head_ref != 'changeset-release/main' ||
+      github.event.pull_request.user.login != 'github-actions[bot]' ||
+      github.event.pull_request.head.repo.full_name != github.repository) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Require a new changeset that bumps imp
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if ! git diff --name-only --diff-filter=A "$BASE_SHA"...HEAD -- '.changeset/*.md' ':!.changeset/README.md' | grep -q .; then
+            echo '::error::Add a changeset with npm run changeset, or apply the skip changeset label to a change that keeps behavior the same.'
+            exit 1
+          fi
+          npx changeset status --since "$BASE_SHA" --output "$RUNNER_TEMP/changeset-status.json"
+          node -e '
+            const status = require(process.env.RUNNER_TEMP + "/changeset-status.json");
+            if (!status.releases.some((release) => release.name === "imp")) {
+              console.error("::error::The changeset must bump imp.");
+              process.exit(1);
+            }
+          '
