@@ -280,6 +280,24 @@ test("the imp remembers what it is told, Settings shows it, and the person can m
   assert.deepEqual(await forgotten, []);
 });
 
+test("after a chat the imp remembers what it learned on its own, without a tool call", async () => {
+  assert.deepEqual(
+    await call("chatSend", ["By the way, I live in Gdańsk now.", ""]),
+    done
+  );
+
+  const entries = await until(
+    "account",
+    remembered((all) => all.length > 0)
+  );
+
+  assert.deepEqual(
+    entries.map(({ id, facts }) => ({ id, facts })),
+    [{ id: "user", facts: ["Lives in Gdańsk"] }]
+  );
+  assert.deepEqual(await call("memoryForget", ["user", ""]), done);
+});
+
 // ---- The studio: the agent previews an app it wrote; the person saves, discards and undoes ----
 
 // A preview builds the shell, so these tests need the Exact checkout the host builds with (HostOptions.exact): EXACT
