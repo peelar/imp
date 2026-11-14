@@ -97,7 +97,7 @@ When the imp needs a key you have not added, it calls `request_secret` with the 
 
 - **Injection gives use, not reading.** Anything on the computer can still use a key against that key's own hosts. Keep rule hosts to API hosts, and watch Recent use.
 - **Clients that pin their own CA** won't trust Imp's, and fail with a TLS error on hosts that have a secret.
-- **Response bodies over 1 MB** stream through without being scrubbed.
+- **A large response is scrubbed as it streams.** A body over 1 MB with a known length gets the value replaced by as many asterisks, so its length stays right; one without a length gets the stand-in. A compressed response is held whole and scrubbed once decoded.
 
 ## Planned
 
