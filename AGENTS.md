@@ -1,0 +1,40 @@
+# Imp
+
+`host/` is the host: Node runs its TypeScript directly, so there is no build step and only erasable syntax (no enums, namespaces or parameter properties). `sdk/app.ts` is the contract an app's `server.ts` is written against. `client/` is the Exact shell and has its own `AGENTS.md`; `client/apps/<id>/` holds one app per folder.
+
+## Checks
+
+- Install twice: `npm ci` at the root (lint, format and type tooling) and `npm ci` in `host/` (the host's own dependencies).
+- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (the host's API tests, about 10 seconds) at the root. CI runs the same two.
+- `npm run lint:fix` formats and applies the automatic fixes. Run it before fixing diagnostics by hand; some fixes only apply on a second run.
+- After a change to the client, or to what the host sends it, also run `cd client && bun exact.mjs test web` (needs Bun and Exact; see `client/AGENTS.md`).
+- A new behavior of the host's HTTP API gets a test in `host/test/api.test.ts`, which drives a real host with a scripted model (`host/scripts/test-host.ts`).
+
+## Lint policy
+
+The rules in `oxlint.config.ts` are strict on purpose. Fix a diagnostic by changing the code, not the config, and do not add `oxlint-disable` comments. Three exceptions, each with its reason written after `--`:
+
+- A type assertion the type system cannot avoid (a library typed `any`): put `// SAFETY: <the invariant that makes it true>` above it, then `// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- <why>`.
+- A poll or retry loop that must await in sequence: `// oxlint-disable-next-line no-await-in-loop -- <why>`. Independent work uses `Promise.all`.
+- `sdk/app.ts` keeps `run` as a method signature so apps can narrow its arguments.
+
+What the rules ask for, where the answer is a design choice:
+
+- Data from outside the process (files, `JSON.parse`, HTTP, child-process output, the model's tool arguments, messages from the agent's machine) is checked with a compiled `@earendil-works/pi-schema` schema before use. `host/src/protocol.ts` and `host/src/computer-choice.ts` show how.
+- `typeof` appears only inside a type-predicate function. No parameter is typed `unknown` except one named `cause`. JSON values are `Json` from `sdk/app.ts`, not `Record<string, unknown>`.
+- Limits: 500 lines per file, 100 per function, 3 parameters (take one options object beyond that), nesting depth 3, cognitive complexity 15. When a file or function passes one, split it by what each part owns and say that in the new module's opening comment.
+- When you change `oxlint.config.ts`, add or update a probe in `scripts/lint-policy.ts` that proves the rule fires.
+
+## Module boundaries in `host/src`
+
+- `host.ts` only composes. What the shell reads and changes is in `shell-api.ts`; how it is served is in `http.ts`.
+- `protocol.ts` is the one definition of the messages between the host, agentd and each app's worker. `host/machine/*.ts` runs on the agent's machine with its types stripped and no packages except `ws`: import types only there, and nothing from `host/src` at runtime.
+- `apps.ts` is the app gateway and composes `app-folders.ts`, `app-manifest.ts`, `app-data.ts`, `app-machine.ts` and `app-tools.ts`. An app's data stays on the host; only `app-data.ts` touches its SQLite file.
+- Only `computer-machines.ts` names a machine provider. Everything else reaches the agent's machine through the `Machine` contract in `machine.ts`.
+- The shell opens at most five live streams, because a browser allows six connections per host and a sixth stream makes calls hang. New shell state rides on an existing stream, as the computer and memory ride on `account`.
+- A name the shell's API starts with (such as `memory`) is added to `RESERVED` in `app-folders.ts`, so no app can take it as its id.
+
+## Generated and shipped files
+
+- Never edit or format the blocks between `// <apps:…>` and `// </apps:…>` in `client/app.contract` and `client/app.ts`. Regenerate them with `node host/scripts/shell.ts` after changing an app's Screen props or operations.
+- A release ships `host/`, `sdk/` and `client/apps/` (`scripts/package.sh`), and the host installs with `npm ci --omit=dev`. Code under `host/src` and `host/machine` may import only the `dependencies` of `host/package.json`; the root `package.json` is tooling and is not shipped.

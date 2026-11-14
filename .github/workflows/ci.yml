@@ -1,0 +1,36 @@
+# Every push to main and every pull request: the lint policy, formatting, types, and the host's API tests.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types and host tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            host/package-lock.json
+      # The lint and type tooling lives at the root; the host's own dependencies in host/.
+      - run: npm ci
+      - run: npm ci
+        working-directory: host
+      - run: npm run check
+      - run: npm test

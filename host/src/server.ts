@@ -10,7 +10,8 @@
 //   IMP_HOME      set by scripts/install-host.sh: the installed host, which updates itself (update.ts)
 //   IMP_AUTO_UPDATE  "0" keeps an installed host at its release
 //   IMP_REPO      the GitHub repository releases come from (default peelar/imp)
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { openCredentialStore } from "./credentials.ts";
@@ -19,8 +20,10 @@ import { localProvider } from "./machine-local.ts";
 import { CHATGPT } from "./signin.ts";
 import { runningVersion, startUpdater } from "./update.ts";
 
-const root = join(import.meta.dirname, "..", "..");
-const dataDir = process.env.DATA_DIR ?? join(import.meta.dirname, "..", "data");
+const root = path.join(import.meta.dirname, "..", "..");
+
+const dataDir =
+  process.env.DATA_DIR ?? path.join(import.meta.dirname, "..", "data");
 
 if (process.env.MACHINE && process.env.MACHINE !== "local") {
   throw new Error(
@@ -31,15 +34,13 @@ if (process.env.MACHINE && process.env.MACHINE !== "local") {
 const machines =
   process.env.MACHINE === "local"
     ? (secret: string) =>
-        localProvider({ secret, dir: join(dataDir, "machines") })
+        localProvider({ secret, dir: path.join(dataDir, "machines") })
     : undefined;
-
-const { mkdirSync } = await import("node:fs");
 
 mkdirSync(dataDir, { recursive: true });
 
 const models = createModels({
-  credentials: openCredentialStore(join(dataDir, "credentials.sqlite")),
+  credentials: openCredentialStore(path.join(dataDir, "credentials.sqlite")),
 });
 
 models.setProvider(openaiCodexProvider());
@@ -52,13 +53,13 @@ const host = await startHost({
   model: { provider: CHATGPT, modelId: process.env.MODEL ?? "gpt-6.1-sol" },
   machines,
   dataDir,
-  appsDir: join(root, "client", "apps"),
-  clientDir: join(root, "client", "dist"),
+  appsDir: path.join(root, "client", "apps"),
+  clientDir: path.join(root, "client", "dist"),
   port: Number(process.env.PORT ?? 8787),
   owner: process.env.OWNER_LOGIN,
   version,
   repo,
-  macInstaller: join(root, "scripts", "install-mac.sh"),
+  macInstaller: path.join(root, "scripts", "install-mac.sh"),
 });
 
 // Only an installed release updates itself: a checkout is the developer's to move.

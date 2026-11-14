@@ -102,7 +102,16 @@ Open the app, continue with ChatGPT, enter the code it shows, and pick a compute
 fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the rest.
 `node scripts/smoke-machine.ts` checks a machine adapter on its own.
 
-Tests run the client against a host with a fake model: `cd client && bun exact.mjs test web`.
+**Checks.** `npm ci` at the root installs the lint, format and type tooling; then:
+
+```sh
+npm run check   # oxlint (Ultracite's core and anti-slop rules, type-aware), the lint policy probes, oxfmt, tsc
+npm test        # the host's HTTP API against a host with a fake model and a local machine
+cd client && bun exact.mjs test web   # the client against the same host
+```
+
+`.github/workflows/ci.yml` runs the first two on every push and pull request. `AGENTS.md` says what the rules ask of
+new code.
 
 ## Credits
 
