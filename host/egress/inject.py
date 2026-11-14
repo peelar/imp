@@ -3,7 +3,8 @@ the hosts the owner's secrets are for.
 
 For each request it reads the secrets the host's rules name for that host from OpenBao, with a token that can only
 read values, and sets each one's header, replacing whatever the agent sent. A secret's stand-in anywhere else in the
-headers becomes its value too. The value is taken out of the response before the agent sees it. Every use is printed
+headers becomes its value too. The value is taken out of the response before the agent sees it, streamed (large)
+responses included. Every use is printed
 as one `IMP-USE {json}` line, which the host records. Nothing here keeps a value beyond the request it is used on.
 
 Only the standard library: the addon runs in mitmproxy's own standalone build.
@@ -110,10 +111,7 @@ def request(flow: http.HTTPFlow):
     flow.metadata["imp"] = used
 
 
-def response(flow: http.HTTPFlow):
-    used = flow.metadata.get("imp")
-    if not used or flow.response is None:
-        return
+def scrub_headers(flow, used):
     stand_ins = rules().get("standIns", {})
     for key in set(flow.response.headers.keys()):
         values = flow.response.headers.get_all(key)
@@ -122,8 +120,67 @@ def response(flow: http.HTTPFlow):
             scrubbed = [v.replace(secret, stand_ins.get(name, "")) for v in scrubbed]
         if scrubbed != values:
             flow.response.headers.set_all(key, scrubbed)
-    # A streamed (large) body passes through as it comes, unscrubbed.
+
+
+def stream_scrubber(replacements):
+    """
+    A chunk transformer for a streamed body that replaces each secret with its replacement. The last bytes of each chunk
+    wait for the next one, so a secret split across two chunks is caught too. mitmproxy calls it with b"" once at the
+    end. It answers a list of chunks: an empty chunk would end an HTTP/1 chunked body early.
+    """
+    pairs = [(secret, replacement) for secret, replacement in replacements if secret]
+    keep = max((len(secret) for secret, _ in pairs), default=1) - 1
+    pending = b""
+
+    def scrub(data):
+        nonlocal pending
+        buffered = pending + data
+        for secret, replacement in pairs:
+            buffered = buffered.replace(secret, replacement)
+        cut = len(buffered) if not data else max(len(buffered) - keep, 0)
+        pending = buffered[cut:]
+        return [buffered[:cut]] if cut else []
+
+    return scrub
+
+
+def responseheaders(flow: http.HTTPFlow):
+    """
+    Decides how a response to a request with a secret is scrubbed, before mitmproxy reads its body: a small one with a
+    known length is buffered and scrubbed whole (response), a large one streams through a scrubber that keeps its
+    length, and one without a length, whose size is unknown, streams through a scrubber from the start. A streamed
+    response sends its headers now, so they are scrubbed now.
+    """
+    used = flow.metadata.get("imp")
+    if not used or flow.response is None:
+        return
+    compressed = flow.response.headers.get("content-encoding", "identity").lower() not in ("", "identity")
+    has_length = "content-length" in flow.response.headers
+    if compressed:
+        # A compressed body cannot be scrubbed as it passes: it is buffered instead, decoded, and scrubbed whole.
+        flow.response.stream = False
+        return
+    if has_length and not flow.response.stream:
+        return
+    scrub_headers(flow, used)
+    stand_ins = rules().get("standIns", {})
+    flow.response.stream = stream_scrubber(
+        [
+            # With a Content-Length to keep true, the value becomes as many asterisks; without one, the stand-in.
+            (secret.encode(), b"*" * len(secret.encode()) if has_length else stand_ins.get(name, "").encode())
+            for name, secret in used
+        ]
+    )
+
+
+def response(flow: http.HTTPFlow):
+    used = flow.metadata.get("imp")
+    if not used or flow.response is None:
+        return
+    scrub_headers(flow, used)
+    # A streamed body was scrubbed as it passed (responseheaders).
     if not flow.response.stream and flow.response.content:
+        stand_ins = rules().get("standIns", {})
         content = flow.response.content
         for name, secret in used:
             content = content.replace(secret.encode(), stand_ins.get(name, "").encode())
