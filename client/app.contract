@@ -194,6 +194,14 @@ shape Trick
   site: string
   params: string[]
 
+// An app in the directory, kept in a GitHub repository (`repo`, its link). `symbol` is its icon.
+shape DirectoryApp
+  id: string
+  name: string
+  description: string
+  repo: string
+  symbol: string
+
 shape Reply
   ok: bool
   error: string
@@ -248,6 +256,32 @@ fn hasDraft(name: string, apps: AppTile[]): bool =
 fn undoKind(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.undo, case none => "" }
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
+fn paneTitle(pane: string): string = pane == "tricks" ? "Tricks" : "App directory"
+// A link to a GitHub repository, such as github.com/owner/app, as its path ("owner/app"), or "" for any other text.
+fn repoPath(link: string): string =
+  link.includes(" ") ? "" : link.startsWith("https://github.com/") ? link.slice(19) : link.startsWith("github.com/") ? link.slice(11) : ""
+fn repoLink(link: string): string = repoPath(link).split("/").filter(p => p != "").length >= 2 ? `https://github.com/${repoPath(link)}` : ""
+// What the imp is asked when the person installs an app from GitHub: the studio's own loop (host/studio/GUIDE.md),
+// starting from the repository's folder instead of a starter.
+fn installAsk(repo: string): string =
+  `Install the app at ${repo}. Clone it on your computer, copy its app folder (app.json, app.contract and server.ts) to apps/<its id>/ in your workspace, and preview it.`
+// The directory's apps. Mock entries for now, except Todos, which this repository ships: the rest name repositories
+// that do not exist yet, so the imp cannot install them.
+fn directory(): DirectoryApp[] = [
+  DirectoryApp(id="todos", name="Todos", description="A list of things to do. The agent can read and change it.",
+    repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:checkmark"),
+  DirectoryApp(id="habits", name="Habits", description="A streak for each habit, ticked off once a day.",
+    repo="https://github.com/imp-apps/habits", symbol="symbol:star"),
+  DirectoryApp(id="reading", name="Reading list", description="Books and articles to read, with a note on each one you finish.",
+    repo="https://github.com/imp-apps/reading", symbol="symbol:book"),
+  DirectoryApp(id="runs", name="Runs", description="Distance and pace for every run, and how the month adds up.",
+    repo="https://github.com/marta/imp-runs", symbol="symbol:chart"),
+  DirectoryApp(id="places", name="Places", description="Places to go, each pinned with who told you about it.",
+    repo="https://github.com/imp-apps/places", symbol="symbol:pin"),
+  DirectoryApp(id="people", name="People", description="Who you met, where, and what to ask them next time.",
+    repo="https://github.com/kuba/imp-people", symbol="symbol:people"),
+  DirectoryApp(id="journal", name="Journal", description="A line a day. Your imp can write it for you from your chats.",
+    repo="https://github.com/imp-apps/journal", symbol="symbol:pencil")]
 fn computerStatus(status: string): string =
   status == "ready" ? "Ready" : status == "starting" ? "Starting…" : status == "failed" ? "Not reachable" : "Not chosen yet"
 
@@ -257,7 +291,8 @@ component App
   state now = 0
   // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
   state chatDocked = true persist
-  // What the chat tab shows: "chat" (the open conversation) or "tricks" (what the imp learned in the browser).
+  // What the chat tab shows: "chat" (the open conversation), "tricks" (what the imp learned in the browser) or
+  // "directory" (apps to install).
   state pane = "chat"
   // The sidebar's conversations past the latest three are folded until this opens them.
   state olderOpen = false
@@ -415,6 +450,15 @@ component App
     pane = "chat"
     draft = `${title}: `
     focus("composer")
+  action openDirectory
+    pane = "directory"
+    drawer = false
+    nav = select(nav, "chat")
+  // An app from the directory, or a link to one: the imp brings it in as a preview, in the open conversation.
+  action installApp(repo: string)
+    if not pending(sent)
+      pane = "chat"
+      send sent = chatSend(installAsk(repo), "")
   action toggleOlder
     olderOpen = not olderOpen
   action toggleDrawer
@@ -513,7 +557,7 @@ component App
                           background-color="transparent" color="ink.strong"
                           image "symbol:menu" width=16 height=16
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=(e.name == "chat" and pane == "tricks" ? "Tricks" : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
+                      Initialled(word=(e.name == "chat" and pane != "chat" ? paneTitle(pane) : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
                       if e.name == "chat" and chat.busy
                         row gap=8 align-items="center" testId="busy"
@@ -531,6 +575,9 @@ component App
                           text "Chat" class=Label color="inherit"
                   if e.name == "chat" and pane == "tricks"
                     TrickList(tricks=tricks, use=useTrick)
+                  else if e.name == "chat" and pane == "directory"
+                    AppDirectory(entries=directory(), installed=apps.map(a => a.id), sending=pending(sent),
+                      install=installApp, open=pick)
                   else if e.name == "chat"
                     if chat.messages.length == 0 and not chat.busy
                       // Home with nothing said yet: the day, a greeting, the workshop, and the apps.
@@ -690,7 +737,8 @@ component App
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
             aria-label="Conversations and tricks"
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, pane=pane, tricks=tricks.length,
-              olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks, toggleOlder=toggleOlder)
+              olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks, openDirectory=openDirectory,
+              toggleOlder=toggleOlder)
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
         if docked
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
@@ -771,7 +819,7 @@ component App
               aria-label="Conversations and tricks"
               Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, pane=pane,
                 tricks=tricks.length, olderOpen=olderOpen, newChat=newChat, show=showChat, openTricks=openTricks,
-                toggleOlder=toggleOlder)
+                openDirectory=openDirectory, toggleOlder=toggleOlder)
             button press=toggleDrawer aria-label="Close" testId="drawer-close" appearance="none" flex=1 border="none"
               background-color="ink.strong" opacity=0.25
         // The masthead above everything on a wide window: the wordmark and the day.
@@ -1054,7 +1102,8 @@ component SecretSettings
                 color=(u.failed ? "-exact-system-red" : "ink.muted")
               text u.when font-size="0.75rem" color="ink.faint"
 
-// The left sidebar: a new chat, the imp's tricks, the three latest conversations and, folded under them, the rest.
+// The left sidebar: a new chat, the imp's tricks, the app directory, the three latest conversations and, folded under
+// them, the rest.
 component Sidebar
   props
     prefix: string
@@ -1066,6 +1115,7 @@ component Sidebar
     newChat: action
     show: action
     openTricks: action
+    openDirectory: action
     toggleOlder: action
   view
     column flex=1 min-height=0 testId=`${prefix}sidebar`
@@ -1084,6 +1134,13 @@ component Sidebar
           image "symbol:sparkles" width=15 height=15 aria-hidden=true
           text "Tricks" font-size="0.9375rem" flex=1
           text `${tricks}` class=Label testId=`${prefix}tricks-count`
+        button press=openDirectory aria-pressed=(pane == "directory") testId=`${prefix}directory-entry` appearance="none"
+          display="flex" align-items="center" gap=10 padding="9px 10px" border="none" text-align="start"
+          background-color=(pane == "directory" ? "surface.soft" : "transparent") color="ink.strong"
+          :hover
+            background-color="surface.soft"
+          image "symbol:layers" width=15 height=15 aria-hidden=true
+          text "App directory" font-size="0.9375rem" flex=1
       scroll flex=1 min-height=0
         column gap=2 padding="14px 10px 20px"
           text "Recent" class=Label padding="0 10px 6px"
@@ -1152,6 +1209,79 @@ component TrickList
                 text (k.params.length == 0 ? k.site : `${k.site} · asks for ${k.params.join(", ")}`) font-size="0.9375rem"
                   color="ink.muted" line-clamp=1
               text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+
+// The app directory: a link to any app on GitHub, and apps others built, each installed by the imp as a preview to try
+// before keeping it. An app already installed opens instead.
+component AppDirectory
+  props
+    entries: DirectoryApp[]
+    installed: string[]
+    sending: bool
+    install: action
+    open: action
+  state link = ""
+  derive repo = repoLink(link.trim())
+  action editLink(v: string)
+    link = v
+  action installLink
+    if repo != "" and not sending
+      install(repo)
+      link = ""
+  view
+    scroll id="directory-list" flex=1 min-height=0
+      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=28 box-sizing="border-box" width="100%"
+        testId="directory"
+        text "Apps other people built for their imps. Pick one, or paste a link to one on GitHub: your imp brings it in as a preview, and you keep it if you like it."
+          color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+        column gap=12
+          row padding-bottom=10 border-bottom="1px solid ink.strong"
+            text "From a link" class=Label color="ink.strong" role="heading" aria-level=2
+          row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+            input value=link input=editLink submit=installLink placeholder="github.com/owner/app" aria-label="Link to an app on GitHub"
+              testId="directory-link" flex=1 min-width=0 padding="9px 0" border="none" background-color="transparent"
+              outline="none" font-family="family.mono" font-size="0.9375rem" color="ink.strong" autocapitalize="none"
+              autocorrect="off" spellcheck=false
+            button press=installLink disabled=(repo == "" or sending) testId="directory-link-install" padding="10px 14px"
+              border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
+              font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+              :disabled
+                background-color="surface.soft"
+                color="ink.faint"
+              text "Install"
+          if link.trim() != "" and repo == ""
+            text "That isn't a link to a GitHub repository. It looks like github.com/owner/app." font-size="0.875rem"
+              color="-exact-system-red" testId="directory-link-error"
+        column
+          row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+            text "In the directory" class=Label color="ink.strong" role="heading" aria-level=2
+            text `No. ${numbered(entries.length)}` class=Label
+          for a in entries key=a.id
+            row align-items="center" gap=14 padding="14px 0" border-bottom="1px solid line.subtle" testId=`directory-${a.id}`
+              row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                image a.symbol width=18 height=18
+              column gap=2 flex=1 min-width=0
+                text a.name font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`directory-name-${a.id}`
+                text a.description font-size="0.9375rem" color="ink.muted" line-height=1.4
+                text `${repoPath(a.repo)}` font-family="family.mono" font-size="0.75rem" color="ink.faint"
+                  white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+              if installed.includes(a.id)
+                button press=open(a.id) aria-label=`Open ${a.name}` testId=`directory-open-${a.id}` padding="8px 12px"
+                  border="1px solid line.strong" background-color="transparent" color="ink.strong" font-family="family.mono"
+                  font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                  :hover
+                    background-color="surface.soft"
+                  text "Open"
+              else
+                button press=install(a.repo) disabled=sending aria-label=`Install ${a.name}` testId=`directory-install-${a.id}`
+                  padding="8px 12px" border="1px solid AccentColor" background-color="transparent" color="AccentColor"
+                  font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                  :hover
+                    background-color="Highlight"
+                  :disabled
+                    border-color="line.subtle"
+                    color="ink.faint"
+                  text "Install"
 
 // What the imp remembers, in Settings: who it is, who its person is, and everything else it learned, each fact with
 // a way to forget it.

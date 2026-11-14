@@ -202,3 +202,29 @@ test "on a narrow window the conversations and tricks open as a drawer"
   tap "drawer-tricks-entry"
   expect tree missing "drawer"
   expect tree has "tricks"
+
+test "the app directory installs an app from a GitHub link through the imp, and opens one already installed"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  tap "directory-entry"
+  expect tree has "directory"
+  expect tree missing "composer"
+  expect text "directory-name-habits" == "Habits"
+  expect tree has "directory-install-habits"
+  expect tree missing "directory-install-todos"
+  type "directory-link" "github.com/someone"
+  expect tree has "directory-link-error"
+  type "directory-link" "github.com/someone/weather"
+  expect tree missing "directory-link-error"
+  tap "directory-link-install"
+  expect tree missing "directory"
+  clock until state chat.messages.0.text == "Install the app at https://github.com/someone/weather. Clone it on your computer, copy its app folder (app.json, app.contract and server.ts) to apps/<its id>/ in your workspace, and preview it." within 5000
+  clock until state chat.busy == false within 10000
+  tap "directory-entry"
+  expect text "directory-link" == ""
+  tap "directory-open-todos"
+  expect tree has "chat-panel"
+  expect text "todo-1" == "Pack camera"
