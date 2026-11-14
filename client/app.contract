@@ -9,6 +9,7 @@
 // <apps:use>
 use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 // </apps:use>
+use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
 
 font "Instrument Serif" = "assets/fonts/InstrumentSerif-Regular.ttf"
 font "Pinyon Script" = "assets/fonts/PinyonScript-Regular.ttf"
@@ -312,6 +313,21 @@ fn routineStatus(r: Routine): string =
 fn routineLast(r: Routine): string = r.last == "" ? "Not run yet" : r.failed ? `Last run failed ${r.last}` : `Last ran ${r.last}`
 fn computerStatus(status: string): string =
   status == "ready" ? "Ready" : status == "starting" ? "Starting…" : status == "failed" ? "Not reachable" : "Not chosen yet"
+// Dictated words added to the end of a draft, a space between them.
+fn withSpoken(draft: string, spoken: string): string =
+  spoken.trim() == "" ? draft : draft == "" or draft.endsWith(" ") or draft.endsWith("\n") ? `${draft}${spoken.trim()}` : `${draft} ${spoken.trim()}`
+// The final results a recognition heard from the `from`th on, best guesses only.
+fn heardSince(heard: SpeechRecognitionState, from: number): string =
+  (heard.results.filter(r => r.index >= from).map(r => r.alternatives.slice(0, 1).map(a => a.transcript.trim()).join(""))
+    .filter(t => t != "").join(" "))
+// Why dictation stopped or did not start, from a start's failure or a recognition's error ("" for none worth saying:
+// the person stopped it, or it heard nothing).
+fn dictationTrouble(code: string): string =
+  (code == "" or code == "aborted" or code == "no-speech" ? ""
+    : code == "NotAllowedError" or code == "not-allowed" ? "Dictation needs the microphone. Allow it for this page and try again."
+    : code == "audio-capture" or code == "NotReadableError" ? "No microphone could be opened for dictation."
+    : code == "network" or code == "service-not-allowed" ? "The browser's speech service did not answer. Try again."
+    : `Dictation stopped (${code}).`)
 
 component App
   state draft = ""
@@ -332,6 +348,14 @@ component App
   state hostDraft = ""
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
   state secretRound = 0
+  // Dictation into the composer: whether it is on, the browser's recognition once it has started, how many of its
+  // final results are already in the draft, and why the last one stopped (a recognition's error).
+  state dictating = false
+  state recognitionId = ""
+  state dictated = 0
+  state dictationEnd = ""
+  resource speech = speechRecognitionStatus() as shape SpeechRecognitionStatus else empty()
+  resource heard = speechRecognitionState(recognition=recognitionId) when recognitionId != "" as shape SpeechRecognitionState else empty()
   resource media = exactViewport() as shape Media
   resource time = exactTime() as shape Time
   resource host = hostOrigin(hostAddress) as shape Host else empty()
@@ -364,6 +388,8 @@ component App
   mutation backupStarted as shape Reply
   mutation backupCancelled as shape Reply
   mutation backupDisconnected as shape Reply
+  mutation listening as shape SpeechRecognitionInfo then listened
+  mutation unheard as shape SpeechRecognitionInfo
   derive still = media.prefersReducedMotion
   // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
   derive wide = media.width >= 960
@@ -379,6 +405,12 @@ component App
   derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
   derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
   derive sendError = match sent { case some(r) => r.error, case none => "" }
+  // Dictation takes the microphone through the browser's own recognizer (the Mac app's takes only a track, so it
+  // offers none). The words it is still unsure of show above the field until they are final and join the draft.
+  derive canDictate = speech.available and speech.state != "denied" and speech.inputs.includes("microphone")
+  derive interimHeard = match heard.interim { case some(i) => i.alternatives.slice(0, 1).map(a => a.transcript).join("").trim(), case none => "" }
+  derive dictationError = dictationTrouble(match failure(listening) { case some(f) => f.code, case none => dictationEnd })
+  derive composerError = sendError != "" ? sendError : dictationError
   // A live stream that ended (the host restarted, the network dropped) is opened again.
   derive hostLost = match failure(host) { case some(f) => true, case none => false }
   derive accountLost = match failure(account) { case some(f) => true, case none => false }
@@ -407,6 +439,13 @@ component App
     every(3000, reconnect)
   task clock mount
     every(60000, tick)
+  task foldDictation when recognitionId != "" and heard.id == recognitionId key=heard.finalCount
+    change(foldHeard)
+  task endDictation when dictating and recognitionId != "" and heard.id == recognitionId and heard.state == "ended"
+    after(1, dictationEnded)
+  // A refused start (no microphone, permission denied) runs no `then`.
+  task dictationRefused when failed(listening) key=true
+    change(dictationOff)
 
   action applyScheme
     setScheme(scheme)
@@ -448,14 +487,59 @@ component App
     setScheme(value)
   action edit(v: string)
     draft = v
+  // Sending while dictating sends the words heard so far, the unsure ones too, and ends the dictation.
   action post(where: string)
-    if draft.trim() != "" and not pending(sent)
-      send sent = chatSend(draft.trim(), where == "side-" ? nav.tab : "")
+    let message = withSpoken(draft, interimHeard).trim()
+    if message != "" and not pending(sent)
+      send sent = chatSend(message, where == "side-" ? nav.tab : "")
       draft = ""
+      if dictating
+        hush()
     if where == "side-"
       focus("side-composer")
     else
       focus("composer")
+  // The microphone button: starts dictation, or stops it, which lets the recognizer finish the words it is on.
+  action dictate
+    if not dictating
+      dictating = true
+      recognitionId = ""
+      dictationEnd = ""
+      send listening = startSpeechRecognition(microphone=true, continuous=true, interimResults=true)
+    else if recognitionId == ""
+      hush()
+    else if heard.state != "stopping"
+      send unheard = stopSpeechRecognition(recognition=recognitionId)
+  // Ends dictation at once, dropping the words not yet final. A start still in flight is superseded, so its
+  // recognition is aborted when it answers.
+  action hush
+    if recognitionId == ""
+      send listening = abortSpeechRecognition(recognition="")
+    else
+      send unheard = abortSpeechRecognition(recognition=recognitionId)
+    dictating = false
+    recognitionId = ""
+  action listened
+    match listening
+      case some(r)
+        recognitionId = r.id
+        dictated = 0
+        if r.id == ""
+          dictating = false
+      case none
+        dictating = false
+  action dictationOff
+    dictating = false
+  action foldHeard
+    draft = withSpoken(draft, heardSince(heard, dictated))
+    dictated = heard.finalCount
+  // The recognition ended: the person stopped it, it heard silence for a while, or it failed. Its last words join
+  // the draft.
+  action dictationEnded
+    foldHeard()
+    dictationEnd = match heard.error { case some(e) => e, case none => "" }
+    dictating = false
+    recognitionId = ""
   action suggest(text: string)
     if not pending(sent)
       send sent = chatSend(text, "")
@@ -738,7 +822,8 @@ component App
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
-                      sending=pending(sent), stopping=pending(stopped), error=sendError, edit=edit, post=post, stop=stop)
+                      sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
+                      canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=32 box-sizing="border-box" width="100%"
@@ -836,7 +921,8 @@ component App
             else
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
             Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
-              sending=pending(sent), stopping=pending(stopped), error=sendError, edit=edit, post=post, stop=stop)
+              sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
+              canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate)
         // The apps, drawn: on a wide window a dock floating over the bottom of the page (Chat, each app's cover, and
         // Settings at the end; the open one shows its name), on a phone a bar of symbols along the bottom.
         row role="tablist" appearance="none" testId="tabs" position="absolute" box-sizing="border-box"
@@ -1880,7 +1966,9 @@ component Transcript
               text m.text markup="markdown" padding="10px 0 14px" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.6
                 overflow-wrap="break-word" testId=`${prefix}message-${m.id}`
 
-// The square field the person writes in, with Send (or Stop while the assistant works and the field is empty).
+// The square field the person writes in, with Send (or Stop while the assistant works and the field is empty), and
+// a microphone that dictates into it where the browser can. While it listens, the words it has not settled on show
+// above the field.
 component Composer
   props
     prefix: string
@@ -1894,24 +1982,41 @@ component Composer
     edit: action
     post: action
     stop: action
+    canDictate: bool
+    dictating: bool
+    heard: string
+    dictate: action
+  derive said = withSpoken(draft, heard).trim()
   view
     row justify-content="center" padding=(compact ? "10px 14px 14px" : "10px 16px 14px")
       column width="100%" max-width="46rem" gap=8
         if error != ""
           text error color="-exact-system-red" font-size="0.8125rem" testId=`${prefix}send-error`
+        if dictating
+          row gap=8 align-items="baseline" testId=`${prefix}dictation`
+            row width=6 height=6 min-width=6 background-color="-exact-system-red" aria-hidden=true
+            text (heard == "" ? "Listening…" : heard) font-style="italic" color="ink.muted" flex=1 min-width=0
+              font-size=(compact ? "0.9375rem" : "1rem") overflow-wrap="break-word" testId=`${prefix}dictation-heard`
         row align-items="flex-end" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
           background-color="surface.page"
           textarea id=`${prefix}composer` value=draft input=edit rows=1 field-sizing="content" max-height=180
             placeholder=placeholder aria-label="Message" testId=`${prefix}composer` flex=1 min-width=0
             padding="9px 0" border="none" background-color="transparent" outline="none" resize="none"
             font-family="family.text" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.5 color="ink.strong"
-          if busy and draft.trim() == ""
+          if canDictate or dictating
+            button press=dictate retainFocus=true aria-pressed=dictating
+              aria-label=(dictating ? "Stop dictating" : "Dictate") testId=`${prefix}dictate` width=38 height=38
+              min-width=38 padding=0 border="none" display="flex" align-items="center" justify-content="center"
+              background-color=(dictating ? "danger.soft" : "transparent")
+              color=(dictating ? "-exact-system-red" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
+              image "symbol:microphone" width=16 height=16
+          if busy and said == ""
             button press=stop disabled=stopping aria-label="Stop" testId=`${prefix}stop` width=38 height=38
               min-width=38 padding=0 border="none" background-color="ink.strong" color="surface.page"
               display="flex" align-items="center" justify-content="center"
               image "symbol:stop-fill" width=13 height=13
           else
-            button press=post(prefix) disabled=(draft.trim() == "" or sending) retainFocus=true aria-label="Send"
+            button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
               testId=`${prefix}send` width=38 height=38 min-width=38 padding=0 border="none"
               background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
               justify-content="center" transition="background-color 120ms ease"

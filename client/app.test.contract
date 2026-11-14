@@ -290,3 +290,13 @@ test "a routine the imp saves is listed in the sidebar, runs now in its own conv
   clock until state chat.routine == "" within 5000
   expect tree missing "routine-bar"
   expect tree has "routines-empty"
+
+test "the composer's microphone dictates until it is pressed again"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  tap "dictate"
+  clock +100
+  expect text "dictation-heard" == "Listening…"
+  tap "dictate"
+  clock +100
+  expect tree missing "dictation"

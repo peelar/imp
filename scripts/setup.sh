@@ -96,6 +96,8 @@ wait "$npm_pid" || {
 	fail "npm ci failed"
 }
 tail -1 "$npm_log"
+# After npm ci, which empties node_modules: the Exact modules the client uses, from the checkout above.
+sh "$root/scripts/link-exact.sh" "$exact"
 
 step "The web client (the first build compiles Exact's web tools and takes a few minutes)"
 (cd "$root/client" && EXACT="$exact" API_BASE_URL= bun exact.mjs web-build --out dist)

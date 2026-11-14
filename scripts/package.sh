@@ -20,6 +20,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 export EXACT_VERSION="${tag#v}"
 # The web client asks the page's origin for its host, and the Mac app the address it saved (client/app.ts).
 export API_BASE_URL=
+# The Exact modules the client uses, which its builds read from client/node_modules.
+sh "$root/scripts/link-exact.sh"
 
 case "$what" in
 host)

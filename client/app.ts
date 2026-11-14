@@ -31,8 +31,10 @@ async function hostOrigin(saved: string): Promise<{ origin: string }> {
   return { origin };
 }
 
-// Any origin, because the host's address is the person's (their tailnet name, later one they type on a phone).
-export const grants = 'net.fetch https:\nnet.fetch http:';
+// Any origin, because the host's address is the person's (their tailnet name, later one they type on a phone). The
+// microphone and speech recognition are the composer's dictation.
+export const grants =
+  'net.fetch https:\nnet.fetch http:\ndevice.microphone purpose.microphone\ndevice.speech-recognition purpose.dictation';
 
 // Every write the shell sends. Typed against the compiled plan, so adding or removing a mutation without listing it
 // here fails the build.

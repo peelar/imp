@@ -11,6 +11,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -346,6 +347,30 @@ function assemble(options: BuildOptions) {
 
   writeFileSync(path.join(options.workDir, "app.contract"), contract);
   writeFileSync(path.join(options.workDir, "app.ts"), ts);
+  linkExactModules(options.workDir, options.exact, contract);
+}
+
+/**
+ * Links the Exact modules the shell uses (`use … from "@exact/<name>"`) into its node_modules from the Exact checkout,
+ * where the Contract compiler finds them, as scripts/link-exact.sh does for client/.
+ */
+function linkExactModules(workDir: string, exact: string, contract: string) {
+  const names = new Set(
+    [...contract.matchAll(/^use .* from "@exact\/([a-z0-9-]+)"$/gmu)].map(
+      (match) => match[1] ?? ""
+    )
+  );
+
+  const modules = path.join(workDir, "node_modules", "@exact");
+
+  for (const name of names) {
+    mkdirSync(modules, { recursive: true });
+    symlinkSync(
+      path.resolve(exact, "packages", name),
+      path.join(modules, name),
+      "dir"
+    );
+  }
 }
 
 /** Runs Exact's web build on the assembled shell; answers its exit code and everything it printed. */

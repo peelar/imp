@@ -81,6 +81,9 @@ jobs:
       # One install for the workspaces and the root's tooling.
       - run: npm ci
         working-directory: imp
+      - name: Link the Exact modules the client uses
+        working-directory: imp
+        run: sh scripts/link-exact.sh
       - name: Build the shell once
         # Warms Exact's build caches, so the studio tests' previews build in seconds rather than minutes.
         working-directory: imp/client

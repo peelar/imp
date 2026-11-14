@@ -37,6 +37,11 @@ The client (`client/`) is written in Exact's Contract language. Everything it sh
 
 Writes name the topics they change, so a change by the imp and a change by you reach every open view the same way. When the imp adds a todo, your open Todos tab updates.
 
+The microphone button in the composer dictates a message with the browser's own speech recognition (Exact's `@exact/speech-recognition`), so the host never hears the audio. Words join the draft as the recognizer settles on them, and the ones it is still unsure of show above the field. Sending while dictating sends those too. The browser chooses where recognition runs: Chrome and Safari send the audio to Google's or Apple's speech service. Browsers without speech recognition, and the Mac app, show no microphone.
+
+> [!NOTE]
+> The Contract compiler finds Exact's modules in a `node_modules` folder. `scripts/link-exact.sh` links the ones `client/app.contract` uses from the Exact checkout into `client/node_modules`, and setup, CI and releases run it. The host links them the same way into the copy of the client it builds.
+
 ## The agent's computer
 
 The computer runs one process the host puts there, **agentd** (`host/machine/agentd.ts`, which the host installs with its types stripped). It serves everything on one port, and every connection must present the machine's token, which the host derives from its own secret:
