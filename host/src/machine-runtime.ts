@@ -3,7 +3,7 @@
 // pi-env, the app daemon and the screen on one port (see machine/agentd.ts). Adapters run the setup, copy the runtime
 // files, start agentd, and check its health; nothing here depends on the provider.
 import { createHash, createHmac } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire, stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { packagedDaemon } from "@earendil-works/pi-env";
@@ -93,6 +93,28 @@ export async function runtime(platform: {
   }
 
   return { files, digest: hash.digest("hex").slice(0, 16) };
+}
+
+/**
+ * Writes the runtime's files under `dir` on this computer, for an adapter that runs agentd from there or packs the
+ * directory to send it.
+ */
+export async function writeRuntime(
+  files: readonly RuntimeFile[],
+  dir: string
+): Promise<void> {
+  await Promise.all(
+    files.map(async (file) => {
+      const to = path.join(dir, file.path);
+
+      await mkdir(path.dirname(to), { recursive: true });
+      await writeFile(to, file.data);
+
+      if (file.executable) {
+        await chmod(to, 0o755);
+      }
+    })
+  );
 }
 
 const shipped = async (to: string, from: string): Promise<RuntimeFile> => ({

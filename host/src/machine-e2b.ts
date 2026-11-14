@@ -3,6 +3,7 @@
 // one template per setup version and size, so a new machine starts set up; an existing machine runs a newer setup in
 // place, because its disk is the user's. E2B cannot resize a sandbox, so a machine is found by its key and size: another
 // size is another sandbox, and the one of the old size stays paused with its files.
+import { setTimeout as sleep } from "node:timers/promises";
 import { Sandbox, Template } from "e2b";
 import type {
   ImageSpec,
@@ -140,7 +141,9 @@ export function e2bProvider(options: E2BProviderOptions): MachineProvider {
       }
     },
 
-    close() {},
+    close() {
+      // Nothing to close: this provider holds nothing open between its calls to E2B.
+    },
   };
 }
 
@@ -231,12 +234,14 @@ async function startAgentd(
     }
   );
 
-  for (let i = 0; i < 50; i++) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- a poll: each try follows the one that found agentd not up yet.
     if ((await health()).stdout.trim() === expected) {
       return;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // oxlint-disable-next-line no-await-in-loop -- the pause between two tries of the poll.
+    await sleep(200);
   }
 
   const log = await sandbox.commands.run(
@@ -246,8 +251,6 @@ async function startAgentd(
   throw new Error(`agentd did not start: ${log.stdout}`);
 }
 
+/** The buffer's bytes in an ArrayBuffer of their own, which is what E2B takes: a Buffer may share its memory. */
 const toArrayBuffer = (buffer: Buffer): ArrayBuffer =>
-  buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength
-  ) as ArrayBuffer;
+  new Uint8Array(buffer).buffer;

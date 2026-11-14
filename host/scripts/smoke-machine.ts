@@ -1,23 +1,27 @@
 // Smoke test for a machine adapter: prepare the image, ensure the machine, reach it through pi-env, run a command,
-// write and read a file, load an app on the app socket, reach the screen, and use a secret through the egress proxy.
+// write and read a file, load an app on the app socket and call one of its operations, and reach the screen.
 //
 //   MACHINE=e2b node scripts/smoke-machine.ts                      (needs E2B_API_KEY; MACHINE_CPUS, MACHINE_MEMORY_MB)
 //   MACHINE=ssh MACHINE_SSH=imp@homelab[:port] [MACHINE_SSH_KEY=~/.ssh/key] node scripts/smoke-machine.ts
 //   MACHINE=local node scripts/smoke-machine.ts
-import { mkdtempSync } from "node:fs";
+import { once } from "node:events";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createRegistry } from "@earendil-works/pi-durable";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
-import WebSocket from "ws";
+import { type RawData, WebSocket } from "ws";
 import type { MachineProvider } from "../src/machine.ts";
 import { Topics } from "../src/live.ts";
 import { e2bProvider } from "../src/machine-e2b.ts";
 import { localProvider } from "../src/machine-local.ts";
 import { machineImage } from "../src/machine-runtime.ts";
 import { sshProvider } from "../src/machine-ssh.ts";
-import { openSecrets } from "../src/secrets.ts";
+import {
+  type FromAgentd,
+  fromAgentdCheck,
+  type ToAgentd,
+} from "../src/protocol.ts";
 
 const started = Date.now();
 
@@ -28,14 +32,32 @@ const lap = (label: string) => {
 const secret = "smoke-test-secret";
 const { MACHINE = "e2b", MACHINE_SSH = "", MACHINE_SSH_KEY } = process.env;
 
-const providers: Record<string, () => MachineProvider> = {
-  e2b: () => e2bProvider({ secret }),
-  ssh: () =>
-    sshProvider({ secret, target: MACHINE_SSH, identityFile: MACHINE_SSH_KEY }),
-  local: () => localProvider({ secret, dir: join(tmpdir(), "imp-smoke") }),
-};
+const providers = new Map<string, () => MachineProvider>([
+  ["e2b", () => e2bProvider({ secret })],
+  [
+    "ssh",
+    () =>
+      sshProvider({
+        secret,
+        target: MACHINE_SSH,
+        identityFile: MACHINE_SSH_KEY,
+      }),
+  ],
+  [
+    "local",
+    () => localProvider({ secret, dir: path.join(tmpdir(), "imp-smoke") }),
+  ],
+]);
 
-const provider = providers[MACHINE]();
+const createProvider = providers.get(MACHINE);
+
+if (!createProvider) {
+  throw new Error(
+    `MACHINE must be one of ${[...providers.keys()].join(", ")}, not ${MACHINE}`
+  );
+}
+
+const provider = createProvider();
 
 const size = {
   cpus: Number(process.env.MACHINE_CPUS ?? 2),
@@ -57,6 +79,7 @@ lap("machine ensured");
 const connection = new Connection({
   command: async () => await machine.daemonCommand(),
 });
+
 const info = await connection.info();
 
 lap(`pi-env hello: ${info.os}/${info.arch} v${info.version}, cwd ${info.cwd}`);
@@ -82,7 +105,7 @@ const result = await env.exec(
 );
 
 lap(
-  `exec ${JSON.stringify(result.ok ? { exitCode: (result.value as { exitCode?: number }).exitCode } : result.error)}:\n${out.trim()}`
+  `exec ${JSON.stringify(result.ok ? { exitCode: result.value.exitCode } : result.error)}:\n${out.trim()}`
 );
 
 await env.writeFile(
@@ -100,24 +123,66 @@ lap(
   `file round trip: ${back.ok ? back.value.trim() : JSON.stringify(back.error)}`
 );
 
+const text = (frame: RawData) => {
+  if (Buffer.isBuffer(frame)) {
+    return frame.toString("utf-8");
+  }
+
+  const bytes = Array.isArray(frame)
+    ? Buffer.concat(frame)
+    : Buffer.from(frame);
+
+  return bytes.toString("utf-8");
+};
+
+/** The next frame `socket` receives, as text; fails when `what` closes or breaks first. */
+const nextFrame = async (socket: WebSocket, what: string) =>
+  await new Promise<string>((resolve, reject) => {
+    socket.once("message", (frame) => {
+      resolve(text(frame));
+    });
+    socket.once("close", (code, reason) => {
+      reject(
+        new Error(`${what} closed (${code}): ${reason.toString("utf-8")}`)
+      );
+    });
+    socket.once("error", reject);
+  });
+
 const endpoint = await machine.appSocket();
 const ws = new WebSocket(endpoint.url, { headers: { ...endpoint.headers } });
 
-await new Promise(
-  (resolve, reject) => (ws.once("open", resolve), ws.once("error", reject))
-);
+// Rejects when the socket fails before it opens.
+await once(ws, "open");
 
-const code = "export default { sources: { ping: () => 'pong' } }";
+const toAgentd = (message: ToAgentd) => {
+  ws.send(JSON.stringify(message));
+};
 
-ws.send(JSON.stringify({ t: "load", app: "smoke", hash: "1", code }));
+/** What agentd says next, checked against the protocol as the host checks it (src/app-machine.ts). */
+const fromAgentd = async (): Promise<FromAgentd> => {
+  const frame = await nextFrame(ws, "the app socket");
+  const message: unknown = JSON.parse(frame);
 
-const loaded = await new Promise((resolve) =>
-  ws.once("message", (data) => {
-    resolve(JSON.parse(String(data)));
-  })
-);
+  if (!fromAgentdCheck.check(message)) {
+    throw new Error(
+      `the app socket sent what is not in the protocol: ${frame}`
+    );
+  }
 
-lap(`app socket: ${JSON.stringify(loaded)}`);
+  return message;
+};
+
+const code =
+  "export default { operations: { ping: { kind: 'read', description: 'Answers pong.', params: {}, run: () => 'pong' } } }";
+
+toAgentd({ t: "load", app: "smoke", hash: "1", code });
+
+lap(`app socket: ${JSON.stringify(await fromAgentd())}`);
+
+toAgentd({ t: "call", id: "1", app: "smoke", name: "ping", args: {} });
+
+lap(`app call: ${JSON.stringify(await fromAgentd())}`);
 
 ws.close();
 
@@ -151,18 +216,9 @@ secrets.close();
 // The screen answers with the VNC (RFB) server's greeting, such as "RFB 003.008".
 const screen = await machine.screen();
 const vnc = new WebSocket(screen.url, { headers: { ...screen.headers } });
+const greeting = await nextFrame(vnc, "the screen");
 
-const greeting = await new Promise<string>((resolve, reject) => {
-  vnc.once("message", (data) => {
-    resolve(String(data).trim());
-  });
-  vnc.once("close", (code, reason) => {
-    reject(new Error(`the screen closed (${code}): ${reason}`));
-  });
-  vnc.once("error", reject);
-});
-
-lap(`screen: ${greeting}`);
+lap(`screen: ${greeting.trim()}`);
 
 vnc.close();
 

@@ -15,14 +15,20 @@
 export type MachineProvider = {
   readonly name: string;
   /** Where the agent works on machine `key`: its read, write, edit, and bash tools start here. */
-  workspace(key: string): string;
+  readonly workspace: (key: string) => string;
   /** Prepare our machine image in this provider's format, such as a template. Idempotent per image. */
-  prepareImage(image: ImageSpec, signal?: AbortSignal): Promise<string>;
+  readonly prepareImage: (
+    image: ImageSpec,
+    signal?: AbortSignal
+  ) => Promise<string>;
   /** Create the machine for `spec.key`, or resume and return the existing one, with the machine runtime running. */
-  ensure(spec: MachineSpec, signal?: AbortSignal): Promise<Machine>;
-  destroy(key: string, signal?: AbortSignal): Promise<void>;
+  readonly ensure: (
+    spec: MachineSpec,
+    signal?: AbortSignal
+  ) => Promise<Machine>;
+  readonly destroy: (key: string, signal?: AbortSignal) => Promise<void>;
   /** The host stops using this provider: close what it holds open, such as tunnels. Machines keep their state. */
-  close(): void;
+  readonly close: () => void;
 };
 
 export type ImageSpec = {
@@ -52,19 +58,19 @@ export type Machine = {
    * A local command whose stdin and stdout reach a pi-env daemon on the machine. pi-env's `Connection` runs it with
    * `serve --token <hex>` appended, on its first request and again after a lost connection.
    */
-  daemonCommand(signal?: AbortSignal): Promise<readonly string[]>;
+  readonly daemonCommand: (signal?: AbortSignal) => Promise<readonly string[]>;
   /** The machine runtime's app socket (agentd's `/apps`): a WebSocket URL and the headers it needs. */
-  appSocket(signal?: AbortSignal): Promise<Endpoint>;
+  readonly appSocket: (signal?: AbortSignal) => Promise<Endpoint>;
   /**
    * The machine's screen, a desktop the agent's programs open their windows on: a WebSocket carrying VNC (RFB), and
    * the headers it needs. It closes with a reason when the machine has no screen.
    */
-  screen(signal?: AbortSignal): Promise<Endpoint>;
+  readonly screen: (signal?: AbortSignal) => Promise<Endpoint>;
   /** An endpoint the host can reach that forwards to `port` on the machine, with the headers it needs. */
-  expose(port: number, signal?: AbortSignal): Promise<Endpoint>;
+  readonly expose: (port: number, signal?: AbortSignal) => Promise<Endpoint>;
   /** The host is using the machine: postpone the idle suspend by another `idleSuspendMs`. */
-  keepAlive(signal?: AbortSignal): Promise<void>;
-  suspend(signal?: AbortSignal): Promise<void>;
+  readonly keepAlive: (signal?: AbortSignal) => Promise<void>;
+  readonly suspend: (signal?: AbortSignal) => Promise<void>;
 };
 
 export type Endpoint = {

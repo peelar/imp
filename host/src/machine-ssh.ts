@@ -1,18 +1,18 @@
 // The SSH adapter: the agent's computer is one you bring, such as a home lab box, a VM on this computer (Lima,
 // Multipass, OrbStack, WSL), or a cloud VM you rent. The host reaches it with the system `ssh`, as a user with
 // passwordless sudo (or root). Settings reach it over Tailscale SSH (see tailnet.ts), which authenticates both ends
-// with their tailnet identities; the adapter itself only needs `ssh` to get in. Over SSH the host runs the setup when the machine has not run this version, keeps the runtime in
-// ~/.imp, and starts agentd on the machine's loopback. It reaches agentd and every exposed port through SSH tunnels it
-// opens itself, so nothing on the machine listens on the network. Tailscale (or Tailscale SSH) is one way to reach it.
+// with their tailnet identities; the adapter itself only needs `ssh` to get in. Over SSH the host runs the setup when
+// the machine has not run this version, keeps the runtime in ~/.imp, and starts agentd on the machine's loopback. It
+// reaches agentd and every exposed port through SSH tunnels it opens itself (machine-ssh-tunnels.ts), so nothing on
+// the machine listens on the network. Tailscale (or Tailscale SSH) is one way to reach it.
 //
 // The computer is yours: it never suspends, `keepAlive()` and `suspend()` do nothing, and `destroy()` removes only
 // what the host put in ~/.imp.
-import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { connect, createServer } from "node:net";
+import { execFile, spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { promisify } from "node:util";
+import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type {
   ImageSpec,
   Machine,
@@ -30,19 +30,22 @@ import {
   SETUP_MARKER,
   setupScript,
   type Runtime,
+  writeRuntime,
 } from "./machine-runtime.ts";
+import { machineTunnels } from "./machine-ssh-tunnels.ts";
+import { healthy } from "./ports.ts";
 
 export type SshTargetOptions = {
   /** `user@host` or `user@host:port`. The host may be a ~/.ssh/config alias. */
   readonly target: string;
-  readonly identityFile?: string;
+  readonly identityFile?: string | undefined;
   /** The host keys to trust, under `hostKeyAlias`; without it, ~/.ssh/known_hosts. */
   readonly knownHostsFile?: string;
   readonly hostKeyAlias?: string;
   /** How `ssh` reaches the machine, such as `tailscale nc %h %p`. */
   readonly proxyCommand?: string;
   /** The user's home directory on the machine. Default: /root for root, else /home/<user>. */
-  readonly home?: string;
+  readonly home?: string | undefined;
 };
 
 export type SshProviderOptions = {
@@ -50,26 +53,29 @@ export type SshProviderOptions = {
   readonly secret: string;
 } & SshTargetOptions;
 
-type Tunnel = {
-  readonly port: number;
-  readonly child: ChildProcess;
-};
-
 /** `user@host[:port]`, split. */
 export function parseSshTarget(
   target: string
-): { user?: string; host: string; port?: number } | undefined {
+):
+  | { user?: string | undefined; host: string; port?: number | undefined }
+  | undefined {
   const match = /^(?:([^@\s]+)@)?([^@:\s]+)(?::(\d{1,5}))?$/.exec(target);
+  const [, user, host, port] = match ?? [];
 
-  if (!match) {
+  if (host === undefined) {
     return undefined;
   }
 
-  return {
-    user: match[1],
-    host: match[2],
-    port: match[3] ? Number(match[3]) : undefined,
-  };
+  return { user, host, port: port ? Number(port) : undefined };
+}
+
+/** Where a user's home is on a Linux machine, when the user is named. */
+function defaultHome(user: string | undefined): string {
+  if (user === "root") {
+    return "/root";
+  }
+
+  return user ? `/home/${user}` : "";
 }
 
 /** How to reach the target with `ssh`: its destination, the options before it, and the user's home there. */
@@ -83,9 +89,7 @@ function sshTarget(options: SshTargetOptions) {
   }
 
   const { user, host, port } = parsed;
-
-  const home =
-    options.home ?? (user === "root" ? "/root" : user ? `/home/${user}` : "");
+  const home = options.home ?? defaultHome(user);
 
   if (!home) {
     throw new Error(
@@ -94,17 +98,18 @@ function sshTarget(options: SshTargetOptions) {
   }
 
   const args = [
-    ...[
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "ConnectTimeout=15",
-      "-o",
-      "ServerAliveInterval=15",
-      "-o",
-      "ServerAliveCountMax=3",
-    ],
-    ...["-o", "ForwardAgent=no", "-o", "ForwardX11=no"],
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=15",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=3",
+    "-o",
+    "ForwardAgent=no",
+    "-o",
+    "ForwardX11=no",
     ...(port ? ["-p", String(port)] : []),
     ...(options.identityFile
       ? ["-i", options.identityFile, "-o", "IdentitiesOnly=yes"]
@@ -129,6 +134,8 @@ function sshTarget(options: SshTargetOptions) {
   return { destination: user ? `${user}@${host}` : host, args, home };
 }
 
+type SshTarget = ReturnType<typeof sshTarget>;
+
 /** Runs `command` with the login user's shell on the machine; `input` is its stdin. */
 async function runSsh(
   target: { destination: string; args: string[] },
@@ -144,8 +151,13 @@ async function runSsh(
 
     let stdout = "";
     let stderr = "";
-    child.stdout.on("data", (chunk) => (stdout += chunk));
-    child.stderr.on("data", (chunk) => (stderr += chunk));
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf-8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf-8");
+    });
     child.on("error", reject);
     child.on("close", (code) => {
       resolve({ code, stdout, stderr });
@@ -209,156 +221,75 @@ export async function probeSsh(
   return { home };
 }
 
-// Tunnels are child processes of the host, so close them when the host exits.
-const tunnels = new Set<ChildProcess>();
+/** Commands on the target: `run` answers however the command ended, and `ok` throws unless it exited with 0. */
+function remoteShell(target: SshTarget) {
+  const run = async (command: string, input?: string | Buffer) =>
+    await runSsh(target, command, input);
 
-process.once("exit", () => {
-  for (const child of tunnels) {
-    child.kill();
-  }
-});
+  return {
+    run,
+    /** The command's stdout; throws that `what` failed, with the end of its output, unless it exited with 0. */
+    async ok(
+      what: string,
+      command: string,
+      input?: string | Buffer
+    ): Promise<string> {
+      const result = await run(command, input);
 
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () =>
-    process.exit(128 + (signal === "SIGINT" ? 2 : 15))
-  );
+      if (result.code !== 0) {
+        const output = `${result.stdout}\n${result.stderr}`
+          .trim()
+          .split("\n")
+          .slice(-30)
+          .join("\n");
+
+        throw new Error(
+          `${what} on ${target.destination} failed (exit ${result.code}):\n${output}`
+        );
+      }
+
+      return result.stdout;
+    },
+  };
 }
+
+type Arch = "x64" | "arm64";
+
+/** The computer as its provider reaches it. */
+type Remote = {
+  readonly target: SshTarget;
+  /** Where the host keeps the runtime on the machine. */
+  readonly runtimeDir: string;
+  readonly shell: ReturnType<typeof remoteShell>;
+  /** The runtime's files for the computer's CPU, read once per provider. */
+  readonly runtime: (arch: Arch) => Promise<Runtime>;
+};
+
+/** One machine's agentd: the token it is started with, and the CPU its runtime is for. */
+type AgentdSpec = {
+  readonly token: string;
+  readonly arch: Arch;
+};
+
+type SshMachine = Machine & { readonly close: () => void };
 
 export function sshProvider(options: SshProviderOptions): MachineProvider {
   const target = sshTarget(options);
   const { destination, home } = target;
-  const sshOptions = target.args;
   const runtimeDir = `${home}/.imp`;
-
-  const ssh = async (command: string, input?: string | Buffer) =>
-    await runSsh(target, command, input);
-
-  async function sshOk(
-    what: string,
-    command: string,
-    input?: string | Buffer
-  ): Promise<string> {
-    const result = await ssh(command, input);
-
-    if (result.code !== 0) {
-      const output = `${result.stdout}\n${result.stderr}`
-        .trim()
-        .split("\n")
-        .slice(-30)
-        .join("\n");
-
-      throw new Error(
-        `${what} on ${destination} failed (exit ${result.code}):\n${output}`
-      );
-    }
-
-    return result.stdout;
-  }
-
-  /** A local port that forwards to `remotePort` on the machine's loopback, for as long as `child` runs. */
-  async function openTunnel(remotePort: number): Promise<Tunnel> {
-    const local = await freePort();
-
-    const child = spawn(
-      "ssh",
-      [
-        ...sshOptions,
-        "-N",
-        "-o",
-        "ExitOnForwardFailure=yes",
-        "-L",
-        `127.0.0.1:${local}:127.0.0.1:${remotePort}`,
-        destination,
-      ],
-      { stdio: ["ignore", "ignore", "pipe"] }
-    );
-
-    tunnels.add(child);
-    let stderr = "";
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("exit", () => tunnels.delete(child));
-
-    for (let i = 0; i < 200; i++) {
-      if (child.exitCode !== null) {
-        break;
-      }
-
-      if (await accepts(local)) {
-        return { port: local, child };
-      }
-
-      await sleep(100);
-    }
-
-    child.kill();
-    throw new Error(
-      `Could not open an SSH tunnel to port ${remotePort} on ${destination}: ${stderr.trim()}`
-    );
-  }
-
+  const shell = remoteShell(target);
   let files: Promise<Runtime> | undefined;
+
+  const remote: Remote = {
+    target,
+    runtimeDir,
+    shell,
+    runtime: async (arch) =>
+      await (files ??= runtime({ platform: "linux", arch })),
+  };
+
   const setups = new Map<string, ReturnType<typeof setupScript>>();
-  const machines = new Map<string, Machine & { close(): void }>();
-
-  /** Stops any agentd and its daemons, installs this runtime, and starts agentd on the machine's loopback. */
-  async function startAgentd(
-    token: string,
-    arch: "x64" | "arm64"
-  ): Promise<void> {
-    const { files: list, digest } = await (files ??= runtime({
-      platform: "linux",
-      arch,
-    }));
-
-    const staging = await mkdtemp(join(tmpdir(), "imp-runtime-"));
-
-    try {
-      for (const file of list) {
-        const path = join(staging, file.path);
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, file.data);
-
-        if (file.executable) {
-          await chmod(path, 0o755);
-        }
-      }
-
-      const { stdout: tar } = await promisify(execFile)(
-        "tar",
-        ["-C", staging, "-cf", "-", "."],
-        {
-          encoding: "buffer",
-          maxBuffer: 512 * 1024 * 1024,
-        }
-      );
-
-      await sshOk(
-        "Installing the machine runtime",
-        `pkill -f '${runtimePattern(runtimeDir)}' || true; rm -rf '${runtimeDir}' && mkdir -p '${runtimeDir}' && tar -xf - -C '${runtimeDir}'`,
-        tar
-      );
-    } finally {
-      await rm(staging, { recursive: true, force: true });
-    }
-
-    const env = {
-      ...agentdEnv({ token, digest, runtimeDir, home, host: "127.0.0.1" }),
-      HOME: home,
-    };
-
-    // The token goes in on stdin, so it never shows in the machine's process list.
-    const start = [
-      "set -e",
-      `mkdir -p '${home}/workspace'`,
-      ...Object.entries(env).map(
-        ([name, value]) => `export ${name}=${quote(value)}`
-      ),
-      `cd '${home}'`,
-      `setsid -f /usr/local/bin/node '${runtimeDir}/agentd.mjs' >> '${runtimeDir}/agentd.log' 2>&1 < /dev/null`,
-    ].join("\n");
-
-    await sshOk("Starting agentd", "sh -s", start);
-  }
+  const machines = new Map<string, SshMachine>();
 
   return {
     name: "ssh",
@@ -366,6 +297,7 @@ export function sshProvider(options: SshProviderOptions): MachineProvider {
 
     async prepareImage(image: ImageSpec) {
       const setup = setupScript(image.setup);
+
       setups.set(setup.digest, setup);
 
       return setup.digest;
@@ -378,42 +310,7 @@ export function sshProvider(options: SshProviderOptions): MachineProvider {
         throw new Error(`prepareImage did not prepare ${spec.image}`);
       }
 
-      const [remoteHome, machine, marker] = (
-        await sshOk(
-          "Reaching the machine",
-          `echo "$HOME"; uname -m; cat ${SETUP_MARKER} 2>/dev/null || true`
-        )
-      )
-        .trim()
-        .split("\n");
-
-      if (remoteHome !== home) {
-        throw new Error(
-          `The machine's home is ${remoteHome}, not ${home}; set its home directory`
-        );
-      }
-
-      const arch =
-        machine === "x86_64"
-          ? "x64"
-          : machine === "aarch64" || machine === "arm64"
-            ? "arm64"
-            : undefined;
-
-      if (!arch) {
-        throw new Error(
-          `Imp machines need an x86_64 or arm64 CPU, not ${machine}`
-        );
-      }
-
-      if (marker !== setup.digest) {
-        await sshOk(
-          "The machine setup (it needs root or passwordless sudo)",
-          `if [ "$(id -u)" = 0 ]; then bash -s; else sudo -n bash -s; fi`,
-          setup.script
-        );
-      }
-
+      const arch = await setUp(remote, setup);
       let current = machines.get(spec.key);
 
       if (!current) {
@@ -422,85 +319,7 @@ export function sshProvider(options: SshProviderOptions): MachineProvider {
           `ssh:${destination}:${spec.key}`
         );
 
-        const open = new Map<number, Promise<Tunnel>>();
-
-        /** The tunnel to `remotePort`, opened again when its `ssh` exited. */
-        const tunnel = async (remotePort: number) => {
-          const existing = await open.get(remotePort)?.catch(() => {});
-
-          if (
-            existing &&
-            existing.child.exitCode === null &&
-            existing.child.signalCode === null
-          ) {
-            return existing;
-          }
-
-          const next = openTunnel(remotePort);
-          open.set(remotePort, next);
-
-          return await next;
-        };
-
-        let pending: Promise<string> | undefined;
-
-        /** agentd's base URL, after making sure the tunnel is up and agentd answers with this token and runtime. */
-        const ready = async () =>
-          await (pending ??= (async () => {
-            const expected = healthFor(
-              token,
-              (await (files ??= runtime({ platform: "linux", arch }))).digest
-            );
-
-            let { port: local } = await tunnel(AGENTD_PORT);
-
-            if (await healthy(local, expected)) {
-              return `http://127.0.0.1:${local}`;
-            }
-
-            await startAgentd(token, arch);
-
-            for (let i = 0; i < 100; i++) {
-              // A tunnel opened while nothing listened may have given up; reopen it if so.
-              local = (await tunnel(AGENTD_PORT)).port;
-
-              if (await healthy(local, expected)) {
-                return `http://127.0.0.1:${local}`;
-              }
-
-              await sleep(100);
-            }
-
-            const log = await ssh(`tail -n 50 '${runtimeDir}/agentd.log'`);
-            throw new Error(
-              `agentd did not start on ${destination}: ${log.stdout}`
-            );
-          })().finally(() => {
-            pending = undefined;
-          }));
-
-        const endpoints = async () =>
-          agentdEndpoints({ url: await ready(), headers: {} }, token);
-
-        current = {
-          key: spec.key,
-          daemonCommand: async () => (await endpoints()).daemonCommand,
-          appSocket: async () => (await endpoints()).appSocket,
-          screen: async () => (await endpoints()).screen,
-          expose: async (remotePort) => ({
-            url: `http://127.0.0.1:${(await tunnel(remotePort)).port}`,
-            headers: {},
-          }),
-          keepAlive: async () => {},
-          suspend: async () => {},
-          close() {
-            for (const t of open.values()) {
-              void t.then((x) => x.child.kill()).catch(() => {});
-            }
-
-            open.clear();
-          },
-        };
+        current = sshMachine(remote, spec.key, { token, arch });
         machines.set(spec.key, current);
       }
 
@@ -512,7 +331,7 @@ export function sshProvider(options: SshProviderOptions): MachineProvider {
     async destroy(key: string) {
       machines.get(key)?.close();
       machines.delete(key);
-      await sshOk(
+      await shell.ok(
         "Removing the machine runtime",
         `pkill -f '${runtimePattern(runtimeDir)}' || true; rm -rf '${runtimeDir}'`
       );
@@ -528,42 +347,204 @@ export function sshProvider(options: SshProviderOptions): MachineProvider {
   };
 }
 
-const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
-const sleep = async (ms: number) =>
-  await new Promise((resolve) => setTimeout(resolve, ms));
-
-async function healthy(port: number, expected: string): Promise<boolean> {
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/health`, {
-      signal: AbortSignal.timeout(5000),
-    });
-
-    return (await response.text()) === expected;
-  } catch {
-    return false;
+/** The runtime's name for the CPU `uname -m` printed, when the runtime has a build for it. */
+function archOf(machine: string | undefined): Arch | undefined {
+  if (machine === "x86_64") {
+    return "x64";
   }
+
+  return machine === "aarch64" || machine === "arm64" ? "arm64" : undefined;
 }
 
-async function accepts(port: number): Promise<boolean> {
-  return await new Promise((resolve) => {
-    const socket = connect(port, "127.0.0.1");
-    socket.once("connect", () => (socket.destroy(), resolve(true)));
-    socket.once("error", () => {
-      resolve(false);
-    });
+/**
+ * Signs in to the computer, checks that its home is the one the provider was given and that the runtime has a build
+ * for its CPU, and runs the setup when the computer has not run this version. Answers the CPU.
+ */
+async function setUp(
+  remote: Remote,
+  setup: ReturnType<typeof setupScript>
+): Promise<Arch> {
+  const { home } = remote.target;
+
+  const [remoteHome, machine, marker] = (
+    await remote.shell.ok(
+      "Reaching the machine",
+      `echo "$HOME"; uname -m; cat ${SETUP_MARKER} 2>/dev/null || true`
+    )
+  )
+    .trim()
+    .split("\n");
+
+  if (remoteHome !== home) {
+    throw new Error(
+      `The machine's home is ${remoteHome}, not ${home}; set its home directory`
+    );
+  }
+
+  const arch = archOf(machine);
+
+  if (!arch) {
+    throw new Error(`Imp machines need an x86_64 or arm64 CPU, not ${machine}`);
+  }
+
+  if (marker !== setup.digest) {
+    await remote.shell.ok(
+      "The machine setup (it needs root or passwordless sudo)",
+      `if [ "$(id -u)" = 0 ]; then bash -s; else sudo -n bash -s; fi`,
+      setup.script
+    );
+  }
+
+  return arch;
+}
+
+/** The machine `key` on the computer: its endpoints go through tunnels, opened and checked when first asked for. */
+function sshMachine(
+  remote: Remote,
+  key: string,
+  agentd: AgentdSpec
+): SshMachine {
+  const tunnels = machineTunnels(remote.target);
+  let pending: Promise<string> | undefined;
+
+  /** agentd's base URL, once it answers. Calls made while one check runs share it. */
+  const ready = async () =>
+    await (pending ??= reachAgentd(remote, agentd, tunnels).finally(() => {
+      pending = undefined;
+    }));
+
+  const endpoints = async () =>
+    agentdEndpoints({ url: await ready(), headers: {} }, agentd.token);
+
+  return {
+    key,
+    daemonCommand: async () => (await endpoints()).daemonCommand,
+    appSocket: async () => (await endpoints()).appSocket,
+    screen: async () => (await endpoints()).screen,
+    expose: async (remotePort) => ({
+      url: `http://127.0.0.1:${(await tunnels.to(remotePort)).port}`,
+      headers: {},
+    }),
+    // The computer is yours: the host neither suspends it nor keeps it from suspending.
+    keepAlive: async () => {
+      // Nothing to postpone.
+    },
+    suspend: async () => {
+      // Nothing to suspend.
+    },
+    close() {
+      tunnels.close();
+    },
+  };
+}
+
+/** agentd's base URL, after making sure the tunnel is up and agentd answers with this token and runtime. */
+async function reachAgentd(
+  remote: Remote,
+  agentd: AgentdSpec,
+  tunnels: ReturnType<typeof machineTunnels>
+): Promise<string> {
+  const expected = healthFor(
+    agentd.token,
+    (await remote.runtime(agentd.arch)).digest
+  );
+
+  /** agentd's base URL through its tunnel, when the agentd this host would start answers there. */
+  const answering = async () => {
+    const { port } = await tunnels.to(AGENTD_PORT);
+    const up = await healthy(port, expected, AbortSignal.timeout(5000));
+
+    return up ? `http://127.0.0.1:${port}` : undefined;
+  };
+
+  const running = await answering();
+
+  if (running) {
+    return running;
+  }
+
+  await startAgentd(remote, agentd);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    // A tunnel opened while nothing listened may have given up; `answering` reopens it if so.
+    // oxlint-disable-next-line no-await-in-loop -- a poll: each try follows the one that found agentd not up yet.
+    const started = await answering();
+
+    if (started) {
+      return started;
+    }
+
+    // oxlint-disable-next-line no-await-in-loop -- the pause between two tries of the poll.
+    await sleep(100);
+  }
+
+  const log = await remote.shell.run(
+    `tail -n 50 '${remote.runtimeDir}/agentd.log'`
+  );
+
+  throw new Error(
+    `agentd did not start on ${remote.target.destination}: ${log.stdout}`
+  );
+}
+
+/** Stops any agentd and its daemons, installs this runtime, and starts agentd on the machine's loopback. */
+async function startAgentd(remote: Remote, agentd: AgentdSpec): Promise<void> {
+  const { runtimeDir, shell } = remote;
+  const { home } = remote.target;
+  const { token } = agentd;
+  const { files: list, digest } = await remote.runtime(agentd.arch);
+  const staging = await mkdtemp(path.join(tmpdir(), "imp-runtime-"));
+
+  try {
+    await writeRuntime(list, staging);
+
+    const tar = await packed(staging);
+
+    await shell.ok(
+      "Installing the machine runtime",
+      `pkill -f '${runtimePattern(runtimeDir)}' || true; rm -rf '${runtimeDir}' && mkdir -p '${runtimeDir}' && tar -xf - -C '${runtimeDir}'`,
+      tar
+    );
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+
+  const env = {
+    ...agentdEnv({ token, digest, runtimeDir, home, host: "127.0.0.1" }),
+    HOME: home,
+  };
+
+  // The token goes in on stdin, so it never shows in the machine's process list.
+  const start = [
+    "set -e",
+    `mkdir -p '${home}/workspace'`,
+    ...Object.entries(env).map(
+      ([name, value]) => `export ${name}=${quote(value)}`
+    ),
+    `cd '${home}'`,
+    `setsid -f /usr/local/bin/node '${runtimeDir}/agentd.mjs' >> '${runtimeDir}/agentd.log' 2>&1 < /dev/null`,
+  ].join("\n");
+
+  await shell.ok("Starting agentd", "sh -s", start);
+}
+
+/** Everything under `dir` on this computer, as one tar archive. */
+async function packed(dir: string): Promise<Buffer> {
+  return await new Promise<Buffer>((resolve, reject) => {
+    execFile(
+      "tar",
+      ["-C", dir, "-cf", "-", "."],
+      { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 },
+      (error, stdout) => {
+        if (error) {
+          // Node's own description of the failure, which names the command and carries what it printed.
+          reject(new Error(error.message, { cause: error }));
+        } else {
+          resolve(stdout);
+        }
+      }
+    );
   });
 }
 
-async function freePort(): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        typeof address === "object" && address
-          ? resolve(address.port)
-          : reject(new Error("no port"));
-      });
-    });
-  });
-}
+const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
