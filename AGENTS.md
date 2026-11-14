@@ -4,7 +4,7 @@ The repository is a Turborepo monorepo on npm workspaces (`turbo.json`, the root
 
 ## Checks
 
-- Install once: `npm run setup` at the root sets up Exact, its toolchains and the web client, and runs `npm ci`, which installs every workspace's dependencies and the lint, format and type tooling into one `node_modules`. For the checks alone, `npm ci` is enough. Add a dependency to the package that uses it (`npm install <name> -w @imp/host`), never to the root unless it is tooling.
+- Install once: `npm run setup` at the root sets up Exact, its web toolchains and the web client (`npm run setup:mac` adds the Mac app's), and runs `npm ci`, which installs every workspace's dependencies and the lint, format and type tooling into one `node_modules`. For the checks alone, `npm ci` is enough. Add a dependency to the package that uses it (`npm install <name> -w @imp/host`), never to the root unless it is tooling.
 - Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (`turbo run test`: the host's API tests, about a minute) at the root. CI runs the same two, then builds the docs (`npx turbo run build --filter=@imp/docs`).
 - `npm run lint:fix` formats and applies the automatic fixes. Run it before fixing diagnostics by hand; some fixes only apply on a second run.
 - After a change to the client, or to what the host sends it, also run `cd client && bun exact.mjs test web` (needs `npm run setup`; see `client/AGENTS.md`). CI's studio job runs those, and the studio's API tests, with Exact at the commit in `client/exact-rev`, the one pin that setup, CI and releases read; move it when the client needs a newer Exact.

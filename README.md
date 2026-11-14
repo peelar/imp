@@ -105,9 +105,11 @@ for `@imp/host`). Pushing it to `main` releases it: `.github/workflows/release.y
 With Node 24+ and git:
 
 ```sh
-npm run setup   # Bun, Rust, Exact at the pinned commit, npm ci, and the web client; about 6 minutes the first time
+npm run setup   # Bun, Rust, Exact at the pinned commit, npm ci, and the web client; a few minutes the first time
 npm start       # http://localhost:8787
 ```
+
+`npm run setup:mac` sets up the Mac app's build too (on macOS), after which `cd client && bun exact.mjs mac` builds it.
 
 Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local npm start`
 instead fixes the agent's computer to a directory on this one, with no isolation; `host/src/server.ts` describes the
