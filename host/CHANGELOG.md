@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.4.0
+
+### Minor Changes
+
+- 080488b: The imp's computer opens in the app as a Computer tab: its live screen, with the chat beside it on a wide window, so you can ask the imp for something and watch it work or take over. New window still opens the screen on its own.
+
 ## 0.3.1
 
 ### Patch Changes
