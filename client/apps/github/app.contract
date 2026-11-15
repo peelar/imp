@@ -1,0 +1,161 @@
+// The GitHub app's default screen. It is yours to change: ask your imp for another one. The data under it (server.ts)
+// is Imp's. The shell feeds it: `inbox` is the read, `done`, `snooze` and `restore` the writes.
+
+// The shell's styles are its own: an app declares the ones it uses.
+style Label
+  font-family = "family.mono"
+  font-size = "0.6875rem"
+  font-weight = 500
+  letter-spacing = "0.12em"
+  text-transform = "uppercase"
+  color = "ink.muted"
+
+shape Item
+  key: string
+  kind: string
+  repo: string
+  number: number
+  title: string
+  url: string
+  author: string
+  draft: bool
+  day: string
+  why: string
+  review: bool
+  mine: bool
+  assigned: bool
+  notified: bool
+  unread: bool
+  status: string
+  until: string
+
+shape Inbox
+  synced: bool
+  note: string
+  items: Item[]
+
+// The filters, in the order the bar shows them.
+fn filterIds(): string[] = ["inbox", "review", "mine", "assigned", "notified", "snoozed", "done"]
+fn filterLabel(id: string): string = id == "inbox" ? "Inbox" : id == "review" ? "Reviews" : id == "mine" ? "Yours" : id == "assigned" ? "Assigned" : id == "notified" ? "Notifications" : id == "snoozed" ? "Snoozed" : "Done"
+
+// Whether an item is under a filter: the four between Inbox and Snoozed narrow the inbox.
+fn narrows(i: Item, filter: string): bool = filter == "inbox" or (filter == "review" and i.review) or (filter == "mine" and i.mine) or (filter == "assigned" and i.assigned) or (filter == "notified" and i.notified)
+fn under(i: Item, filter: string): bool = filter == "snoozed" or filter == "done" ? i.status == filter : i.status == "inbox" and narrows(i, filter)
+
+fn matches(i: Item, q: string): bool = q == "" or `${i.repo} #${i.number} ${i.title} ${i.author}`.toLowerCase().includes(q)
+
+fn kindLabel(kind: string): string = kind == "pr" ? "PR" : kind == "issue" ? "Issue" : kind == "ci" ? "CI" : kind == "discussion" ? "Talk" : kind == "release" ? "Release" : "Other"
+
+fn heading(n: number): string = n == 0 ? "Nothing needs you" : `${n} ${n == 1 ? "thing needs" : "things need"} you`
+
+// A small square button with a symbol, for a row's Done, Snooze and Back.
+component RowButton
+  props
+    symbol: string
+    label: string
+    testId: string
+    press: action
+  view
+    button press=press aria-label=label title=label testId=testId appearance="none" width=30 height=30 min-width=30
+      padding=0 display="flex" align-items="center" justify-content="center" border="none"
+      background-color="transparent" color="ink.faint"
+      :hover
+        color="ink.strong"
+        background-color="surface.soft"
+      image symbol width=15 height=15 aria-hidden=true
+
+component FilterButton
+  props
+    filter: string
+    count: number
+    current: bool
+    press: action
+  view
+    button press=press aria-pressed=current testId=`github-filter-${filter}` appearance="none" padding="7px 10px"
+      display="flex" align-items="baseline" gap=6 border=(current ? "1px solid ink.strong" : "1px solid line.subtle")
+      background-color=(current ? "ink.strong" : "transparent") color=(current ? "surface.page" : "ink.muted")
+      :hover
+        border-color="ink.strong"
+      text filterLabel(filter) class=Label color="inherit"
+      text count.toString() font-family="family.mono" font-size="0.75rem" color="inherit" opacity=0.7
+
+// One issue, pull request or notification: what it is, its title (a link to it on GitHub), why it is here, and its
+// triage.
+component ItemRow
+  props
+    item: Item
+    done: action
+    snooze: action
+    restore: action
+  view
+    row align-items="flex-start" gap=14 padding="14px 0" border-bottom="1px solid line.subtle"
+      testId=`github-item-${item.key}`
+      column width=52 min-width=52 gap=6 padding-top=4
+        text kindLabel(item.kind) class=Label color=(item.unread ? "AccentColor" : "ink.muted")
+        if item.draft
+          text "Draft" class=Label color="ink.faint"
+      column flex=1 min-width=0 gap=5
+        link href=item.url color="ink.strong" text-decoration-line="none" font-size="1.0625rem" line-height=1.35
+          overflow-wrap="break-word"
+          :hover
+            color="AccentColor"
+          text item.title
+        row gap=10 flex-wrap="wrap" align-items="baseline"
+          text `${item.repo}${item.number > 0 ? ` #${item.number}` : ""}` font-family="family.mono"
+            font-size="0.75rem" color="ink.muted"
+          if item.why != ""
+            text item.why font-size="0.875rem" color=(item.review ? "AccentColor" : "ink.muted")
+          text (item.until != "" ? `Snoozed until ${item.until}` : item.author != "" ? `${item.author} · ${item.day}` : item.day)
+            font-size="0.875rem" color="ink.faint"
+      row gap=2 padding-top=2
+        if item.status == "inbox"
+          RowButton(symbol="symbol:checkmark", label=`Done: ${item.title}`, testId=`github-done-${item.key}`,
+            press=done(item.key))
+          RowButton(symbol="symbol:moon", label=`Snooze until tomorrow: ${item.title}`,
+            testId=`github-snooze-${item.key}`, press=snooze(item.key, 1))
+        else
+          RowButton(symbol="symbol:back", label=`Back to the inbox: ${item.title}`,
+            testId=`github-restore-${item.key}`, press=restore(item.key))
+
+component Screen
+  props
+    inbox: Inbox
+    done: action
+    snooze: action
+    restore: action
+  state filter = "inbox"
+  state query = ""
+  derive items = inbox.items
+  derive status = inbox
+  derive q = query.trim().toLowerCase()
+  derive shown = items.filter(i => under(i, filter) and matches(i, q))
+  action pick(id: string)
+    filter = id
+  action search(value: string)
+    query = value
+  view
+    column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=22 box-sizing="border-box" width="100%"
+      column gap=6
+        text heading(items.filter(i => i.status == "inbox").length) font-family="family.display" font-size="2.25rem"
+          line-height=1.05 testId="github-heading"
+        text `${items.filter(i => i.status == "inbox" and i.review).length} reviews waiting · ${items.filter(i => i.status == "inbox" and i.unread).length} unread`
+          class=Label
+        if status.note != ""
+          text status.note font-size="0.875rem" color="ink.muted" font-style="italic" testId="github-note"
+      row gap=6 flex-wrap="wrap" role="toolbar" aria-label="Filter"
+        for f in filterIds() key=f
+          FilterButton(filter=f, count=items.filter(i => under(i, f)).length, current=(filter == f), press=pick(f))
+      row align-items="center" gap=8 padding="0 12px" border="1px solid line.strong"
+        image "symbol:search" width=14 height=14 aria-hidden=true color="ink.faint"
+        input value=query input=search placeholder="Filter by repo, title, author or number" aria-label="Filter items"
+          testId="github-search" flex=1 min-width=0 border="none" background-color="transparent" outline="none"
+          padding="10px 0" font-family="family.text" font-size="1rem" color="ink.strong"
+      column
+        for i in shown key=i.key
+          ItemRow(item=i, done=done, snooze=snooze, restore=restore)
+      if shown.length == 0
+        column gap=8 align-items="center" padding-top=12 testId="github-empty"
+          text (not status.synced ? "Not synced yet" : q != "" ? "Nothing matches" : "All clear") font-family="family.display"
+            font-size="1.625rem" role="heading" aria-level=2
+          text (not status.synced ? "The bar above says how the sync is going. The app reads GitHub with your key named github, from Settings → Secrets." : "Ask your imp in Chat to review, reply or merge: it acts on GitHub for you.")
+            color="ink.muted" font-style="italic" text-align="center"

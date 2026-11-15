@@ -77,4 +77,12 @@ Only code is backed up. The apps' data stays on the host, so back up `DATA_DIR` 
 
 An app in `client/apps/` whose `app.json` says `"server": "imp"` keeps Imp's server code. Its screen is yours to change, like any app's, but its `server.ts` and `app.json` are Imp's: the host always runs the repository's copy of them under the screen you saved (`host/src/studio/code.ts`), at start, in a preview and on Undo, so Imp's updates to them reach you and your screen stays yours. A preview that changes them is refused, and the imp is told to say what data the screen is missing instead.
 
+### GitHub
+
+The GitHub app (`client/apps/github`) is the first app Imp ships this way. Its sync reads, with your key named `github`, the pull requests waiting for your review, your own open pull requests, the issues and pull requests assigned to you, and your unread notifications, and merges them into one item per issue or pull request. It watches `api.github.com/notifications`, so a new notification brings a sync within a minute or so.
+
+- **Notifications need a classic token** with the `notifications` scope (or `repo`): GitHub gives them to nothing else. With another key, the app shows the rest and says so.
+- **Done and Snooze are the app's own.** They change nothing on GitHub, and a sync keeps them. A done item comes back when it changes on GitHub again, and a snoozed one when its snooze ends.
+- **Acting on GitHub is the imp's.** Ask in the chat beside the app ("review the gift card PR", "mark my notifications read"): the imp reads the app's items and acts with `gh`.
+
 To write an app yourself, see [Build an app](building-apps.md).

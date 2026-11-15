@@ -7,6 +7,7 @@
 // The host writes each app's part between the `// <apps:…>` markers from the props of the app's `component Screen`
 // (host/src/studio/shell.ts); `node host/scripts/shell.ts` writes them for the apps in apps/. Do not edit between them.
 // <apps:use>
+use Screen as GithubScreen, Inbox as GithubInbox from "./apps/github/app.contract"
 use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 // </apps:use>
 use showNotification, closeNotification, setAppBadge, clearAppBadge, notificationStatus, requestNotificationPermission, notificationclick, NotificationStatus, NotificationEvent from "@exact/notifications"
@@ -24,6 +25,7 @@ font "IBM Plex Mono"
 routes nav
   tab chat "/"
   // <apps:tabs>
+  tab github "/github"
   tab todos "/todos"
   // </apps:tabs>
   // The imp's computer: its screen, beside the chat on a wide window, as an app's page is.
@@ -584,6 +586,8 @@ component App
     if stale
       relaunch()
     // <apps:refresh>
+    if githubReadInboxLost
+      refresh githubReadInbox
     if todosReadListLost
       refresh todosReadList
     // </apps:refresh>
@@ -776,6 +780,17 @@ component App
   action syncApp(id: string)
     send appSynced = appsSync(id)
   // <apps:members>
+  resource githubReadInbox = githubInbox() when signedIn and nav.tab == "github" as shape GithubInbox else empty()
+  derive githubReadInboxLost = match failure(githubReadInbox) { case some(f) => true, case none => false }
+  mutation githubWroteDone as shape Reply queue
+  action githubDoDone(arg1: string)
+    send githubWroteDone = githubDone(arg1)
+  mutation githubWroteSnooze as shape Reply queue
+  action githubDoSnooze(arg1: string, arg2: number)
+    send githubWroteSnooze = githubSnooze(arg1, arg2)
+  mutation githubWroteRestore as shape Reply queue
+  action githubDoRestore(arg1: string)
+    send githubWroteRestore = githubRestore(arg1)
   resource todosReadList = todosList() when signedIn and nav.tab == "todos" as shape TodosTodo[] else empty()
   derive todosReadListLost = match failure(todosReadList) { case some(f) => true, case none => false }
   mutation todosWroteAdd as shape Reply queue
@@ -1067,6 +1082,9 @@ component App
                     ComputerScreen(computer=computer, src=`${host.origin}/computer/screen?embed&scheme=${scheme}`,
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=pick("settings"))
                   // <apps:screens>
+                  if e.name == "github"
+                    AppPage(id="github", draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
+                      GithubScreen(inbox=githubReadInbox, done=githubDoDone, snooze=githubDoSnooze, restore=githubDoRestore)
                   if e.name == "todos"
                     AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)

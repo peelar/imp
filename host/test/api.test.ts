@@ -101,6 +101,20 @@ test("the host tells a web client the address it was reached at", async () => {
 test("the shell lists the installed apps and the running version", async () => {
   assert.deepEqual(await first("apps"), [
     {
+      id: "github",
+      name: "GitHub",
+      description:
+        "What needs you on GitHub: review requests, your pull requests, what's assigned to you and your notifications, with Done and Snooze. Your imp can read it and act on GitHub for you.",
+      symbol: "symbol:notifications",
+      cover: "",
+      draft: false,
+      undo: "",
+      // The bar says what it reads before its first sync, which its tab starts.
+      reads:
+        "Reads api.github.com with your github key, every 15 min, and when api.github.com/notifications changes.",
+      sync: "Not synced yet",
+    },
+    {
       id: "todos",
       name: "Todos",
       description: "A list of things to do. Your imp can read and change it.",
@@ -487,7 +501,8 @@ it("a host started again has the saved app, its draft and its build; Discard dro
   assert.deepEqual(await call("appsDiscard", ["notes"]), done);
   assert.deepEqual(await notes(), saved("remove", "Kept", "Later"));
   assert.deepEqual(await call("appsUndo", ["notes"]), done);
-  assert.equal(rows(await first("apps")).length, 1);
+  // The apps Imp ships are left: GitHub and Todos.
+  assert.equal(rows(await first("apps")).length, 2);
   assert.equal((await fetch(`${base}/api/live/notesNotes`)).status, 404);
   assert.ok(!existsSync(path.join(dataDir, "code", "notes")));
 });

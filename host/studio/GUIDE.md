@@ -118,7 +118,7 @@ export default {
 
 The file declares its shapes and one `component Screen`. The shell shows the Screen in the app's tab, below its own bar and inside a scroll, and feeds it through its props. **Each prop names an operation in server.ts:**
 
-- a prop whose type is a value (`events: Event[]`) gets that read's answer, live: it updates after every write, by the user or by the agent. Such a read must take no params; filter and sort in the screen.
+- a prop whose type is a value (`events: Event[]`) gets that read's answer, live: it updates after every write, by the user or by the agent. Such a read must take no params; filter and sort in the screen. **Give the screen one such prop**: each is a live stream, and the shell has room for one more. With two, the screen's writes hang. Put everything the screen shows in one read's answer, as an object.
 - a prop of type `action` (`addEvent: action`) is that write; the screen calls it with the write's params in order: `addEvent(title, day)`.
 
 The screen cannot declare `resource`, `mutation` or `task` (only the shell's root can). It keeps its own `state`, `derive`s and `action`s, and may declare more components and `fn`s in the same file.

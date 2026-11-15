@@ -58,7 +58,7 @@ test("the host keeps the apps it starts with as the first version, a folder per 
       cwd: path.join(dataDir, "backup"),
       encoding: "utf-8",
     }),
-    "todos/app.contract\ntodos/app.json\ntodos/server.ts\n"
+    "github/app.contract\ngithub/app.json\ngithub/server.ts\ntodos/app.contract\ntodos/app.json\ntodos/server.ts\n"
   );
 });
 

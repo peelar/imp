@@ -69,6 +69,9 @@ const mutations: Record<MutationSource, true> = {
   appsSync: true,
   // Each app's writes its screen calls, which the host writes from the apps (host/src/studio/shell.ts).
   // <apps:mutations>
+  githubDone: true,
+  githubSnooze: true,
+  githubRestore: true,
   todosAdd: true,
   todosSetDone: true,
   todosRename: true,

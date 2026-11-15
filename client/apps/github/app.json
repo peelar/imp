@@ -1,0 +1,7 @@
+{
+  "id": "github",
+  "name": "GitHub",
+  "symbol": "symbol:notifications",
+  "server": "imp",
+  "description": "What needs you on GitHub: review requests, your pull requests, what's assigned to you and your notifications, with Done and Snooze. Your imp can read it and act on GitHub for you."
+}

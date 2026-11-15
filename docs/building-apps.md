@@ -120,7 +120,7 @@ export default {
 
 The screen is one `component Screen`. The shell shows it in the app's tab and feeds it through its props, and **each prop names an operation**:
 
-- A prop whose type is a value (`list: Todo[]`) gets that read's answer, live. It updates after every write, yours or the imp's. Such a read takes no params; filter and sort in the screen.
+- A prop whose type is a value (`list: Todo[]`) gets that read's answer, live. It updates after every write, yours or the imp's. Such a read takes no params; filter and sort in the screen. A screen gets **one** such prop: each is a live stream, and the shell has room for one more (browsers allow six connections per server). Put everything the screen shows in one read's answer, as an object.
 - A prop of type `action` (`setDone: action`) is that write, called with the write's params in order: `setDone(todo.id, not todo.done)`.
 
 ```text title="app.contract"

@@ -370,7 +370,7 @@ test "⌘ chords open the tabs, a new chat and the message box, and a browser ta
   tap "tab-chat"
   type "composer" key "Meta+,"
   expect state nav.tab == "settings"
-  type "app" key "Meta+2"
+  type "app" key "Meta+3"
   expect state nav.tab == "todos"
   expect tree has "new-chat-todos"
   type "app" key "Meta+n"
@@ -385,3 +385,13 @@ test "⌘ chords open the tabs, a new chat and the message box, and a browser ta
   clock +500
   expect tree missing "keys-Meta+1"
   type "app" key "Meta" up
+
+// The GitHub app Imp ships: with no github key it has nothing yet, and says how it gets its data.
+test "the GitHub app opens to an empty inbox that says it has not synced yet"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-github"
+  clock until state githubReadInbox.synced == false within 5000
+  expect text "github-heading" == "Nothing needs you"
+  expect tree has "github-empty"
+  expect tree has "github-filter-review"

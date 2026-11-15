@@ -147,7 +147,7 @@ export function appWatch(options: WatchOptions) {
 
       timing.next = Date.now() + wait;
       options.log(
-        `watch ${watched.id}: ${why(cause)}; next try in ${Math.round(wait / 60_000)} min`
+        `watch ${watched.id}: ${why(cause).replace(/\.$/, "")}; next try in ${Math.round(wait / 60_000)} min`
       );
     } finally {
       timing.asking = false;
