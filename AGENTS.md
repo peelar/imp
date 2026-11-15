@@ -1,46 +1,24 @@
 # Imp
 
-The repository is a Turborepo monorepo on npm workspaces (`turbo.json`, the root `package.json`): `host/` and `client/` are its packages. `host/` is the host: Node runs its TypeScript directly, so there is no build step and only erasable syntax (no enums, namespaces or parameter properties). `sdk/app.ts` is the contract an app's `server.ts` is written against. `client/` is the Exact shell and has its own `AGENTS.md`; `client/apps/<id>/` holds one app per folder. `docs/` holds the docs as plain Markdown, one page per file, with `docs/README.md` as their contents.
+Rules and conventions you can't read from the code. For how things work, read the code.
 
-## Checks
-
-- Install once: `npm run setup` at the root sets up Exact, its web toolchains and the web client (`npm run setup:mac` adds the Mac app's), and runs `npm ci`, which installs every workspace's dependencies and the lint, format and type tooling into one `node_modules`. For the checks alone, `npm ci` is enough. Add a dependency to the package that uses it (`npm install <name> -w @imp/host`), never to the root unless it is tooling.
-- Before you call a change done, run `npm run check` (lint, the lint policy probes, formatting, types) and `npm test` (`turbo run test`: the host's API tests, about a minute) at the root. CI runs the same two.
-- `npm run lint:fix` formats and applies the automatic fixes. Run it before fixing diagnostics by hand; some fixes only apply on a second run.
-- After a change to the client, or to what the host sends it, also run `cd client && bun exact.mjs test web` (needs `npm run setup`; see `client/AGENTS.md`). CI's studio job runs those, and the studio's API tests, with Exact at the commit in `client/exact-rev`, the one pin that setup, CI and releases read; move it when the client needs a newer Exact.
-- After a change to the host's behavior, settings or files, update the page in `docs/` that describes it. Write callouts as GitHub alerts (`> [!NOTE]`), which GitHub renders and oxfmt keeps.
-- A new behavior of the host's HTTP API gets a test in `host/test/`, in the file for its part of the API (`api.test.ts`, `secrets.test.ts`, `backup.test.ts`, `egress.test.ts`, `machine-ssh.test.ts`). Each file starts its own host with a scripted model (`host/test/harness.ts`, `host/scripts/test-host.ts`). The host's `test` script runs the files one at a time: on a fresh machine, hosts that download and start OpenBao and mitmproxy together are slow enough to miss the tests' waits.
-- A change to what Imp does adds a changeset in the same commit: `.changeset/<name>.md` with `"@imp/host": patch` (or `minor` for a feature) in its front matter and one or two sentences for the changelog, written for the person using Imp. Pushing it to `main` releases it to every installed host. Tests, CI and docs need none; a commit that changes shipped code without changing behavior (a refactor) says `Changeset: none` on its own line in its message. `.githooks/pre-push` blocks a push to `main` that breaks this.
-
-## Lint policy
-
-The rules in `oxlint.config.ts` are strict on purpose. Fix a diagnostic by changing the code, not the config, and do not add `oxlint-disable` comments. Three exceptions, each with its reason written after `--`:
-
-- A type assertion the type system cannot avoid (a library typed `any`): put `// SAFETY: <the invariant that makes it true>` above it, then `// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- <why>`.
-- A poll or retry loop that must await in sequence: `// oxlint-disable-next-line no-await-in-loop -- <why>`. Independent work uses `Promise.all`.
-- `sdk/app.ts` keeps `run` as a method signature so apps can narrow its arguments.
-
-What the rules ask for, where the answer is a design choice:
-
-- Data from outside the process (files, `JSON.parse`, HTTP, child-process output, the model's tool arguments, messages from the agent's machine) is checked with a compiled `@earendil-works/pi-schema` schema before use. `host/src/protocol.ts` and `host/src/computer-choice.ts` show how.
-- `typeof` appears only inside a type-predicate function. No parameter is typed `unknown` except one named `cause`. JSON values are `Json` from `sdk/app.ts`, not `Record<string, unknown>`.
-- Limits: 500 lines per file, 100 per function, 3 parameters (take one options object beyond that), nesting depth 3, cognitive complexity 15. When a file or function passes one, split it by what each part owns and say that in the new module's opening comment.
-- When you change `oxlint.config.ts`, add or update a probe in `scripts/lint-policy.ts` that proves the rule fires.
-
-## Module boundaries in `host/src`
-
-- `host.ts` only composes. What the shell reads and changes is in `shell-api.ts`; how it is served is in `http.ts`.
-- `protocol.ts` is the one definition of the messages between the host, agentd, each app's worker and agentd's egress proxy. `host/machine/*.ts` runs on the agent's machine with its types stripped and no packages except `ws`: import types only there, and nothing from `host/src` at runtime.
-- `apps.ts` is the app gateway and composes `app-folders.ts`, `app-manifest.ts`, `app-data.ts`, `app-machine.ts` and `app-tools.ts`. An app's data stays on the host; only `app-data.ts` touches its SQLite file.
-- `secrets.ts` composes the vault (`vault.ts`, `vault-server.ts`, `vault-files.ts`), the egress proxy (`egress.ts`, `egress-proxy.ts`) and the `secret-*.ts` modules. A secret's value goes into the vault and is read back only by mitmproxy's addon (`host/egress/inject.py`) and, for a login, by `signIn` in `secret-logins.ts`, with a read-only token minted for that one read, to type it into a page of the login's site (`chrome.ts`). Nothing else in `host/src` reads, logs or shows a value, and none goes to the agent's machine except a login typed into its site's page; API keys reach it only as stand-ins.
-- `backup.ts` composes `backup-history.ts` (the git repository of the apps' code) and `backup-github.ts` (the sign-in and the repository on GitHub). Both run git and gh only through `backup-commands.ts`, which keeps the host's GitHub sign-in in its data directory and drops GitHub tokens from the environment.
-- A program the host starts and must not leave behind registers with `killOnExit` in `children.ts`, the one module that listens for the host's exit.
-- A JSON file the host keeps in its data directory is read with `readKept` in `kept.ts`: a damaged one reads as empty and is logged, and never stops the host.
-- Only `computer-machines.ts` names a machine provider. Everything else reaches the agent's machine through the `Machine` contract in `machine.ts`.
-- The shell opens at most five live streams, because a browser allows six connections per host and a sixth stream makes calls hang. New shell state rides on an existing stream, as the computer, memory, secrets and backup ride on `account`.
-- A name the shell's API starts with (such as `memory`) is added to `RESERVED` in `app-folders.ts`, so no app can take it as its id.
-
-## Generated and shipped files
-
-- Never edit or format the blocks between `// <apps:…>` and `// </apps:…>` in `client/app.contract` and `client/app.ts`. Regenerate them with `node host/scripts/shell.ts` after changing an app's Screen props or operations.
-- A release ships `host/`, `sdk/` and `client/apps/` (`scripts/package.sh`). The host's production dependencies come from the lockfile pruned to `@imp/host` (`turbo prune`) and ship in `host/node_modules`. Code under `host/src` and `host/machine` may import only the `dependencies` of `host/package.json`. Workspaces hoist every package into the root `node_modules`, so an undeclared import still resolves in a checkout and fails only in a release. The root `package.json` is tooling and is not shipped.
+- A secret's value lives only in the vault. The only code that reads it back is mitmproxy's addon (`host/egress/inject.py`) and `signIn` in `secret-logins.ts`. Never log it, show it, or send it to the agent's machine. The machine gets stand-ins for API keys, and a login is typed straight into its own site's page.
+- An app's data never leaves the host. Only `app-data.ts` opens an app's SQLite file.
+- Code in `host/machine/` runs on the agent's machine with its types stripped. It may use the `ws` package and nothing else, and import only types from `host/src`.
+- Only `computer-machines.ts` knows about specific machine providers. Everything else goes through the `Machine` interface in `machine.ts`.
+- The shell keeps at most five live streams open. Browsers allow six connections per server, and a sixth makes every other request hang. Put new shell state on a stream that already exists, as `account` carries the computer, memory, secrets and backup. An app's stream is open only while its tab is.
+- Every program the host starts registers with `killOnExit` (`children.ts`), so it stops when the host stops.
+- Read JSON files in the data directory with `readKept` (`kept.ts`). A damaged file must never stop the host.
+- Check anything that comes from outside the process (files, HTTP, `JSON.parse`, child processes, the model's tool arguments, the agent's machine) against a `pi-schema` schema before using it.
+- When you add a new top-level name to the shell's API, add it to `RESERVED` in `app-folders.ts` too, so no app can take it as its id.
+- Don't edit the `// <apps:…>` blocks in `client/app.contract` and `client/app.ts` by hand. They are generated: run `node host/scripts/shell.ts`.
+- Code in `host/src` and `host/machine` may only import packages listed under `dependencies` in `host/package.json`. In a checkout every package resolves, because the workspaces share one `node_modules`, but a release ships only the host's own dependencies.
+- Node runs the host's TypeScript as it is, so use only syntax that can simply be erased: no enums, namespaces or constructor parameter properties.
+- The lint rules are strict on purpose. Fix the code, not the config, and don't add `oxlint-disable` comments. There are two exceptions: a type assertion that truly can't be avoided (with a `// SAFETY:` comment above it saying why it holds), and a retry or polling loop that must wait one step at a time. Write the reason after `--`.
+- If you change `oxlint.config.ts`, add a probe to `scripts/lint-policy.ts` that shows the rule fires.
+- When a file or function grows past a lint limit, split it by what each part is responsible for, and say so in the new file's opening comment.
+- `client/exact-rev` is the only place that pins Exact's version. Setup, CI and releases all read it.
+- Every change to what Imp does needs a changeset in the same commit: `.changeset/<name>.md`, marked `patch` or `minor`, with a sentence or two written for the person using Imp. Pushing to `main` releases it to every installed host. A refactor says `Changeset: none` in its commit message instead. Changes to tests, CI and docs need neither.
+- When the host's behavior, settings or files change, update the page in `docs/` that describes it.
+- New behavior in the host's HTTP API gets a test in `host/test/`.
+- Before calling a change done, run `npm run check` and `npm test`. If you touched the client or what the host sends it, also run `bun exact.mjs test web` in `client/`.
