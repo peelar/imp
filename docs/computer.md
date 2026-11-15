@@ -2,11 +2,11 @@
 
 The imp works on a Linux computer of its own. Its read, write, edit and bash tools run there, each app's server code runs there in a worker, and it has a desktop with Chrome that you can watch and take over from the **Computer** tab in the app. On a wide window the screen sits beside the chat, so you can ask the imp to do something and watch it work; **New window** opens it on its own. The screen connects only while the tab is open, because a watched computer stays awake.
 
-You pick the computer in **Settings**. Both kinds sit behind the same [machine adapter contract](machines.md), and wherever the computer runs, the host decides what is installed on it.
+The app asks for the computer right after you sign in, and **Settings** changes it later. Every kind sits behind the same [machine adapter contract](machines.md), and wherever the computer runs, the host decides what is installed on it.
 
 ## Imp cloud
 
-An [E2B](https://e2b.dev) sandbox, on E2B's free plan. Paste an E2B API key in Settings and pick a size:
+An [E2B](https://e2b.dev) sandbox. It needs an E2B account: a new one gets a one-time free credit with no card, and E2B bills by the second once it is spent. Paste an E2B API key in Settings and pick a size:
 
 | Size    | vCPUs | Memory |
 | ------- | ----- | ------ |
@@ -20,22 +20,11 @@ The key is kept in `DATA_DIR/e2b-api-key`, readable by the host alone. Nothing o
 
 ## A computer of yours
 
-Any Linux computer on your tailnet: a home lab box, a VM on your laptop (Lima, Multipass, OrbStack, WSL), or a cloud VM you rent. It needs Debian or Ubuntu. Settings shows the two things to do, once:
+Any Linux computer on your tailnet: a home lab box, a VM on your laptop (Lima, Multipass, OrbStack, WSL), or a cloud VM you rent. It needs Debian or Ubuntu. The app shows a folded **Setup prompt** with a Copy button: paste it into a coding agent on the computer (Claude Code, Codex, Amp or another), and the agent does the two things below, once. Unfold it to read what it asks.
 
-1. **Run one command on the computer**
+1. **Add one rule to your tailnet policy**
 
-   It installs Tailscale with Tailscale SSH and the `tag:imp-computer` tag, and creates the user the agent works as, `imp`, with passwordless sudo:
-
-   ```sh
-   curl -fsSL https://tailscale.com/install.sh | sh \
-     && sudo tailscale up --ssh --advertise-tags=tag:imp-computer \
-     && (id imp >/dev/null 2>&1 || sudo useradd -m -s /bin/bash imp) \
-     && echo 'imp ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/imp >/dev/null
-   ```
-
-2. **Add one rule to your tailnet policy**
-
-   It lets this host, and only this host, sign in to tagged computers as `imp`. Settings fills in the host's own login or tag as `src`:
+   It comes first, because Tailscale refuses a tag no policy owns. It lets this host, and only this host, sign in to tagged computers as `imp`. The prompt fills in the host's own login or tag as `src`:
 
    ```json
    {
@@ -51,6 +40,17 @@ Any Linux computer on your tailnet: a home lab box, a VM on your laptop (Lima, M
    }
    ```
 
+2. **Run one command on the computer**
+
+   It installs Tailscale with Tailscale SSH and the `tag:imp-computer` tag, and creates the user the agent works as, `imp`, with passwordless sudo:
+
+   ```sh
+   curl -fsSL https://tailscale.com/install.sh | sh \
+     && sudo tailscale up --ssh --advertise-tags=tag:imp-computer \
+     && (id imp >/dev/null 2>&1 || sudo useradd -m -s /bin/bash imp) \
+     && echo 'imp ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/imp >/dev/null
+   ```
+
 3. **Pick it in Settings**
 
    The host lists the tagged computers on your tailnet. Pick one, and the host sets it up.
@@ -60,6 +60,16 @@ The host reaches the computer with the system `ssh` through Tailscale (`tailscal
 Nothing on the computer listens on the network. The host runs the setup when the computer has not run this version, keeps its runtime in `~/.imp`, and starts it on the computer's loopback. It reaches it through SSH tunnels it opens itself.
 
 Your computer is yours: it never suspends, and removing it as the imp's computer deletes only what the host put in `~/.imp`.
+
+## This machine
+
+The fallback, for when you have neither an E2B account nor a spare computer: a container on the machine the host runs on, through Docker (Docker Engine, Docker Desktop or OrbStack) or Podman. It is free and needs no account and no other computer, and onboarding offers it as the way to skip the other two: **Skip, use a container here**. Install one of them on the host's machine, and on Linux let the host's user use it (`sudo usermod -aG docker $USER`, then restart Imp). When no engine answers, the app says what is missing. Onboarding checks again every few seconds while Skip is open, and in Settings **Look again** checks once you fixed it. Likewise, a computer of yours set up with the prompt shows up in onboarding by itself.
+
+The container is Debian, with the agent working as `imp` (passwordless sudo inside the container) in a home directory kept on a named volume. Its first start installs the desktop and Chrome, which takes a few minutes. It gets 2 vCPUs and 4 GB, and 1 GB of shared memory for Chrome. Only agentd's port is published, on the host's loopback, and agentd takes nothing without its token. The container sees none of the host's files.
+
+It never suspends on its own: it runs on your machine and bills nothing. After the machine restarts, the host starts the container and agentd again the next time it needs them. Removing it as the imp's computer leaves the container and its volume in place, so switching back picks up there; `docker rm -f` and `docker volume rm` remove them (their names start with `imp-`).
+
+A container shares the kernel of the machine it runs on, so it isolates less than Imp cloud's sandbox or a separate computer. See [Security model](security.md#what-the-agents-computer-can-do).
 
 ## Switching
 

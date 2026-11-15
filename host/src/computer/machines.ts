@@ -8,11 +8,17 @@ import type {
   MachineProvider,
   MachineSize,
 } from "../machine/machine.ts";
+import { containerProvider, findContainerRuntime } from "./container.ts";
 import { e2bKeyProblem, e2bProvider } from "./e2b.ts";
 import { machineImage } from "./runtime.ts";
 import { probeSsh, sshProvider } from "./ssh.ts";
 
 const MACHINE_KEY = "owner:local";
+
+/** The container CLI on this machine whose engine answers, or why there is none. */
+export const containerRuntime = findContainerRuntime;
+
+export type { ContainerRuntime } from "./container.ts";
 
 /** Why Imp cloud does not take an API key; "" when it does. */
 export const cloudKeyProblem = e2bKeyProblem;
@@ -66,7 +72,7 @@ function explain(cause: unknown): string {
   }
 
   if (text.includes("Permission denied")) {
-    return "Tailscale did not let this host sign in. Check the policy rule shown here.";
+    return "Tailscale did not let this host sign in. Your tailnet policy needs the rule in the setup prompt.";
   }
 
   if (text.includes("failed (exit 255)")) {
@@ -118,6 +124,17 @@ export function machinePlan(
       provider: options.fixed,
       size: DEFAULT_SIZE.size,
       workspace: options.fixed.workspace(MACHINE_KEY),
+    };
+  }
+
+  if (choice?.kind === "container") {
+    const provider = containerProvider({ secret: options.secret });
+
+    return {
+      id: "machine:container",
+      provider,
+      size: DEFAULT_SIZE.size,
+      workspace: provider.workspace(MACHINE_KEY),
     };
   }
 

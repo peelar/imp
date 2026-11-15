@@ -7,7 +7,11 @@
 // secrets', the shell's and the routines' tools the same way, and "reply: <words>" makes it answer those words. Its
 // agent-browser knows two tricks. TEST_DATA_DIR names
 // the host's data directory, for a test that starts the host again on it.
+//
+// Beside it, on TEST_API_PORT (default 8799), a server that speaks OpenAI's Chat Completions API, for the API key
+// sign-in: it takes the key "test-key" and the model "fake-model", and answers every message "Hello from the API."
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createModels, type Provider } from "@earendil-works/pi-ai/models";
@@ -19,7 +23,7 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { startHost } from "../src/host.ts";
 import { localProvider } from "../src/computer/local.ts";
-import { CHATGPT } from "../src/account/account.ts";
+import { CHATGPT, openCredentialStore } from "../src/account/account.ts";
 
 type Content =
   Parameters<FauxResponseFactory>[0]["messages"][number]["content"];
@@ -240,12 +244,63 @@ const auth: Provider["auth"] = {
 
 const chatgpt: Provider = { ...faux.provider, auth };
 
-const models = createModels();
+/** What the API answers besides a chat: its model list, or why it refused. */
+type ApiAnswer =
+  | { readonly error: { readonly message: string } }
+  | { readonly object: "list"; readonly data: readonly { id: string }[] };
 
-models.setProvider(chatgpt);
+/** One streamed choice of a Chat Completions answer, and the usage the last one carries. */
+type Chunk = {
+  readonly delta: { readonly role?: string; readonly content?: string };
+  readonly finish_reason?: string;
+  readonly usage?: { prompt_tokens: number; completion_tokens: number };
+};
+
+const json = (res: ServerResponse, status: number, value: ApiAnswer) =>
+  res
+    .writeHead(status, { "content-type": "application/json" })
+    .end(JSON.stringify(value));
+
+const chunk = ({ usage, ...choice }: Chunk) =>
+  `data: ${JSON.stringify({ id: "chatcmpl-1", object: "chat.completion.chunk", created: 0, model: "fake-model", choices: [{ index: 0, ...choice }], usage })}\n\n`;
+
+const api = createServer((req, res) => {
+  req.resume();
+
+  if (req.headers.authorization !== "Bearer test-key") {
+    json(res, 401, { error: { message: "Incorrect API key provided." } });
+  } else if (req.method === "GET" && req.url === "/v1/models") {
+    json(res, 200, { object: "list", data: [{ id: "fake-model" }] });
+  } else if (req.method === "POST" && req.url === "/v1/chat/completions") {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.end(
+      [
+        chunk({ delta: { role: "assistant", content: "Hello from " } }),
+        chunk({ delta: { content: "the API." } }),
+        chunk({
+          delta: {},
+          finish_reason: "stop",
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }),
+        "data: [DONE]\n\n",
+      ].join("")
+    );
+  } else {
+    json(res, 404, { error: { message: "Not found." } });
+  }
+});
+
+api.listen(Number(process.env.TEST_API_PORT ?? 8799), "127.0.0.1");
 
 const dataDir =
   process.env.TEST_DATA_DIR ?? mkdtempSync(path.join(tmpdir(), "imp-test-"));
+
+// Kept in the data directory, as the real host keeps them: a host started again on it is still signed in.
+const models = createModels({
+  credentials: openCredentialStore(path.join(dataDir, "credentials.sqlite")),
+});
+
+models.setProvider(chatgpt);
 
 // The machine's agent-browser, which the host asks for the imp's tricks (tricks.ts): a stand-in that knows two.
 const flows = [

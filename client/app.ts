@@ -41,6 +41,7 @@ export const grants =
 const mutations: Record<MutationSource, true> = {
   accountSignIn: true,
   accountCancel: true,
+  accountUseKey: true,
   accountSignOut: true,
   chatSend: true,
   chatStop: true,
@@ -57,6 +58,7 @@ const mutations: Record<MutationSource, true> = {
   secretsPutLogin: true,
   computerUseCloud: true,
   computerUseOwn: true,
+  computerUseContainer: true,
   computerRefresh: true,
   computerRetry: true,
   computerSetCloudKey: true,

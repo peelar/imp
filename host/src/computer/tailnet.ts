@@ -178,19 +178,13 @@ export async function writeKnownHosts(
   );
 }
 
-/** What to run once on the computer: Tailscale with SSH and the computer tag, and the user the agent works as. */
-export function computerCommand(): string {
-  return [
-    "curl -fsSL https://tailscale.com/install.sh | sh",
-    `sudo tailscale up --ssh --advertise-tags=${COMPUTER_TAG}`,
-    `(id ${COMPUTER_USER} >/dev/null 2>&1 || sudo useradd -m -s /bin/bash ${COMPUTER_USER})`,
-    `echo '${COMPUTER_USER} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/${COMPUTER_USER} >/dev/null`,
-  ].join(" && ");
-}
-
-/** What to add to the tailnet policy once, so this host (and only it) may sign in to tagged computers as the agent. */
-export function policySnippet(source: string): string {
-  return JSON.stringify(
+/**
+ * A prompt for the person's coding agent that makes a Linux computer the imp's: the tailnet policy first, because
+ * Tailscale refuses a tag no policy owns, then Tailscale with SSH and the tag, and the user the agent works as. People
+ * see only that it is a prompt; the commands and the policy are for the agent that runs them.
+ */
+export function setupPrompt(source: string): string {
+  const policy = JSON.stringify(
     {
       tagOwners: { [COMPUTER_TAG]: ["autogroup:admin"] },
       ssh: [
@@ -205,4 +199,24 @@ export function policySnippet(source: string): string {
     null,
     2
   );
+
+  const command = [
+    "curl -fsSL https://tailscale.com/install.sh | sh",
+    `sudo tailscale up --ssh --advertise-tags=${COMPUTER_TAG}`,
+    `(id ${COMPUTER_USER} >/dev/null 2>&1 || sudo useradd -m -s /bin/bash ${COMPUTER_USER})`,
+    `echo '${COMPUTER_USER} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/${COMPUTER_USER} >/dev/null`,
+  ].join(" && ");
+
+  return `Set up this Linux computer so my Imp can work on it over Tailscale SSH.
+
+1. Merge these entries into my tailnet policy file (https://login.tailscale.com/admin/acls/file). Keep everything already there. If you cannot edit the policy yourself, tell me exactly what to paste and where, and wait until I have.
+
+${policy}
+
+2. Run this once on this computer. If Tailscale asks me to sign in, show me the link.
+
+${command}
+
+3. Check that \`tailscale status\` lists this computer with ${COMPUTER_TAG}, and that \`sudo -u ${COMPUTER_USER} sudo -n true\` succeeds. Then tell me to go back to Imp and choose this computer.
+`;
 }

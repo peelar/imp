@@ -3,7 +3,17 @@
 // pi-env, the app daemon and the screen on one port (see machine/agentd.ts). Adapters run the setup, copy the runtime
 // files, start agentd, and check its health; nothing here depends on the provider.
 import { createHash, createHmac } from "node:crypto";
-import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { createRequire, stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { packagedDaemon } from "@earendil-works/pi-env";
@@ -120,6 +130,40 @@ export async function writeRuntime(
       }
     })
   );
+}
+
+/** Everything under `dir` on this computer, as one tar archive. */
+async function packed(dir: string): Promise<Buffer> {
+  return await new Promise<Buffer>((resolve, reject) => {
+    execFile(
+      "tar",
+      ["-C", dir, "-cf", "-", "."],
+      { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 },
+      (error, stdout) => {
+        if (error) {
+          // Node's own description of the failure, which names the command and carries what it printed.
+          reject(new Error(error.message, { cause: error }));
+        } else {
+          resolve(stdout);
+        }
+      }
+    );
+  });
+}
+
+/** The runtime's files as one tar archive, for an adapter that unpacks it on the machine. */
+export async function packedRuntime(
+  files: readonly RuntimeFile[]
+): Promise<Buffer> {
+  const staging = await mkdtemp(path.join(tmpdir(), "imp-runtime-"));
+
+  try {
+    await writeRuntime(files, staging);
+
+    return await packed(staging);
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
 }
 
 const shipped = async (to: string, from: string): Promise<RuntimeFile> => ({

@@ -14,15 +14,16 @@ an app that stays: a screen you keep using, which the imp can also operate for y
 
 ## Features
 
-- **A computer of its own.** The imp works on a durable Linux machine with a desktop and Chrome, either an
-  [E2B](https://e2b.dev) sandbox or a computer of yours on your tailnet. You can watch it work there, or take over.
+- **A computer of its own.** The imp works on a durable Linux machine with a desktop and Chrome: an
+  [E2B](https://e2b.dev) sandbox or a computer of yours on your tailnet, or, with neither, a free container on the
+  host's own machine (Docker, OrbStack or Podman). You can watch it work there, or take over.
 - **Apps it builds for you.** New apps open as a preview on a copy of their data, with Save, Discard and Undo. Every
   version of their code is kept, and can be backed up to a private GitHub repository.
 - **Memory.** It remembers what it learns about you and about itself, and Settings lets you forget any of it.
 - **Routines.** Ask for something on a schedule, and it runs in a conversation of its own.
 - **Secrets it never holds.** API keys and website logins live in a vault on the host, and are added to the imp's
   requests on their way out, so neither the imp nor its computer ever sees them.
-- **Yours to host.** Your ChatGPT plan is the model, your data stays on your machine, and Tailscale decides who gets
+- **Yours to host.** Your ChatGPT plan (or any OpenAI-compatible API key) is the model, your data stays on your machine, and Tailscale decides who gets
   in.
 
 ## Install
@@ -33,8 +34,8 @@ On the machine that will run your Imp (Linux with systemd, or macOS), with Node 
 curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
 ```
 
-It installs Imp as a service, serves it on your tailnet and prints one link. Open it, sign in with ChatGPT, and give
-your imp a computer in Settings. The host keeps itself at the latest release. [Install](docs/install.md) covers the
+It installs Imp as a service, serves it on your tailnet and prints one link. Open it, sign in with ChatGPT or an
+OpenAI-compatible API key, and give your imp a computer. The host keeps itself at the latest release. [Install](docs/install.md) covers the
 details, and the optional Mac app, which installs from your host with one command.
 
 ## Development

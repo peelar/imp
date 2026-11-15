@@ -1,4 +1,4 @@
-// What the owner chose in Settings for the agent's computer, and the E2B API key they entered there. Both are kept
+// What the owner chose for the agent's computer, and the E2B API key they entered there. Both are kept
 // in the host's data directory, readable by the host alone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -28,6 +28,8 @@ export const sizeOf = (id: string) =>
 
 // Open objects: a later release may keep more about a choice than this one reads.
 const choice = union([
+  /** A container on the machine the host runs on. */
+  obj({ kind: lit("container") }, { open: true }),
   obj({ kind: lit("cloud"), size: str() }, { open: true }),
   obj(
     {
@@ -43,7 +45,7 @@ const choice = union([
 
 const stored = compile(choice);
 
-/** Imp cloud (an E2B sandbox of a chosen size) or a computer of the owner's on the tailnet. */
+/** This machine (a container), Imp cloud (an E2B sandbox of a chosen size) or a computer of the owner's on the tailnet. */
 export type Choice = Static<typeof choice>;
 
 export type ChoiceStore = ReturnType<typeof openChoice>;

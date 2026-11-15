@@ -70,7 +70,7 @@ test("each reason a computer cannot be a machine is said in words", async () => 
     ],
     [
       ["Linux aarch64", "no-sudo"],
-      "imp@box has no passwordless sudo. Run the setup command on the computer.",
+      "imp@box has no passwordless sudo. Give your agent the setup prompt again.",
     ],
   ] as const;
 

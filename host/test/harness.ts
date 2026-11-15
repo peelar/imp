@@ -22,20 +22,25 @@ const isPipe = (
 
 export const repo = path.join(import.meta.dirname, "..", "..");
 
-// A free port: the one the system gives a server that asks for any, which then closes.
-const probe = createServer().listen(0, "127.0.0.1");
+/** A free port: the one the system gives a server that asks for any, which then closes. */
+async function freePort() {
+  const probe = createServer().listen(0, "127.0.0.1");
 
-await once(probe, "listening");
+  await once(probe, "listening");
 
-const address = probe.address();
+  const address = probe.address();
 
-assert.ok(address !== null && !isPipe(address), "no port");
+  assert.ok(address !== null && !isPipe(address), "no port");
+  probe.close();
+  await once(probe, "close");
 
-const { port } = address;
+  return address.port;
+}
 
-probe.close();
+const port = await freePort();
 
-await once(probe, "close");
+// The test host's OpenAI-compatible API (scripts/test-host.ts), which the tests address too.
+process.env.TEST_API_PORT = String(await freePort());
 
 export const base = `http://127.0.0.1:${port}`;
 

@@ -1,5 +1,5 @@
-// The agent's computer, as the owner picks it in Settings: Imp cloud (an E2B sandbox of a chosen size) or a computer
-// of theirs on the tailnet. The choice is kept in the host's data directory (choice.ts). Switching moves the
+// The agent's computer, as the owner picks it in Settings: this machine (a container on the machine the host runs
+// on), Imp cloud (an E2B sandbox of a chosen size) or a computer of theirs on the tailnet. The choice is kept in the host's data directory (choice.ts). Switching moves the
 // agent, its tools and its apps to the other machine at once (machines.ts); the machine left behind keeps
 // its files, so switching back picks up there.
 import path from "node:path";
@@ -13,6 +13,8 @@ import {
 } from "./choice.ts";
 import {
   cloudKeyProblem,
+  type ContainerRuntime,
+  containerRuntime,
   machinePlan,
   machineRunner,
   type MachineStatus,
@@ -26,12 +28,7 @@ import {
 } from "./own.ts";
 import type { Topics } from "../kernel/live.ts";
 import type { MachineProvider } from "../machine/machine.ts";
-import {
-  COMPUTER_USER,
-  computerCommand,
-  policySnippet,
-  type TailnetDevice,
-} from "./tailnet.ts";
+import { COMPUTER_USER, setupPrompt, type TailnetDevice } from "./tailnet.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { localProvider } from "./local.ts";
@@ -48,20 +45,22 @@ export type { ComputerDevice } from "./own.ts";
 
 export type ComputerState = {
   /** "dev" is a development host's fixed machine. */
-  kind: "cloud" | "own" | "dev" | "none";
+  kind: "container" | "cloud" | "own" | "dev" | "none";
   /** "none": no computer chosen. "failed" comes with `error`. */
   status: MachineStatus;
   error: string;
   name: string;
   size: string;
   device: string;
+  /** Whether a container engine answers on the host's machine, and why not when none does. */
+  containerAvailable: boolean;
+  containerProblem: string;
   cloudAvailable: boolean;
   sizes: { id: string; label: string }[];
   devices: ComputerDevice[];
   tailnetError: string;
-  /** What to run once on a computer, and what to add to the tailnet policy once. */
-  command: string;
-  policy: string;
+  /** The prompt that has the person's coding agent make a computer of theirs the imp's. */
+  setupPrompt: string;
 };
 
 export type ComputerOptions = {
@@ -95,6 +94,48 @@ type Switching = {
 };
 
 const FIXED = "This host runs on a fixed development machine.";
+
+/** How long a look for a container engine stands before the next state Settings shows looks again. */
+const CONTAINER_CHECK_MS = 30_000;
+
+/** The host's look for a container engine, kept a while: Settings' state is read on every change. */
+function containerCheck() {
+  let last: { at: number; found: Promise<ContainerRuntime> } | undefined;
+
+  return {
+    async found() {
+      if (!last || Date.now() - last.at > CONTAINER_CHECK_MS) {
+        last = { at: Date.now(), found: containerRuntime() };
+      }
+
+      return await last.found;
+    },
+    /** The next look asks the engine again. */
+    forget() {
+      last = undefined;
+    },
+  };
+}
+
+/** A container on the host's machine, once its engine answers. */
+async function useContainer(
+  { fixed, choice, switchTo }: Switching,
+  found: ContainerRuntime
+) {
+  if (fixed) {
+    return refused(FIXED);
+  }
+
+  if (!found.ok) {
+    return refused(found.problem);
+  }
+
+  if (choice.get()?.kind !== "container") {
+    await switchTo({ kind: "container" });
+  }
+
+  return ok;
+}
 
 async function useCloud({ fixed, choice, switchTo }: Switching, size: string) {
   const picked = choice.get();
@@ -179,7 +220,7 @@ async function useOwn({ fixed, own, switchTo }: Switching, dnsName: string) {
   if ("error" in probe) {
     return refused(
       probe.denied
-        ? `Tailscale did not let this host sign in to ${device.name} as ${COMPUTER_USER}. Add the policy rule shown here to your tailnet policy.`
+        ? `Tailscale did not let this host sign in to ${device.name} as ${COMPUTER_USER}. Your tailnet policy needs the rule in the setup prompt.`
         : probe.error
     );
   }
@@ -209,6 +250,7 @@ export function openComputer(options: ComputerOptions) {
     });
 
   const machines = machineRunner(plan(choice.get()), changed);
+  const engine = containerCheck();
 
   async function switchTo(next: Choice) {
     choice.set(next);
@@ -237,6 +279,10 @@ export function openComputer(options: ComputerOptions) {
       return "This computer (development)";
     }
 
+    if (picked?.kind === "container") {
+      return "This machine";
+    }
+
     if (picked?.kind === "cloud") {
       return `Imp cloud, ${sizeOf(picked.size).label}`;
     }
@@ -253,18 +299,23 @@ export function openComputer(options: ComputerOptions) {
 
       const picked = choice.get();
 
+      const found: ContainerRuntime = fixed
+        ? { ok: false, problem: "" }
+        : await engine.found();
+
       return {
         kind: fixed ? "dev" : (picked?.kind ?? "none"),
         ...machines.state(),
         name: name(picked),
         size: picked?.kind === "cloud" ? picked.size : "",
         device: picked?.kind === "own" ? picked.device : "",
+        containerAvailable: found.ok,
+        containerProblem: found.ok ? "" : found.problem,
         cloudAvailable: choice.cloudKey() !== "",
         sizes: SIZES.map(({ id, label }) => ({ id, label })),
         devices: own.devices(),
         tailnetError: own.error(),
-        command: computerCommand(),
-        policy: policySnippet(own.source()),
+        setupPrompt: setupPrompt(own.source()),
       };
     },
     /** The pi-env connection to the current machine; a switch replaces it. */
@@ -281,8 +332,9 @@ export function openComputer(options: ComputerOptions) {
     onSwitch: (listener: (workspace: string) => Promise<void> | void) => {
       listeners.add(listener);
     },
-    /** Settings asked for the tailnet's devices again. */
+    /** Settings asked for the tailnet's devices, and the container engine, again. */
     refresh: () => {
+      engine.forget();
       changed();
 
       return ok;
@@ -295,6 +347,11 @@ export function openComputer(options: ComputerOptions) {
     useCloud: async (size: string) => await useCloud(switching, size),
     setCloudKey: async (key: string) => await setCloudKey(switching, key),
     useOwn: async (dnsName: string) => await useOwn(switching, dnsName),
+    useContainer: async () => {
+      engine.forget();
+
+      return await useContainer(switching, await engine.found());
+    },
     close: machines.close,
   };
 }

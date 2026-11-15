@@ -11,7 +11,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
   │  agent (Pi Durable) · app gateway · studio · memory · vault                 │
   │  DATA_DIR: SQLite for conversation, apps, credentials; memory.jsonl         │
   └──────────────────────────────────┬──────────────────────────────────────────┘
-                                     │  adapter: E2B URLs, or SSH tunnels over Tailscale
+                                     │  adapter: a loopback port, E2B URLs, or SSH tunnels
                                      ▼
   ┌──────────────────────── the agent's computer ─────────────────────────┐
   │  agentd (one port, token required)                                    │
@@ -25,7 +25,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 
 `host/src/host.ts` starts everything and serves one HTTP origin on localhost: the built web client, and its API.
 
-- **The agent** runs on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable), with its conversation in `harness.sqlite`. It survives restarts in the middle of a turn. The model is your ChatGPT account, signed in with ChatGPT's device code flow (`host/src/account/account.ts`).
+- **The agent** runs on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable), with its conversation in `harness.sqlite`. It survives restarts in the middle of a turn. The model is your ChatGPT account, signed in with ChatGPT's device code flow (`host/src/account/account.ts`), or a key for an OpenAI-compatible API (`host/src/account/api-key.ts`).
 - **The app gateway** (`host/src/apps/apps.ts`) loads every app's server code onto the computer and keeps each app's SQLite database on the host. See [Apps](apps.md).
 - **The studio** (`host/src/studio/studio.ts`) is where the imp makes apps: it takes an app folder from the computer, checks it, rebuilds the web client, and shows the result as a preview.
 - **Memory** (`host/src/memory/memory.ts`) is what the imp knows about you and itself. See [Memory](memory.md).
@@ -47,7 +47,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `computer/` | The owner's choice of computer, every machine provider, the runtime the host installs, and the screen | `machine` |
 | `machine/` | The machine adapter contract that every provider meets |  |
 | `backup/` | Every saved version of the apps' code, in git and on GitHub | `apps` |
-| `account/` | The ChatGPT sign-in and the model's credentials |  |
+| `account/` | The model account: the ChatGPT sign-in or an API key, and their credentials |  |
 | `tricks/` | The browser tasks the imp keeps on its computer |  |
 | `update/` | The host's updates to the latest release |  |
 

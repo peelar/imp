@@ -9,7 +9,7 @@ These docs are for the people who run an Imp: how to install it, how its parts f
 
 ## The parts
 
-- **The host** (`host/`) is the server you run. It runs the agent, signs in to ChatGPT (your Plus or Pro plan is the model), keeps every app's data in SQLite, and serves the app. It listens on localhost only. Tailscale is the door in front of it.
+- **The host** (`host/`) is the server you run. It runs the agent, signs in to ChatGPT (your Plus or Pro plan is the model) or uses an OpenAI-compatible API key, keeps every app's data in SQLite, and serves the app. It listens on localhost only. Tailscale is the door in front of it.
 - **The agent's computer** is a durable Linux machine: an [E2B](https://e2b.dev) sandbox ("Imp cloud") or a computer of yours on your tailnet. The agent's tools run there, along with each app's server code and a desktop with Chrome that you can watch.
 - **The client** (`client/`) is the app you open, written in [Exact](https://github.com/expo/exact)'s Contract language. It runs on the web today, and there is a Mac app.
 - **Apps** (`client/apps/<id>/`) are what the imp builds: a screen, server code, and a SQLite database on the host.

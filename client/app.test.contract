@@ -67,7 +67,7 @@ test "settings show the computer the agent works on, and offer to turn notificat
   expect text "computer-name" == "This computer (development)"
   expect text "computer-status" == "Ready"
   expect tree missing "computer-size-2c-4096m"
-  expect tree missing "computer-command"
+  expect tree missing "computer-setup-prompt"
   expect tree has "computer-open-screen"
 
 test "the computer's screen opens in its own tab, beside the chat on a wide window, and connects only while shown"
@@ -395,3 +395,32 @@ test "the GitHub app opens to an empty inbox that says it has not synced yet"
   expect text "github-heading" == "Nothing needs you"
   expect tree has "github-empty"
   expect tree has "github-filter-review"
+
+// Last: it signs the shared host out of ChatGPT. scripts/test-host.ts serves an OpenAI-compatible API on port 8799.
+test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the imp answers on it"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  tap "signout"
+  tap "signout-confirm"
+  clock until state account.status == "signedOut" within 5000
+  tap "key-open"
+  type "key-base" "http://127.0.0.1:8799/v1"
+  type "key-value" "wrong-key"
+  type "key-model" "fake-model"
+  tap "key-use"
+  clock until state apiKeyError == "127.0.0.1:8799 refused this key." within 5000
+  expect state account.status == "signedOut"
+  type "key-value" ""
+  type "key-value" "test-key"
+  tap "key-use"
+  clock until state account.status == "signedIn" within 5000
+  expect state account.kind == "apiKey"
+  expect state keyValue == ""
+  tap "tab-settings"
+  tap "new-chat-settings"
+  type "composer" "Hello"
+  tap "send"
+  clock until state chat.messages.1.text == "Hello from the API." within 10000
+  tap "tab-settings"
+  expect text "account-model" == "fake-model"
+  expect text "account-base" == "http://127.0.0.1:8799/v1"

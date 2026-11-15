@@ -14,9 +14,11 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
 
    The host shows a code and a link. Approve it on any device. This is ChatGPT's device code flow, so it works from your phone too. Your ChatGPT plan is the model the agent runs on.
 
+   No ChatGPT plan? Choose **Use an API key** and enter the API's address, a key and a model: OpenAI's API, OpenRouter, a local server, anything that speaks the Chat Completions API. The host checks the key against the API's model list and keeps it in `DATA_DIR/credentials.sqlite`. The API's provider bills what the imp uses.
+
 3. **Give your imp a computer**
 
-   In Settings, paste an E2B key for Imp cloud, or pick a Linux computer on your tailnet. See [The agent's computer](computer.md).
+   The app asks next. Imp cloud takes an E2B key, and a computer of yours is any Linux computer on your tailnet, which a setup prompt you hand to a coding agent prepares. With neither, or to try Imp first, **Skip, use a container here** runs it in a container on the host's machine, free, once Docker, OrbStack or Podman is installed there. See [The agent's computer](computer.md).
 
 4. **Optional: install the Mac app**
 

@@ -4,6 +4,7 @@
 //
 //   MACHINE=e2b node scripts/smoke-machine.ts                      (needs E2B_API_KEY; MACHINE_CPUS, MACHINE_MEMORY_MB)
 //   MACHINE=ssh MACHINE_SSH=imp@homelab[:port] [MACHINE_SSH_KEY=~/.ssh/key] node scripts/smoke-machine.ts
+//   MACHINE=container node scripts/smoke-machine.ts                 (needs Docker, OrbStack or Podman on this machine)
 //   MACHINE=local node scripts/smoke-machine.ts
 import { once } from "node:events";
 import { mkdtempSync } from "node:fs";
@@ -18,6 +19,7 @@ import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type RawData, WebSocket } from "ws";
 import { Topics } from "../src/kernel/live.ts";
 import type { MachineProvider } from "../src/machine/machine.ts";
+import { containerProvider } from "../src/computer/container.ts";
 import { e2bProvider } from "../src/computer/e2b.ts";
 import { localProvider } from "../src/computer/local.ts";
 import { machineImage } from "../src/computer/runtime.ts";
@@ -49,6 +51,7 @@ const providers = new Map<string, () => MachineProvider>([
         identityFile: MACHINE_SSH_KEY,
       }),
   ],
+  ["container", () => containerProvider({ secret })],
   [
     "local",
     () => localProvider({ secret, dir: path.join(tmpdir(), "imp-smoke") }),

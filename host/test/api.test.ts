@@ -41,10 +41,14 @@ const todoTitles = (answer: Json) => rows(answer).map((todo) => todo.title);
  * the backup that ride on the same stream.
  */
 const withStatus = (wanted: string) => (answer: Json) => {
-  const { status, code, url, error, email, plan } = isRow(answer) ? answer : {};
+  const { status, code, url, error, email, plan, kind, baseUrl, model } = isRow(
+    answer
+  )
+    ? answer
+    : {};
 
   return status === wanted
-    ? { status, code, url, error, email, plan }
+    ? { status, code, url, error, email, plan, kind, baseUrl, model }
     : undefined;
 };
 
@@ -136,6 +140,12 @@ test("the computer's state rides on the account stream, and the screen's page ha
   assert.ok(isRow(account) && isRow(account.computer));
   assert.equal(account.computer.kind, "dev");
   assert.equal(account.computer.name, "This computer (development)");
+  // A development host's computer is fixed: it looks for no container engine, and refuses to switch to one.
+  assert.equal(account.computer.containerAvailable, false);
+  assert.deepEqual(
+    await call("computerUseContainer", []),
+    refused("This host runs on a fixed development machine.")
+  );
 
   // host/src/computer/screen.html, in a tab of its own, reads the computer's state from here.
   const computer = await first("computer");
@@ -147,12 +157,59 @@ test("the computer's state rides on the account stream, and the screen's page ha
   assert.match(await page.text(), /\/api\/live\/computer/);
 });
 
-test("a message is refused until ChatGPT is signed in", async () => {
+test("a message is refused until a model account is signed in", async () => {
   await until("account", withStatus("signedOut"));
   assert.deepEqual(
     await call("chatSend", ["Hello", ""]),
-    refused("Sign in with ChatGPT first.")
+    refused("Sign in first.")
   );
+});
+
+test("an API key the API refuses is not kept; one it takes runs the imp until the person signs out", async () => {
+  const address = `http://127.0.0.1:${process.env.TEST_API_PORT}/v1`;
+
+  assert.deepEqual(
+    await call("accountUseKey", [address, "wrong-key", "fake-model"]),
+    refused(`127.0.0.1:${process.env.TEST_API_PORT} refused this key.`)
+  );
+  assert.deepEqual(
+    await call("accountUseKey", ["not an address", "test-key", "fake-model"]),
+    refused("Enter the API's address, such as https://api.openai.com/v1.")
+  );
+  assert.deepEqual(
+    await call("accountUseKey", [`${address}/`, "test-key", "fake-model"]),
+    done
+  );
+  assert.deepEqual(await until("account", withStatus("signedIn")), {
+    status: "signedIn",
+    code: "",
+    url: "",
+    error: "",
+    email: "",
+    plan: "",
+    kind: "apiKey",
+    baseUrl: address,
+    model: "fake-model",
+  });
+
+  // The key stays across a restart of the host.
+  await startTestHost();
+  assert.equal(
+    (await until("account", withStatus("signedIn")))?.kind,
+    "apiKey"
+  );
+
+  assert.deepEqual(await call("chatSend", ["Hello", ""]), done);
+
+  const messages = await until(
+    "chat",
+    settledChat((all) => all.at(-1)?.role === "assistant")
+  );
+
+  assert.deepEqual(messages.at(-1)?.text, "Hello from the API.");
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.deepEqual(await call("accountSignOut", []), done);
+  assert.equal((await until("account", withStatus("signedOut")))?.kind, "");
 });
 
 test("a sign-in that cannot reach ChatGPT says why", async () => {
@@ -175,6 +232,9 @@ test("signing in shows the device code, then the account", async () => {
     error: "",
     email: "",
     plan: "",
+    kind: "",
+    baseUrl: "",
+    model: "",
   });
   assert.deepEqual(await until("account", withStatus("signedIn")), {
     status: "signedIn",
@@ -183,6 +243,9 @@ test("signing in shows the device code, then the account", async () => {
     error: "",
     email: "tester@example.com",
     plan: "plus",
+    kind: "chatgpt",
+    baseUrl: "",
+    model: "",
   });
 });
 

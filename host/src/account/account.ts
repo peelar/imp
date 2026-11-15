@@ -1,9 +1,18 @@
-// Sign in with ChatGPT: the model account the agent runs on. The host is usually opened from another device (a phone
-// on the tailnet), where ChatGPT's browser flow cannot reach its localhost callback, so this uses ChatGPT's device
-// code flow: the shell shows a code and a link, the person approves on any device, and the host polls for the tokens.
-import type { Models } from "@earendil-works/pi-ai/models";
+// The model account the agent runs on: a ChatGPT plan, or a key for an OpenAI-compatible API (api-key.ts).
+//
+// ChatGPT: the host is usually opened from another device (a phone on the tailnet), where ChatGPT's browser flow
+// cannot reach its localhost callback, so this uses ChatGPT's device code flow: the shell shows a code and a link, the
+// person approves on any device, and the host polls for the tokens.
+import type { Models, MutableModels } from "@earendil-works/pi-ai/models";
 import { compile, nullable, obj, opt, str } from "@earendil-works/pi-schema";
 import type { Topics } from "../kernel/live.ts";
+import {
+  API,
+  type ApiSettings,
+  signInWithKey,
+  signOutOfKey,
+  storedApiKey,
+} from "./api-key.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { openCredentialStore } from "./credentials.ts";
@@ -19,7 +28,35 @@ export type Account = {
   error: string;
   email: string;
   plan: string;
+  /** What it is signed in with: "chatgpt" or "apiKey" ("" while signed out). */
+  kind: string;
+  /** An API key's address and model. */
+  baseUrl: string;
+  model: string;
 };
+
+/** A model the agent runs on. */
+export type ModelRef = { readonly provider: string; readonly modelId: string };
+
+const SIGNED_OUT: Account = {
+  status: "signedOut",
+  code: "",
+  url: "",
+  error: "",
+  email: "",
+  plan: "",
+  kind: "",
+  baseUrl: "",
+  model: "",
+};
+
+const withKey = ({ baseUrl, model }: ApiSettings): Account => ({
+  ...SIGNED_OUT,
+  status: "signedIn",
+  kind: "apiKey",
+  baseUrl,
+  model,
+});
 
 type Interaction = Parameters<Models["login"]>[2];
 
@@ -44,15 +81,13 @@ const tokenClaims = compile(
   )
 );
 
-export function chatgptAccount(models: Models, topics: Topics) {
-  let state: Account = {
-    status: "checking",
-    code: "",
-    url: "",
-    error: "",
-    email: "",
-    plan: "",
-  };
+/** `chatgptModel` is the model a ChatGPT sign-in runs on; an API key names its own. */
+export function modelAccount(
+  models: MutableModels,
+  topics: Topics,
+  chatgptModel: ModelRef
+) {
+  let state: Account = { ...SIGNED_OUT, status: "checking" };
 
   let attempt: AbortController | undefined;
 
@@ -61,12 +96,17 @@ export function chatgptAccount(models: Models, topics: Topics) {
     topics.changed(TOPIC);
   };
 
+  // A stored ChatGPT sign-in wins over a stored key.
   const ready = (async () => {
-    set(
-      (await hasCredential(models))
-        ? await signedIn(models)
-        : { status: "signedOut" }
-    );
+    if (await hasCredential(models)) {
+      set(await signedIn(models));
+
+      return;
+    }
+
+    const key = await storedApiKey(models);
+
+    set(key ? withKey(key) : SIGNED_OUT);
   })();
 
   /** Runs one sign-in attempt to its end. A newer attempt, or a cancel, takes the account's state from it. */
@@ -87,7 +127,17 @@ export function chatgptAccount(models: Models, topics: Topics) {
   return {
     ready,
     state: () => state,
-    /** Whether the agent can run: a ChatGPT credential is stored. */
+    /** The model the agent runs on, once signed in. */
+    model(): ModelRef | undefined {
+      if (state.status !== "signedIn") {
+        return undefined;
+      }
+
+      return state.kind === "apiKey"
+        ? { provider: API, modelId: state.model }
+        : chatgptModel;
+    },
+    /** Whether the agent can run: a model account is stored. */
     async usable() {
       await ready;
 
@@ -125,6 +175,28 @@ export function chatgptAccount(models: Models, topics: Topics) {
       });
     },
 
+    /** Signs in with an API key, once the API takes it. Answers why not, or "". */
+    async useKey(input: ApiSettings) {
+      await ready;
+
+      if (state.status === "signedIn") {
+        return "Sign out first.";
+      }
+
+      const result = await signInWithKey(models, input);
+
+      if (!result.ok) {
+        return result.error;
+      }
+
+      // A ChatGPT sign-in still waiting for its code is dropped: the agent runs on one account.
+      attempt?.abort();
+      attempt = undefined;
+      set(withKey(result.settings));
+
+      return "";
+    },
+
     cancel() {
       attempt?.abort();
       attempt = undefined;
@@ -138,19 +210,13 @@ export function chatgptAccount(models: Models, topics: Topics) {
       attempt?.abort();
       attempt = undefined;
       await models.logout(CHATGPT);
-      set({
-        status: "signedOut",
-        code: "",
-        url: "",
-        error: "",
-        email: "",
-        plan: "",
-      });
+      await signOutOfKey(models);
+      set(SIGNED_OUT);
     },
   };
 }
 
-export type ChatGPTAccount = ReturnType<typeof chatgptAccount>;
+export type ModelAccount = ReturnType<typeof modelAccount>;
 
 /** The device code flow's side of a sign-in: it picks the method, and hands over the code once ChatGPT issues it. */
 function deviceCodeFlow(
@@ -212,10 +278,9 @@ async function signedIn(models: Models): Promise<Account> {
   const identity = await readIdentity(models);
 
   return {
+    ...SIGNED_OUT,
     status: "signedIn",
-    code: "",
-    url: "",
-    error: "",
+    kind: "chatgpt",
     email: identity?.email ?? "",
     plan: identity?.plan ?? "",
   };

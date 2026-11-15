@@ -1,9 +1,10 @@
 # Machines
 
-Every provider of the agent's computer implements one interface, `MachineProvider` in `host/src/machine/machine.ts`. Three exist today:
+Every provider of the agent's computer implements one interface, `MachineProvider` in `host/src/machine/machine.ts`. Four exist today:
 
 | Adapter | File | The computer is |
 | --- | --- | --- |
+| Container | `host/src/computer/container.ts` | A Docker or Podman container on the host's machine. |
 | E2B | `host/src/computer/e2b.ts` | One E2B sandbox, found by its key and size. |
 | SSH | `host/src/computer/ssh.ts` | A Linux computer you bring, reached with the system `ssh`. |
 | Local | `host/src/computer/local.ts` | A directory on the host. Development and tests only. |
@@ -53,6 +54,7 @@ An `Endpoint` is a URL and the headers it needs.
 Each adapter does the same four things in its own way: run the setup, copy the runtime files, start agentd, and check its health.
 
 - **E2B** bakes the setup into one template per setup version and size, so a new sandbox starts set up. An existing sandbox runs a newer setup in place, because its disk is yours.
+- **Container** runs the setup in the container with `<cli> exec` when it has not run this version, keeps the runtime in `/home/imp/.imp`, and reaches agentd on the port the container publishes on the host's loopback, read again each time, since a restarted container may get another. An exposed port goes through a `<cli> exec` relay.
 - **SSH** runs the setup over SSH when the computer has not run this version, keeps the runtime in `~/.imp`, starts agentd on loopback, and opens its own SSH tunnels to it.
 
 ## Adding a provider
@@ -61,6 +63,7 @@ Implement `MachineProvider`, keep the four guarantees, and check it with the smo
 
 ```sh
 cd host
+MACHINE=container node scripts/smoke-machine.ts            # needs Docker, OrbStack or Podman
 MACHINE=e2b node scripts/smoke-machine.ts                  # needs E2B_API_KEY
 MACHINE=ssh MACHINE_SSH=imp@homelab node scripts/smoke-machine.ts
 MACHINE=local node scripts/smoke-machine.ts

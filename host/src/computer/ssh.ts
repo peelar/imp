@@ -8,10 +8,7 @@
 //
 // The computer is yours: it never suspends, `keepAlive()` and `suspend()` do nothing, and `destroy()` removes only
 // what the host put in ~/.imp.
-import { execFile, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import type {
   ImageSpec,
@@ -30,8 +27,8 @@ import {
   runtimePattern,
   SETUP_MARKER,
   setupScript,
+  packedRuntime,
   type Runtime,
-  writeRuntime,
 } from "./runtime.ts";
 import { machineTunnels } from "./ssh-tunnels.ts";
 import { healthy } from "../kernel/ports.ts";
@@ -215,7 +212,7 @@ export async function probeSsh(
 
   if (problems.includes("no-sudo")) {
     return {
-      error: `${target.destination} has no passwordless sudo. Run the setup command on the computer.`,
+      error: `${target.destination} has no passwordless sudo. Give your agent the setup prompt again.`,
     };
   }
 
@@ -499,21 +496,12 @@ async function startAgentd(remote: Remote, agentd: AgentdSpec): Promise<void> {
   const { home } = remote.target;
   const { token } = agentd;
   const { files: list, digest } = await remote.runtime(agentd.arch);
-  const staging = await mkdtemp(path.join(tmpdir(), "imp-runtime-"));
 
-  try {
-    await writeRuntime(list, staging);
-
-    const tar = await packed(staging);
-
-    await shell.ok(
-      "Installing the machine runtime",
-      `pkill -f '${runtimePattern(runtimeDir)}' || true; rm -rf '${runtimeDir}' && mkdir -p '${runtimeDir}' && tar -xf - -C '${runtimeDir}'`,
-      tar
-    );
-  } finally {
-    await rm(staging, { recursive: true, force: true });
-  }
+  await shell.ok(
+    "Installing the machine runtime",
+    `pkill -f '${runtimePattern(runtimeDir)}' || true; rm -rf '${runtimeDir}' && mkdir -p '${runtimeDir}' && tar -xf - -C '${runtimeDir}'`,
+    await packedRuntime(list)
+  );
 
   const env = {
     ...agentdEnv({ token, digest, runtimeDir, home, host: "127.0.0.1" }),
@@ -532,25 +520,6 @@ async function startAgentd(remote: Remote, agentd: AgentdSpec): Promise<void> {
   ].join("\n");
 
   await shell.ok("Starting agentd", "sh -s", start);
-}
-
-/** Everything under `dir` on this computer, as one tar archive. */
-async function packed(dir: string): Promise<Buffer> {
-  return await new Promise<Buffer>((resolve, reject) => {
-    execFile(
-      "tar",
-      ["-C", dir, "-cf", "-", "."],
-      { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          // Node's own description of the failure, which names the command and carries what it printed.
-          reject(new Error(error.message, { cause: error }));
-        } else {
-          resolve(stdout);
-        }
-      }
-    );
-  });
 }
 
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;

@@ -10,14 +10,14 @@ import type { Answer, LiveSource } from "./kernel/live.ts";
 import { type AppBackup, TOPIC as BACKUP } from "./backup/backup.ts";
 import { TOPIC as MEMORY, type MemoryProvider } from "./memory/memory.ts";
 import { TOPIC as SECRETS, type Secrets } from "./secrets/secrets.ts";
-import { TOPIC as ACCOUNT, type ChatGPTAccount } from "./account/account.ts";
+import { TOPIC as ACCOUNT, type ModelAccount } from "./account/account.ts";
 import { TOPIC as ROUTINES, type Routines } from "./routines/routines.ts";
 import { TOPIC as NOTICES, type Notices } from "./notices/notices.ts";
 import { TOPIC as TRICKS, type Tricks } from "./tricks/tricks.ts";
 import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio/studio.ts";
 
 export type ShellApiOptions = {
-  readonly account: ChatGPTAccount;
+  readonly account: ModelAccount;
   /** The person's conversations: the open one, which their messages go to, and the rest. */
   readonly chats: Chats;
   /** What the imp does on a schedule. */
@@ -198,6 +198,18 @@ function accountCalls({ account }: ShellApiOptions): Calls {
       },
     ],
     [
+      "accountUseKey",
+      async (args) => {
+        const error = await account.useKey({
+          baseUrl: text(args, 0),
+          key: text(args, 1),
+          model: text(args, 2),
+        });
+
+        return error ? refused(error) : ok;
+      },
+    ],
+    [
       "accountCancel",
       () => {
         account.cancel();
@@ -230,7 +242,7 @@ function chatCalls(options: ShellApiOptions): Calls {
         }
 
         if (!(await account.usable())) {
-          return refused("Sign in with ChatGPT first.");
+          return refused("Sign in first.");
         }
 
         // The second argument is the app open beside the chat, "" from the chat tab.
@@ -380,6 +392,10 @@ function computerCalls({ computer, chats }: ShellApiOptions): Calls {
     [
       "computerUseCloud",
       betweenTurns(async (size) => await computer.useCloud(size)),
+    ],
+    [
+      "computerUseContainer",
+      betweenTurns(async () => await computer.useContainer()),
     ],
     [
       "computerUseOwn",

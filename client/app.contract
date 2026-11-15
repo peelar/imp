@@ -1,4 +1,4 @@
-// Imp's shell: ChatGPT sign-in first, then the chat home and the installed apps, compiled into one
+// Imp's shell: onboarding first (a model account, then a computer), then the chat home and the installed apps, compiled into one
 // plan. Every source goes to the host through the one data module in app.ts, which streams each resource live. Each
 // app's resources and mutations live here, in the root, because Contract allows them only there; its screen is
 // imported from apps/<id>/app.contract. Colours and type are app.tamber's; the look is "Catalogue": white paper,
@@ -36,8 +36,9 @@ routes nav
 shape Host
   origin: string
 
-// The ChatGPT account the agent runs on. `status` is "checking", "signedOut", "starting", "waiting" (for the person
-// to enter `code` at `url`), "signedIn", or "failed" (with `error`).
+// The model account the agent runs on: a ChatGPT plan, or a key for an OpenAI-compatible API. `status` is
+// "checking", "signedOut", "starting", "waiting" (for the person to enter `code` at `url`), "signedIn", or "failed"
+// (with `error`). `kind` is "chatgpt" or "apiKey" once signed in; a key's API is at `baseUrl` and runs `model`.
 shape Account
   status: string
   code: string
@@ -45,6 +46,9 @@ shape Account
   error: string
   email: string
   plan: string
+  kind: string
+  baseUrl: string
+  model: string
   // The agent's computer, what the imp remembers and the owner's secrets ride on the account's stream: a browser opens
   // at most six connections to a host over HTTP/1.1, and a seventh request (a mutation) would wait for one of the
   // shell's streams to end.
@@ -103,8 +107,9 @@ shape AppTile
 shape Build
   id: string
 
-// The agent's computer. `kind` is "cloud" (Imp cloud, an E2B sandbox of `size`), "own" (`device` on the tailnet),
-// "dev" (fixed by a development host) or "none"; `status` is "none", "starting", "ready" or "failed" (with `error`).
+// The agent's computer. `kind` is "container" (this machine: a container on the host's machine, which
+// `containerAvailable` says can run, or `containerProblem` why not), "cloud" (Imp cloud, an E2B sandbox of `size`),
+// "own" (`device` on the tailnet), "dev" (fixed by a development host) or "none"; `status` is "none", "starting", "ready" or "failed" (with `error`).
 shape ComputerSize
   id: string
   label: string
@@ -122,12 +127,13 @@ shape Computer
   name: string
   size: string
   device: string
+  containerAvailable: bool
+  containerProblem: string
   cloudAvailable: bool
   sizes: ComputerSize[]
   devices: ComputerDevice[]
   tailnetError: string
-  command: string
-  policy: string
+  setupPrompt: string
 
 // What the imp remembers, one entry per person or thing, as Settings lists it. `kind` is "" for the imp and its person.
 shape MemoryEntry
@@ -405,6 +411,13 @@ component App
   // in; the onboarding asks for it when no host answers.
   state hostAddress = "" persist
   state hostDraft = ""
+  // The onboarding's open section for the computer: "cloud", "own", "container" or none.
+  state computerChoice = ""
+  // Whether the onboarding's API key fold is open.
+  state keyForm = false
+  state keyBase = "https://api.openai.com/v1"
+  state keyValue = ""
+  state keyModel = ""
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
   state secretRound = 0
   // Dictation into the composer: whether it is on, the browser's recognition once it has started, how many of its
@@ -432,6 +445,7 @@ component App
   resource build = build() when signedIn as shape Build else empty()
   mutation signInStarted as shape Reply
   mutation signInCancelled as shape Reply
+  mutation keyUsed as shape Reply then afterKeyUsed
   mutation signedOut as shape Reply
   mutation sent as shape Reply then toEnd
   mutation stopped as shape Reply
@@ -474,6 +488,16 @@ component App
   derive shownApps = apps.filter(a => nav.tabs.map(t => t.name).includes(a.id))
   derive openAppName = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
   derive signedIn = account.status == "signedIn"
+  derive signingIn = account.status == "starting" or account.status == "waiting"
+  derive onKey = account.kind == "apiKey"
+  // Onboarding's second step: a computer, until the imp has one or the person tries the chat without.
+  derive needsComputer = signedIn and computer.status == "none"
+  // An onboarding section waiting on something done outside Imp (a computer set up with the setup prompt, a container
+  // engine started) has the host look again every few seconds, so it shows up without a click.
+  derive computerAwaited = (needsComputer and not pending(computerSwitched) and not pending(computerKeySaved)
+    and ((computerChoice == "own" and computer.devices.filter(d => d.problem == "").length == 0)
+    or (computerChoice == "container" and not computer.containerAvailable)))
+  derive apiKeyError = match keyUsed { case some(r) => r.error, case none => "" }
   derive shown = time.epochAtZero + now
   derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
   derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
@@ -518,6 +542,8 @@ component App
     every(3000, reconnect)
   task clock mount
     every(60000, tick)
+  task watchComputer when computerAwaited
+    every(5000, refreshDevices)
   task foldDictation when recognitionId != "" and heard.id == recognitionId key=heard.finalCount
     change(foldHeard)
   task endDictation when dictating and recognitionId != "" and heard.id == recognitionId and heard.state == "ended"
@@ -595,10 +621,32 @@ component App
     nav = select(nav, name)
   action follow(url: string)
     nav = go(nav, url)
-  action signIn
-    send signInStarted = accountSignIn()
-  action cancelSignIn
-    send signInCancelled = accountCancel()
+  // Step 1's two ways in are folds, and one is open at a time: opening ChatGPT's starts its sign-in, folding it
+  // cancels that, and opening the key's cancels a sign-in under way.
+  action foldChatGPT
+    if signingIn
+      send signInCancelled = accountCancel()
+    else
+      keyForm = false
+      send signInStarted = accountSignIn()
+  action toggleKeyForm
+    if not keyForm and signingIn
+      send signInCancelled = accountCancel()
+    keyForm = not keyForm
+  action editKeyBase(v: string)
+    keyBase = v
+  action editKeyValue(v: string)
+    keyValue = v
+  action editKeyModel(v: string)
+    keyModel = v
+  action useKey
+    if not pending(keyUsed)
+      send keyUsed = accountUseKey(keyBase, keyValue, keyModel)
+  // A key the host took is not kept in the page.
+  action afterKeyUsed
+    if match keyUsed { case some(r) => r.ok, case none => false }
+      keyValue = ""
+      keyForm = false
   action askSignOut
     showModal("confirm-signout")
   action signOut
@@ -806,11 +854,15 @@ component App
   action todosDoRemove(arg1: string)
     send todosWroteRemove = todosRemove(arg1)
   // </apps:members>
+  action useContainer
+    send computerSwitched = computerUseContainer()
   action useCloud(size: string)
     send computerSwitched = computerUseCloud(size)
   action useOwn(device: string)
     if not (computer.kind == "own" and computer.device == device)
       send computerSwitched = computerUseOwn(device)
+  action toggleComputerChoice(next: string)
+    computerChoice = computerChoice == next ? "" : next
   action refreshDevices
     send computerRefreshed = computerRefresh()
   action setCloudKey(key: string)
@@ -821,10 +873,8 @@ component App
   // browser. It takes the app's appearance along. The Computer tab shows the same page.
   action openScreen
     openURL(`${host.origin}/computer/screen?scheme=${scheme}`)
-  action copyComputerCommand
-    copyText(computer.command)
-  action copyComputerPolicy
-    copyText(computer.policy)
+  action copySetupPrompt
+    copyText(computer.setupPrompt)
   action forget(entry: string, fact: string)
     send forgotten = memoryForget(entry, fact)
   action saveSecret(name: string, service: string, value: string, hosts: string, header: string, prefix: string, envName: string)
@@ -858,7 +908,7 @@ component App
       display="flex" flex-direction="column" position="relative" viewport-fit="cover" interactive-widget="resizes-content"
       background-color="surface.page"
       color="ink.strong" font-family="family.text"
-      if signedIn
+      if signedIn and not needsComputer
         // The routes. On a wide window they sit under the top bar, and beside the chat panel while an app is open.
         column position="absolute" left=(sidebar ? "16rem" : "0px") bottom=0 top=(wide ? "3.25rem" : "0px") right=(docked ? "26rem" : "0px")
           for t in nav.tabs key=t.name
@@ -936,18 +986,6 @@ component App
                             Initialled(word=salutation, size="2.5rem", heading=2)
                             text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
                               color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
-                          if computer.status == "none"
-                            button press=pick("settings") testId="home-no-computer" display="flex" align-items="center" gap=12
-                              padding="14px 16px" border="1px solid ink.strong" background-color="transparent" color="ink.strong"
-                              text-align="start"
-                              :hover
-                                background-color="surface.soft"
-                              image "symbol:icon.computer" width=18 height=18 aria-hidden=true
-                              column flex=1 min-width=0 gap=2
-                                text "Give your imp a computer" font-family="family.display" font-size="1.25rem" line-height=1.15
-                                text "Imp cloud, or a Linux computer of yours on Tailscale. Pick one in Settings."
-                                  font-size="0.9375rem" color="ink.muted"
-                              text "→" font-family="family.mono" color="ink.muted" aria-hidden=true
                           column
                             row align-items="baseline" justify-content="space-between" padding-bottom=10
                               border-bottom="1px solid ink.strong"
@@ -1027,24 +1065,36 @@ component App
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=32 box-sizing="border-box" width="100%"
-                        column
-                          row padding-bottom=10 border-bottom="1px solid ink.strong"
-                            text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
-                          row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
-                            text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
-                              text-align="center" line-height="2.75rem" font-family="family.script" font-size="1.75rem"
-                              border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                            column flex=1 min-width=0 gap=4 align-items="flex-start"
-                              text (account.email == "" ? "ChatGPT account" : account.email) font-family="family.display"
-                                font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere" testId="account-email"
-                              if account.plan != ""
-                                text capitalized(account.plan) class=Label testId="account-plan"
-                          text "Your imp runs on this plan. Nothing is billed separately." font-size="0.9375rem"
-                            color="ink.muted" padding-top=10
+                        if onKey
+                          column
+                            row padding-bottom=10 border-bottom="1px solid ink.strong"
+                              text "API key" class=Label color="ink.strong" role="heading" aria-level=2
+                            column gap=4 padding="16px 0" border-bottom="1px solid line.subtle"
+                              text account.model font-family="family.display" font-size="1.375rem"
+                                line-height=1.15 overflow-wrap="anywhere" testId="account-model"
+                              text account.baseUrl font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
+                                testId="account-base"
+                            text "Your imp runs on this key. Its provider bills what it uses." font-size="0.9375rem"
+                              color="ink.muted" padding-top=10
+                        else
+                          column
+                            row padding-bottom=10 border-bottom="1px solid ink.strong"
+                              text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
+                            row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
+                              text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
+                                text-align="center" line-height="2.75rem" font-family="family.script" font-size="1.75rem"
+                                border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                              column flex=1 min-width=0 gap=4 align-items="flex-start"
+                                text (account.email == "" ? "ChatGPT account" : account.email) font-family="family.display"
+                                  font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere" testId="account-email"
+                                if account.plan != ""
+                                  text capitalized(account.plan) class=Label testId="account-plan"
+                            text "Your imp runs on this plan. Nothing is billed separately." font-size="0.9375rem"
+                              color="ink.muted" padding-top=10
                         ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
                           switchError=(keyError != "" ? keyError : switchError), setCloudKey=setCloudKey,
-                          refreshing=pending(computerRefreshed), useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
-                          retry=retryComputer, openScreen=pick("computer"), copyCommand=copyComputerCommand, copyPolicy=copyComputerPolicy)
+                          refreshing=pending(computerRefreshed), useContainer=useContainer, useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
+                          retry=retryComputer, openScreen=pick("computer"), copyPrompt=copySetupPrompt)
                         MemorySettings(memory=memory, forget=forget)
                         for r in [secretRound] key=`${r}`
                           SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
@@ -1072,7 +1122,7 @@ component App
                               background-color="danger.soft"
                             image "symbol:sign-out" width=16 height=16
                             text "Sign out" class=Label color="-exact-system-red"
-                    dialog id="confirm-signout" role="alertdialog" aria-label="Sign out of ChatGPT?"
+                    dialog id="confirm-signout" role="alertdialog" aria-label=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?")
                       text "Your imp stops until you sign in again. Your chats and apps stay."
                       button commandfor="confirm-signout" command="close" testId="signout-cancel"
                         text "Cancel"
@@ -1141,10 +1191,13 @@ component App
           align-items=(wide ? "center" : "stretch") background-color="surface.page"
           border=(wide ? "1px solid line.strong" : "none") border-top=(wide ? "1px solid line.strong" : "1px solid line.subtle")
           box-shadow=(wide ? "0 10px 28px -12px rgba(0, 0, 0, 0.35)" : "none")
-          for t, i in nav.tabs.filter(t => t.name != "computer" or computer.status != "none") key=t.name
+          // Every tab stays in the tablist, the Computer tab hidden until there is a computer: a tab left out unlinks
+          // its panel, which then shows over every page.
+          for t, i in nav.tabs key=t.name
             button role="tab" aria-controls=`panel-${t.name}` aria-selected=(nav.tab == t.name) press=pick(t.name)
               aria-keyshortcuts=tabChord(t.name, i) aria-label=tabLabel(t.name, apps) title=tabLabel(t.name, apps)
-              testId=`tab-${t.name}` appearance="none" display="flex"
+              testId=`tab-${t.name}` appearance="none"
+              display=(t.name == "computer" and computer.status == "none" ? "none" : "flex")
               align-items="center" justify-content="center" position="relative"
               flex-direction=(wide ? "row" : "column") flex=(wide ? "0 0 auto" : "1 1 0") gap=(wide ? 9 : 4)
               height=(wide ? "2.75rem" : "auto") min-width=(wide ? "2.75rem" : "0px") box-sizing="border-box"
@@ -1199,25 +1252,20 @@ component App
             row flex=1
             text formatDate(shown, time.utcOffset, "medium") class=Label
       else
+        // Onboarding, a wizard: one question a screen, a model first and then a computer.
         scroll flex=1 min-height=0
-          column min-height="100%" box-sizing="border-box" padding="36px 24px 40px" gap=28 max-width="34rem" margin="0 auto"
+          column min-height="100%" box-sizing="border-box" padding="36px 24px 40px" gap=28 max-width="28rem" margin="0 auto"
             justify-content="center" testId="onboarding"
-            column gap=14
-              row align-items="center" gap=12 padding-bottom=12 border-bottom="1px solid ink.strong"
-                image "symbol:icon.imp" width=40 height=40 aria-hidden=true
-                Initialled(word="Imp", size="2.5rem", heading=1)
-                row flex=1
-                text "Vol. 1" class=Label
-              image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
-                width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover"
-                border="1px solid line.subtle" box-sizing="border-box"
-              text "Meet your imp. It runs errands in your apps, builds new ones for you, and keeps them."
-                font-family="family.display" font-size="1.625rem" line-height=1.2
+            row align-items="center" gap=10 padding-bottom=12 border-bottom="1px solid ink.strong"
+              image "symbol:icon.imp" width=32 height=32 aria-hidden=true
+              Initialled(word="Imp", size="2rem", heading=1)
+              row flex=1
+              if not unreachable
+                text (signedIn ? "2 / 2" : "1 / 2") class=Label testId="onboarding-step"
             if unreachable
-              column gap=12 testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
-                Step(number="01", title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"))
-                text (hostAddress == "" ? "Enter the address your host is served at, such as imp.your-tailnet.ts.net." : `Nothing answered at ${hostAddress}. Check that the host is running and this Mac is on your tailnet, or enter another address.`)
-                  color="ink.muted" font-size="0.9375rem" line-height=1.45
+              column gap=14 testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
+                WizardTitle(title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"),
+                  note=(hostAddress == "" ? "Its address on your tailnet." : `Nothing answered at ${hostAddress}.`))
                 row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
                   input value=hostDraft input=editHost submit=connect placeholder="imp.your-tailnet.ts.net"
                     aria-label="Host address" testId="host-address" flex=1 min-width=0 padding="9px 0" border="none"
@@ -1230,63 +1278,62 @@ component App
                       background-color="surface.soft"
                       color="ink.faint"
                     text "Connect"
-            else if account.status == "waiting"
-              column gap=20 testId="signin-waiting" animation=(still ? "none" : "rise 260ms ease-out both")
-                column gap=10
-                  Step(number="01", title="Open ChatGPT's sign-in page")
-                  link href=account.url testId="signin-open" display="flex" align-items="center" justify-content="center"
-                    gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
-                    font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
-                    text-decoration-line="none"
-                    text "Open ChatGPT"
-                    image "symbol:open-app" width=14 height=14 aria-hidden=true
-                column gap=10
-                  Step(number="02", title="Enter this code")
-                  row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
-                    text account.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
-                      letter-spacing="0.18em" user-select="all" testId="signin-code"
-                    button press=copyCode testId="signin-copy" display="flex" align-items="center" gap=6
-                      padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
-                      font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
-                      :hover
-                        background-color="surface.soft"
-                      image "symbol:copy" width=13 height=13 aria-hidden=true
-                      text "Copy"
-                row gap=10 align-items="center" padding-top=2
-                  progress aria-label="Waiting for approval"
-                  text "Waiting for you to approve…" font-style="italic" color="ink.muted"
-                button press=cancelSignIn disabled=pending(signInCancelled) testId="signin-cancel" align-self="flex-start"
-                  padding="4px 0" border="none" background-color="transparent" color="ink.muted"
-                  :hover
-                    color="ink.strong"
-                  text "Cancel" class=Label color="inherit"
-            else if account.status == "starting" or account.status == "checking" or account.status == ""
+            else if signedIn
+              ComputerWizard(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
+                error=(keyError != "" ? keyError : switchError),
+                useContainer=useContainer, setCloudKey=setCloudKey, useOwn=useOwn,
+                copyPrompt=copySetupPrompt, choice=computerChoice, toggle=toggleComputerChoice,
+                still=still)
+            else if account.status == "checking" or account.status == ""
               row gap=10 align-items="center" padding="24px 0" testId="signin-starting"
                 progress aria-label="Loading"
-                text (account.status == "starting" ? "Asking ChatGPT for a code…" : "Connecting…")
-                  font-style="italic" color="ink.muted"
+                text "Connecting…" font-style="italic" color="ink.muted"
             else
-              column gap=24
-                column border-top="1px solid line.subtle"
-                  Feature(number="01", title="Chat is home", message="Ask for anything. Your imp has a computer of its own.")
-                  Feature(number="02", title="Apps that stay", message="Ask for a tool and it builds one: a screen you keep, which your imp can use too.")
-                  Feature(number="03", title="Yours", message="Runs on your server, behind your Tailscale login.")
-                column gap=12
-                  if account.status == "failed"
-                    row gap=8 align-items="flex-start" padding="10px 14px" background-color="danger.soft"
-                      border-left="2px solid -exact-system-red"
-                      image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
-                      text account.error font-size="0.9375rem" flex=1 min-width=0 testId="signin-error"
-                  button press=signIn disabled=pending(signInStarted) testId="signin" display="flex" align-items="center"
-                    justify-content="space-between" gap=10 padding="15px 18px" border="none" color="ink.on-fill"
-                    background-color="AccentColor" font-family="family.mono" font-size="0.8125rem" font-weight=500
-                    letter-spacing="0.1em" text-transform="uppercase" transition="opacity 120ms ease"
-                    :hover
-                      opacity=0.9
-                    text "Continue with ChatGPT"
-                    text "→" aria-hidden=true
-                  text "Uses your ChatGPT Plus or Pro plan. Nothing is billed separately." font-size="0.875rem"
-                    font-style="italic" color="ink.muted"
+              column gap=14 animation=(still ? "none" : "rise 260ms ease-out both")
+                image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
+                  width="100%" height="auto" aspect-ratio="2 / 1" max-height="13rem" object-fit="cover"
+                  border="1px solid line.subtle" box-sizing="border-box"
+                WizardTitle(title="Connect a model", note="Your imp thinks with it.")
+                if account.status == "failed"
+                  text account.error color="-exact-system-red" font-size="0.9375rem" testId="signin-error"
+                WizardFold(label="Continue with ChatGPT", press=foldChatGPT, testId="signin", primary=(not signingIn),
+                  open=signingIn, disabled=(pending(signInStarted) or pending(signInCancelled)))
+                  if account.status == "waiting"
+                    column gap=12 testId="signin-waiting"
+                      row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
+                        text account.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
+                          letter-spacing="0.18em" user-select="all" testId="signin-code"
+                        button press=copyCode testId="signin-copy" display="flex" align-items="center" gap=6
+                          padding="9px 12px" border="1px solid line.strong" background-color="transparent"
+                          color="ink.strong" font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em"
+                          text-transform="uppercase"
+                          :hover
+                            background-color="surface.soft"
+                          image "symbol:copy" width=13 height=13 aria-hidden=true
+                          text "Copy"
+                      link href=account.url testId="signin-open" display="flex" align-items="center"
+                        justify-content="center" gap=8 padding="13px 16px" background-color="AccentColor"
+                        color="ink.on-fill" font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em"
+                        text-transform="uppercase" text-decoration-line="none"
+                        text "Open ChatGPT"
+                        image "symbol:open-app" width=14 height=14 aria-hidden=true
+                  row gap=10 align-items="center"
+                    progress aria-label=(account.status == "waiting" ? "Waiting for approval" : "Connecting")
+                    text (account.status == "waiting" ? "Waiting for approval…" : "Connecting…") font-style="italic"
+                      color="ink.muted"
+                WizardFold(label="Use an API key", press=toggleKeyForm, testId="key-open", primary=false, open=keyForm,
+                  disabled=false)
+                  column gap=14 testId="key-form"
+                    KeyField(label="API address", value=keyBase, edit=editKeyBase, secret=false,
+                      placeholder="https://api.openai.com/v1", testId="key-base")
+                    KeyField(label="API key", value=keyValue, edit=editKeyValue, secret=true, placeholder="sk-…",
+                      testId="key-value")
+                    KeyField(label="Model", value=keyModel, edit=editKeyModel, secret=false, placeholder="gpt-5",
+                      testId="key-model")
+                    if apiKeyError != "" and not pending(keyUsed)
+                      text apiKeyError color="-exact-system-red" font-size="0.9375rem" testId="key-error"
+                    WizardButton(label=(pending(keyUsed) ? "Checking…" : "Connect"), press=useKey, testId="key-use",
+                      primary=true, disabled=(pending(keyUsed) or keyBase.trim() == "" or keyValue.trim() == "" or keyModel.trim() == ""))
 
 // The owner's secrets in Settings: the API keys the imp uses on its computer without seeing them, and the logins the
 // host types into its Chrome; a form to add either (a value is never shown again once saved), what the imp asked for,
@@ -2069,19 +2116,6 @@ component Initialled
       text word.slice(0, 1) font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.08em"
       text word.slice(1)
 
-// One of onboarding's three promises, numbered like a catalogue entry.
-component Feature
-  props
-    number: string
-    title: string
-    message: string
-  view
-    row gap=16 align-items="baseline" padding="14px 0" border-bottom="1px solid line.subtle"
-      text number class=Label min-width="1.75rem"
-      column gap=2 flex=1 min-width=0
-        text title font-family="family.display" font-size="1.375rem" line-height=1.15
-        text message color="ink.muted" font-size="0.9375rem" line-height=1.45
-
 // The Computer tab: the computer's live screen, which the host serves as a page of its own, while the computer is ready;
 // otherwise what it is doing, or a way to choose one.
 component ComputerScreen
@@ -2116,7 +2150,7 @@ component ComputerScreen
           image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=28 height=28 aria-hidden=true
           text (computer.status == "none" ? "Your imp has no computer yet." : computer.status == "failed" ? `Could not reach ${computer.name}.` : `Starting ${computer.name}…`)
             font-family="family.display" font-size="1.625rem" line-height=1.2 max-width="30rem"
-          text (computer.status == "none" ? "Give it Imp cloud, or a Linux computer of yours on Tailscale." : computer.status == "failed" ? computer.error : "A computer that slept wakes up in a few seconds.")
+          text (computer.status == "none" ? "Give it Imp cloud, a Linux computer of yours on Tailscale, or this machine." : computer.status == "failed" ? computer.error : "A computer that slept wakes up in a few seconds.")
             color="ink.muted" font-size="0.9375rem" max-width="34rem" overflow-wrap="anywhere"
           if computer.status == "none" or computer.status == "failed"
             button press=setUp testId="computer-set-up" padding="8px 12px" border="1px solid line.strong"
@@ -2133,14 +2167,14 @@ component ComputerSettings
     switching: bool
     switchError: string
     refreshing: bool
+    useContainer: action
     useCloud: action
     setCloudKey: action
     useOwn: action
     refresh: action
     retry: action
     openScreen: action
-    copyCommand: action
-    copyPolicy: action
+    copyPrompt: action
   state settingUp = false
   state keyDraft = ""
   derive usable = computer.devices.filter(d => d.problem == "").length
@@ -2193,7 +2227,7 @@ component ComputerSettings
           text switchError color="-exact-system-red" font-size="0.9375rem" padding-top=10 testId="computer-switch-error"
         column gap=10 padding-top=22
           text "Imp cloud" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3
-          text (computer.cloudAvailable ? "A computer in E2B's cloud. It sleeps when idle and keeps its files." : "A computer in E2B's cloud. Paste your E2B API key from e2b.dev/dashboard; the free plan is enough.")
+          text (computer.cloudAvailable ? "A computer in E2B's cloud. It sleeps when idle and keeps its files." : "A computer in E2B's cloud. Paste an API key from e2b.dev/dashboard: a new account gets free credit, with no card.")
             font-size="0.9375rem" color="ink.muted" line-height=1.45
           if not computer.cloudAvailable
             row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
@@ -2258,31 +2292,244 @@ component ComputerSettings
               text (settingUp ? "Hide setup" : "Add a computer") class=Label color="inherit"
           if usable == 0 or settingUp
             column gap=10 padding-top=10
-              Step(number="01", title="On the computer, run once")
-              CodeBlock(code=computer.command, copy=copyCommand, testId="computer-command")
-              Step(number="02", title="Add to your tailnet policy once")
-              CodeBlock(code=computer.policy, copy=copyPolicy, testId="computer-policy")
+              text "Give this prompt to a coding agent on the computer." font-size="0.9375rem" color="ink.muted"
+              SetupPrompt(prompt=computer.setupPrompt, copy=copyPrompt)
+        column gap=10 padding-top=26 testId="computer-container-section"
+          row align-items="center" gap=10
+            text "This machine" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3 flex=1
+            text "Free" class=Label
+          text "No E2B account and no spare computer? Your imp can work in a container on the machine Imp runs on, through Docker, OrbStack or Podman. It costs nothing, but it shares this machine's kernel, so it is walled off less well than the two above. Its first start takes a few minutes."
+            font-size="0.9375rem" color="ink.muted" line-height=1.45
+          if computer.kind == "container"
+            text "In use" class=Label color="ink.strong" testId="computer-container-in-use"
+          else if computer.containerAvailable
+            button press=useContainer disabled=switching testId="computer-container" align-self="flex-start"
+              display="flex" align-items="center" gap=8 padding="9px 14px" border="1px solid line.strong"
+              background-color="transparent" color="ink.strong" font-family="family.mono" font-size="0.75rem"
+              letter-spacing="0.1em" text-transform="uppercase"
+              :hover
+                background-color="surface.soft"
+              :disabled
+                color="ink.faint"
+              text "Use this machine"
+          else
+            row gap=10 align-items="flex-start"
+              text computer.containerProblem font-size="0.9375rem" font-style="italic" color="ink.muted" flex=1
+                testId="computer-container-problem"
+              button press=refresh disabled=refreshing testId="computer-container-again" padding="6px 0" border="none"
+                background-color="transparent" color="ink.muted"
+                :hover
+                  color="ink.strong"
+                text "Look again" class=Label color="inherit"
 
 // Text to copy into a terminal or a file, set in mono, with Copy.
-component CodeBlock
+// A prompt for the person's coding agent: the setup to do, which the agent reads and the person only copies. It
+// stays folded, so the person sees a prompt to hand over, not the commands and configuration inside it.
+component SetupPrompt
   props
-    code: string
+    prompt: string
     copy: action
-    testId: string
+  state open = false
+  action toggle
+    open = not open
   view
-    column border="1px solid line.strong" background-color="surface.soft"
-      text code font-family="family.mono" font-size="0.75rem" line-height=1.55 white-space="pre-wrap"
-        overflow-wrap="anywhere" padding="12px 14px" user-select="all" testId=testId
-      row justify-content="flex-end" border-top="1px solid line.subtle"
-        button press=copy testId=`${testId}-copy` display="flex" align-items="center" gap=6 padding="7px 12px"
-          border="none" background-color="transparent" color="ink.strong" font-family="family.mono" font-size="0.6875rem"
-          letter-spacing="0.1em" text-transform="uppercase"
+    column border="1px solid line.strong" testId="computer-setup-prompt"
+      row align-items="center"
+        button press=toggle aria-expanded=open testId="computer-setup-prompt-toggle" flex=1 display="flex"
+          align-items="center" gap=8 padding="10px 12px" border="none" background-color="transparent" color="ink.muted"
+          text-align="start"
           :hover
-            background-color="surface.page"
+            color="ink.strong"
+          text (open ? "−" : "+") font-family="family.mono" width="0.75rem" aria-hidden=true
+          text "Setup prompt" class=Label color="inherit"
+        button press=copy testId="computer-setup-prompt-copy" display="flex" align-items="center" gap=6
+          padding="10px 12px" border="none" background-color="transparent" color="ink.strong" font-family="family.mono"
+          font-size="0.6875rem" letter-spacing="0.1em" text-transform="uppercase"
+          :hover
+            background-color="surface.soft"
           image "symbol:copy" width=12 height=12 aria-hidden=true
           text "Copy"
+      if open
+        text prompt font-family="family.mono" font-size="0.75rem" line-height=1.55 white-space="pre-wrap"
+          overflow-wrap="anywhere" padding="12px 14px" border-top="1px solid line.subtle" background-color="surface.soft"
+          max-height="18rem" overflow-y="auto" testId="computer-setup-prompt-text"
 
-// A numbered step of the device-code sign-in.
+// A wizard screen's question, and one short line under it.
+component WizardTitle
+  props
+    title: string
+    note: string
+  view
+    column gap=4
+      text title font-family="family.display" font-size="1.75rem" line-height=1.15 role="heading" aria-level=2
+      text note color="ink.muted" font-size="0.9375rem"
+
+// A wizard's full-width button: the step's answer when `primary`, another way when not.
+component WizardButton
+  props
+    label: string
+    press: action
+    testId: string
+    primary: bool
+    disabled: bool
+  view
+    button press=press disabled=disabled testId=testId display="flex" align-items="center"
+      justify-content="space-between" gap=10 padding="14px 18px" font-family="family.mono" font-size="0.8125rem"
+      font-weight=500 letter-spacing="0.1em" text-transform="uppercase"
+      border=(primary ? "1px solid AccentColor" : "1px solid line.strong")
+      background-color=(primary ? "AccentColor" : "transparent") color=(primary ? "ink.on-fill" : "ink.strong")
+      :hover
+        opacity=0.9
+      :disabled
+        background-color="surface.soft"
+        border-color="line.subtle"
+        color="ink.faint"
+      text label
+      text "→" aria-hidden=true
+
+// A wizard's button that opens what it holds beneath it, in place, rather than on a screen of its own.
+component WizardFold
+  props
+    label: string
+    press: action
+    testId: string
+    primary: bool
+    open: bool
+    disabled: bool
+  slot
+  view
+    column
+      button press=press disabled=disabled aria-expanded=open testId=testId display="flex" align-items="center"
+        justify-content="space-between" gap=10 padding="14px 18px" font-family="family.mono" font-size="0.8125rem"
+        font-weight=500 letter-spacing="0.1em" text-transform="uppercase"
+        border=(primary ? "1px solid AccentColor" : "1px solid line.strong")
+        background-color=(primary ? "AccentColor" : "transparent") color=(primary ? "ink.on-fill" : "ink.strong")
+        :hover
+          opacity=0.9
+        :disabled
+          color="ink.faint"
+        text label
+        text (open ? "↓" : "→") aria-hidden=true
+      if open
+        column gap=14 padding="16px 18px" border="1px solid line.strong" border-top="none"
+          children
+
+// A computer of the person's that the onboarding found ready, and the one press that makes it the imp's.
+component FoundComputer
+  props
+    name: string
+    press: action
+    disabled: bool
+    testId: string
+  view
+    button press=press disabled=disabled testId=testId display="flex" align-items="center" gap=12
+      padding="10px 10px 10px 14px" border="none" background-color="surface.soft" color="ink.strong"
+      text-align="start"
+      :hover
+        background-color="line.subtle"
+      :disabled
+        color="ink.faint"
+      row width=8 height=8 min-width=8 background-color="-exact-system-green" aria-hidden=true
+      text name flex=1 min-width=0 font-family="family.display" font-size="1.25rem" line-height=1.15
+        overflow-wrap="anywhere"
+      text "Use →" class=Label padding="7px 12px" background-color="AccentColor" color="ink.on-fill"
+
+// Onboarding's second step: which computer, then only what that one needs. Settings has the full picture.
+component ComputerWizard
+  props
+    computer: Computer
+    switching: bool
+    error: string
+    useContainer: action
+    setCloudKey: action
+    useOwn: action
+    copyPrompt: action
+    choice: string
+    toggle: action
+    still: bool
+  state keyDraft = ""
+  derive usable = computer.devices.filter(d => d.problem == "")
+  action editKey(v: string)
+    keyDraft = v
+  view
+    column gap=14 testId="onboarding-computer" animation=(still ? "none" : "rise 260ms ease-out both")
+      WizardTitle(title="Give it a computer", note="Where your imp works.")
+      WizardFold(label="Imp cloud", press=toggle("cloud"), testId="choose-cloud", primary=(choice == ""),
+        open=(choice == "cloud"), disabled=false)
+        text "Paste a key from e2b.dev/dashboard." font-size="0.9375rem" color="ink.muted"
+        row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+          input type="password" value=keyDraft input=editKey submit=setCloudKey(keyDraft.trim()) placeholder="e2b_…"
+            aria-label="E2B API key" testId="computer-cloud-key" flex=1 min-width=0 padding="8px 0" border="none"
+            background-color="transparent" outline="none" font-family="family.mono" font-size="0.875rem" color="ink.strong"
+          button press=setCloudKey(keyDraft.trim()) disabled=(keyDraft.trim() == "" or switching)
+            testId="computer-cloud-key-save" padding="9px 14px" border="none" background-color="AccentColor"
+            color="ink.on-fill" font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em"
+            text-transform="uppercase"
+            :disabled
+              background-color="surface.soft"
+              color="ink.faint"
+            text "Use"
+      WizardFold(label="Your computer", press=toggle("own"), testId="choose-own", primary=false, open=(choice == "own"),
+        disabled=false)
+        if computer.tailnetError != ""
+          text computer.tailnetError font-size="0.9375rem" color="-exact-system-red" testId="computer-tailnet-error"
+        else if usable.length == 0
+          text "Give this prompt to a coding agent on a Linux computer." font-size="0.9375rem" color="ink.muted"
+          SetupPrompt(prompt=computer.setupPrompt, copy=copyPrompt)
+          Watching()
+        else
+          text (usable.length == 1 ? "Found it" : `Found ${usable.length}`) class=Label color="ink.strong"
+            testId="computer-found"
+          for d in usable key=d.id
+            FoundComputer(name=d.name, press=useOwn(d.id), disabled=switching, testId=`computer-device-${d.name}`)
+      // No computer is not a choice: skipping gives the imp a container on the host's machine, which needs nothing.
+      if computer.containerAvailable
+        button press=useContainer disabled=switching testId="computer-skip" align-self="flex-start" padding="4px 0"
+          border="none" background-color="transparent" color="ink.muted"
+          :hover
+            color="ink.strong"
+          text "Skip, use a container here" class=Label color="inherit"
+      else
+        button press=toggle("container") aria-expanded=(choice == "container") testId="computer-skip"
+          align-self="flex-start" padding="4px 0" border="none" background-color="transparent" color="ink.muted"
+          :hover
+            color="ink.strong"
+          text "Skip, use a container here" class=Label color="inherit"
+        if choice == "container"
+          text computer.containerProblem font-size="0.9375rem" color="ink.muted" testId="computer-container-problem"
+          Watching()
+      if switching
+        row gap=10 align-items="center"
+          progress aria-label="Setting it up"
+          text "Setting it up…" font-style="italic" color="ink.muted"
+      else if error != ""
+        text error color="-exact-system-red" font-size="0.9375rem" testId="computer-switch-error"
+
+// That the onboarding is looking for something to appear by itself, so the person need not press anything.
+component Watching
+  view
+    row gap=10 align-items="center" testId="computer-watching"
+      progress aria-label="Waiting"
+      text "Waiting…" font-style="italic" color="ink.muted"
+
+// One field of the onboarding's API key form, labelled above its input.
+component KeyField
+  props
+    label: string
+    value: string
+    edit: action
+    secret: bool
+    placeholder: string
+    testId: string
+  view
+    column gap=4
+      text label class=Label
+      input type=(secret ? "password" : "text") value=value input=edit placeholder=placeholder aria-label=label
+        testId=testId padding="9px 12px" border="1px solid line.strong" background-color="transparent" outline="none"
+        font-family="family.mono" font-size="0.875rem" color="ink.strong" autocapitalize="none" autocorrect="off"
+        spellcheck=false
+
+// A numbered step of the onboarding.
 component Step
   props
     number: string

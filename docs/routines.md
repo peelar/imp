@@ -16,7 +16,7 @@ The schedule is five-field cron (minute, hour, day of the month, month, day of t
 
 The host keeps the routines in `DATA_DIR/routines.json` and their conversations with the others in `DATA_DIR/conversations.json` (`host/src/routines/routines.ts`, `host/src/routines/schedule.ts`). Every 20 seconds it looks for a routine that is due, and runs it once:
 
-- **you are signed in to ChatGPT**, and
+- **you are signed in**, with ChatGPT or an API key, and
 - **the imp is idle.** It has one computer and one browser, so a routine waits while you are in the middle of a chat, and routines run one at a time. Run now puts a routine first in line.
 
 A routine due while the host was down runs once when it is back, not once for every time it missed. A run the host restarted in the middle of carries on, since the agent is durable. A paused routine misses its times; resumed, it runs at its next one from then.

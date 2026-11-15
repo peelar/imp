@@ -9,7 +9,7 @@ npm start       # http://localhost:8787
 
 Setup installs Bun and Rust when they are missing, puts [Exact](https://github.com/expo/exact) at the commit in `client/exact-rev` where the client looks for it (`tools/exact` two directories above the repository, or `EXACT`), installs what Exact's web build reads, runs `npm ci` for every workspace and the lint and type tooling, and builds the web client. Most of the first run is that build compiling Exact's web tools; later builds take seconds. `npm run setup:mac` sets up the Mac app's build too, on macOS, after which `cd client && bun exact.mjs mac` builds it. The host needs all of this because it rebuilds the web client whenever the imp previews an app. Run setup again after a pull that moves `client/exact-rev`.
 
-Open the app, continue with ChatGPT, enter the code it shows, and pick a computer in Settings. `MACHINE=local npm start` instead fixes the agent's computer to a directory on this one, with no isolation.
+Open the app, continue with ChatGPT and enter the code it shows (or use an API key), then pick a computer. `MACHINE=local npm start` instead fixes the agent's computer to a directory on this one, with no isolation.
 
 ## The repository
 

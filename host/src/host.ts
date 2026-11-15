@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { Models } from "@earendil-works/pi-ai/models";
+import type { MutableModels } from "@earendil-works/pi-ai/models";
 import {
   createRegistry,
   defineExtension,
@@ -38,14 +38,19 @@ import {
 import { openSecrets, type Secrets } from "./secrets/secrets.ts";
 import { openNotices } from "./notices/notices.ts";
 import { shellApi } from "./shell-api.ts";
-import { type ChatGPTAccount, chatgptAccount } from "./account/account.ts";
+import {
+  TOPIC as ACCOUNT,
+  type ModelAccount,
+  type ModelRef,
+  modelAccount,
+} from "./account/account.ts";
 import { storedApps, studio } from "./studio/studio.ts";
 
 const context = BACKGROUND_CONTEXT;
 
 export type HostOptions = {
-  readonly models: Models;
-  /** The home conversation's model, on the ChatGPT provider. */
+  readonly models: MutableModels;
+  /** The agent's model after a ChatGPT sign-in, on the ChatGPT provider. An API key names its own. */
   readonly model: { readonly provider: string; readonly modelId: string };
   /**
    * A fixed machine for development and tests, such as the local adapter. Absent: the owner picks the agent's computer
@@ -77,6 +82,8 @@ export type HostOptions = {
   /** The GitHub CLI the backup signs in and creates its repository with (backup/backup.ts). Default: gh on PATH. */
   readonly gh?: string | undefined;
 };
+
+const named = (model: ModelRef) => `${model.provider}/${model.modelId}`;
 
 /** Reports a failure of something nobody waits for, in the host's log. */
 const report = (what: string) => (cause: unknown) => {
@@ -210,7 +217,7 @@ function openBackup({ options, topics }: Parts, gateway: AppGateway) {
 type Followers = {
   readonly gateway: AppGateway;
   readonly secrets: Secrets;
-  readonly account: ChatGPTAccount;
+  readonly account: ModelAccount;
 };
 
 /**
@@ -221,6 +228,9 @@ async function openAgent(
   { gateway, secrets, account }: Followers
 ) {
   const { options, topics, computer, registry } = parts;
+
+  // The conversations start on the model of the account the host has stored.
+  await account.ready;
 
   const harness = await Harness.open(
     await openNodeSqliteStorage(path.join(options.dataDir, "harness.sqlite")),
@@ -237,7 +247,8 @@ async function openAgent(
     context
   );
 
-  const agent = () => ({ model: options.model, cwd: computer.workspace() });
+  const model = () => account.model() ?? options.model;
+  const agent = () => ({ model: model(), cwd: computer.workspace() });
 
   const chats = await openChats({
     harness,
@@ -278,6 +289,21 @@ async function openAgent(
     };
 
     reload().catch(report("apps"));
+  });
+
+  // Signing in with the other kind of account moves the conversations to its model.
+  let current = model();
+
+  topics.on(ACCOUNT, () => {
+    const next = model();
+
+    if (
+      next.provider !== current.provider ||
+      next.modelId !== current.modelId
+    ) {
+      current = next;
+      chats.configure().catch(report("model"));
+    }
   });
 
   harness.resume();
@@ -375,7 +401,7 @@ export async function startHost(options: HostOptions) {
     liveChanged: backup.record,
   });
 
-  const account = chatgptAccount(options.models, topics);
+  const account = modelAccount(options.models, topics, options.model);
 
   const { harness, chats, routines, tricks, notices } = await openAgent(parts, {
     gateway,
@@ -420,7 +446,7 @@ export async function startHost(options: HostOptions) {
   });
 
   console.log(
-    `host on http://127.0.0.1:${options.port}, model ${options.model.provider}/${options.model.modelId}`
+    `host on http://127.0.0.1:${options.port}, model ${named(account.model() ?? options.model)}`
   );
 
   return {
