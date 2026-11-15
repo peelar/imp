@@ -113,6 +113,7 @@ export default {
 - **`app.fetch` only reads, from the app's connections.** HTTPS on port 443, GET or HEAD, or POST to a connection's `query` path, because GraphQL APIs take reads by POST. It follows no redirect, and refuses a host that resolves to an address on your host's network. It answers `{ status, headers, body }` with the body as text.
 - **Your key goes on the request at the host.** A connection's `secret` names one of your keys in Settings → Secrets. The host sends the request through the same proxy as the imp's commands, which puts the key on it and takes it out of the answer, and **Recent use** names the app. Without the key, `app.fetch` throws `needs secret github`.
 - **`sync.every`** is `15m`, `1h`, `6h` or `1d`. See [Apps](apps.md#live-apps-reading-your-services) for when it runs.
+- **`sync.watch`** lists up to five URLs that say when the service has something new, such as `https://api.github.com/notifications`. The host asks them itself, cheaply, and runs the sync when one's answer changed, waking the computer if it must. Each must be on one of the app's connections.
 - **Fetch everything, then write once.** One `app.db.batch` keeps the last good copy whole when a sync fails halfway. Throw on a failure, so the app's bar says why.
 
 ## app.contract

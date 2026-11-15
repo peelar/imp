@@ -18,7 +18,7 @@ import type { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import type { AppInfo, AppGateway } from "../apps/apps.ts";
 import type { Topics } from "../kernel/live.ts";
 import { shellBuilds } from "./builds.ts";
-import { codeFolders } from "./code.ts";
+import { codeFolders, impServers } from "./code.ts";
 import { appDecisions } from "./decisions.ts";
 import { versionHistory } from "./history.ts";
 import { appPreview } from "./preview.ts";
@@ -79,6 +79,7 @@ export function studio(options: StudioOptions) {
   };
 
   const folders = codeFolders(options.dataDir);
+  const imp = impServers(options.repoAppsDir);
   const history = versionHistory({ folders, data: gateway });
 
   const builds = shellBuilds({
@@ -99,21 +100,10 @@ export function studio(options: StudioOptions) {
     context: options.context,
   });
 
-  const preview = appPreview({
-    gateway,
-    workspace,
-    folders,
-    builds,
-    appsChanged,
-  });
-
-  const decisions = appDecisions({
-    gateway,
-    folders,
-    history,
-    builds,
-    appsChanged,
-  });
+  // What a preview and a decision both change: the code, the shell's build and the apps the shell lists.
+  const versions = { gateway, folders, builds, imp, appsChanged };
+  const preview = appPreview({ ...versions, workspace });
+  const decisions = appDecisions({ ...versions, history });
 
   const serial = oneAtATime();
 

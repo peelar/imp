@@ -15,6 +15,8 @@ An app is a folder, `apps/<id>/`, with three files. `<id>` is lowercase letters 
 
 To change an app that exists, start with `app_code` too: `apps/<id>/` in your workspace may be gone or old.
 
+An app whose `app.json` says `"server": "imp"` comes with Imp: its `server.ts` and `app.json` are Imp's, and `preview_app` refuses a version that changes them. Change only its `app.contract`. If the screen the user wants needs data the operations do not give, tell them what is missing.
+
 ## server.ts
 
 ```ts
@@ -85,6 +87,9 @@ export default {
   ],
   sync: {
     every: "15m", // or "1h", "6h", "1d"
+    // Optional, at most 5: URLs that say when there is something new. The host asks them about once a minute, cheaply,
+    // and runs the sync when one's answer changed.
+    watch: ["https://api.github.com/notifications"],
     run: async (app) => {
       const answer = await app.fetch(
         "https://api.github.com/search/issues?q=is:pr+is:open+author:@me"
@@ -106,7 +111,7 @@ export default {
 ```
 
 - `app.fetch(url, { method, headers, body })` answers `{ status, headers, body }`, the body as text. It reaches only the hosts in `connections`, over HTTPS, with GET or HEAD, or POST to a connection's `query` path. The host puts the user's key on the request; you never see it. It throws when a request breaks a rule, and `needs secret <name>` when the user has no such key: then call request_secret.
-- The host runs `sync` on the live version: when its tab opens and the copy is due, on Sync now, and on schedule while the user's computer is awake. Never in a preview, so the preview shows the live data's copy. Fetch everything first, then write it in one `app.db.batch`, so a failure halfway keeps the last copy whole. Throw when something fails: the app's bar shows the error.
+- The host runs `sync` on the live version: when its tab opens and the copy is due, on Sync now, on schedule while the user's computer is awake, and when a `watch` URL's answer changed. Never in a preview, so the preview shows the live data's copy. Fetch everything first, then write it in one `app.db.batch`, so a failure halfway keeps the last copy whole. Throw when something fails: the app's bar shows the error.
 - Operations answer from `app.db`, not from `app.fetch`: a read runs again after every write.
 
 ## app.contract

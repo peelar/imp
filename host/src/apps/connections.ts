@@ -99,6 +99,49 @@ export function checkEvery(
   return { every: reported };
 }
 
+/** The most URLs an app may watch: each is asked every minute or so. */
+const MAX_WATCHED = 5;
+
+const urls = compile(arr(str(), { maxItems: MAX_WATCHED }));
+
+/**
+ * A sync's watched URLs, `[]` for none; undefined after reporting why they are not: each a GET over HTTPS to one of
+ * the app's connections.
+ */
+export function checkWatch(
+  reported: ReportedManifest["watch"],
+  connections: readonly Connection[],
+  report: (problem: string) => void
+): string[] | undefined {
+  if (reported === undefined) {
+    return [];
+  }
+
+  if (!urls.check(reported)) {
+    report(`sync.watch must be a list of at most ${MAX_WATCHED} URLs`);
+
+    return undefined;
+  }
+
+  const wrong = reported.filter((watched) => {
+    const url = URL.parse(watched);
+
+    return (
+      url?.protocol !== "https:" ||
+      (url.port !== "" && url.port !== "443") ||
+      !connections.some(({ host }) => host === url.hostname)
+    );
+  });
+
+  for (const watched of wrong) {
+    report(
+      `sync.watch: ${watched} must be an https URL on one of the app's connections`
+    );
+  }
+
+  return wrong.length === 0 ? reported : undefined;
+}
+
 /** What a request may be sent as: its URL, and the key that goes on it, if any. */
 export type Checked = {
   readonly url: URL;

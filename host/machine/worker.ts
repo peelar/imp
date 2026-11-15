@@ -39,6 +39,7 @@ type Claimed = {
   readonly connections?: ReportedManifest["connections"];
   readonly sync?: {
     readonly every?: ReportedManifest["every"];
+    readonly watch?: ReportedManifest["watch"];
     readonly run?: SyncRun | null;
   } | null;
 };
@@ -189,6 +190,7 @@ async function load() {
     operations,
     connections: definition.connections,
     every: sync ? (sync.every ?? null) : undefined,
+    watch: sync?.watch,
   };
 
   return { manifest, runs };

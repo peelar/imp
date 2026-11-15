@@ -2,7 +2,7 @@
 // Discard drops the draft, and Undo restores the version the last save replaced.
 import { appInfo, readAppFiles, type AppGateway } from "../apps/apps.ts";
 import type { ShellBuilds } from "./builds.ts";
-import type { CodeFolders } from "./code.ts";
+import { type CodeFolders, type ImpServers, withImpServer } from "./code.ts";
 import type { VersionHistory } from "./history.ts";
 
 export type DecisionsOptions = {
@@ -10,6 +10,8 @@ export type DecisionsOptions = {
   readonly folders: CodeFolders;
   readonly history: VersionHistory;
   readonly builds: ShellBuilds;
+  /** The apps whose server code is Imp's (code.ts): Undo brings back their screen, with Imp's server code. */
+  readonly imp: ImpServers;
   /** Tells the open shells that the apps changed. */
   readonly appsChanged: () => void;
 };
@@ -76,7 +78,10 @@ export function appDecisions(options: DecisionsOptions) {
       await gateway.restore(id, undefined);
       folders.remove(id);
     } else {
-      const previous = appInfo(readAppFiles(entry.code), id);
+      const previous = appInfo(
+        withImpServer(readAppFiles(entry.code), options.imp.get(id)),
+        id
+      );
 
       folders.put(id, "live", previous.files);
       await gateway.restore(id, {

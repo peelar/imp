@@ -1,10 +1,10 @@
 // The apps' syncs: an app that declares `sync` (sdk/app.ts) brings outside data into its database, and the host
-// decides when. A sync runs on the live version only, never on a draft, which runs on a copy of the data, and never
-// wakes the computer for itself:
+// decides when. A sync runs on the live version only, never on a draft, which runs on a copy of the data:
 //
 // - when the app's tab opens and its data is due for a sync (its tab reads it, which needs the computer anyway),
-// - on Sync now, and
-// - on schedule, only while the socket to the computer is open.
+// - on Sync now,
+// - on schedule, only while the socket to the computer is open, and
+// - when a URL it watches changed (watch.ts): the only time a sync wakes the computer by itself.
 //
 // The host keeps each app's sync status outside the app's database, in DATA_DIR/apps/sync.json, so an app cannot
 // make it up: when it last synced, since when it has failed and why, and when it runs next. A failure is tried again

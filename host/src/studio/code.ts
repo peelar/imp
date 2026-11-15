@@ -3,6 +3,11 @@
 //   code/<id>/live/       the live version (an app nobody changed has none: the repository's client/apps/<id>/ is it)
 //   code/<id>/draft/      the draft being previewed
 //   code/<id>/history/    the versions a save replaced (history.ts)
+//
+// An app Imp ships can keep its server code: its app.json says `"server": "imp"`. Then only its screen
+// (app.contract) is the person's. Every version of it the host reads, at start, in a preview and on Undo, takes
+// server.ts and app.json from the repository's copy, so Imp's updates to them reach a person who changed the screen,
+// and the screen they made stays theirs. A screen they never changed is the repository's, and updates with it.
 import {
   existsSync,
   mkdirSync,
@@ -19,6 +24,26 @@ import {
   readAppFiles,
   readApps,
 } from "../apps/apps.ts";
+
+/** The server.ts and app.json Imp keeps for an app it ships, by id. */
+export type ImpServers = ReadonlyMap<string, AppFiles>;
+
+/** The repository's apps whose server code is Imp's. */
+export const impServers = (repoAppsDir: string): ImpServers =>
+  new Map(
+    readApps(repoAppsDir).flatMap((app) =>
+      app.impServer ? [[app.id, app.files] as const] : []
+    )
+  );
+
+/** An app's files with Imp's server.ts and app.json in place of its own, when Imp keeps them. */
+export const withImpServer = (
+  files: AppFiles,
+  imp: AppFiles | undefined
+): AppFiles =>
+  imp
+    ? { ...files, "app.json": imp["app.json"], "server.ts": imp["server.ts"] }
+    : files;
 
 /** The versions of an app the host keeps as a folder of their own. */
 type Kept = "live" | "draft";
@@ -69,6 +94,7 @@ export function storedApps(
   log: (message: string) => void
 ) {
   const live = new Map(readApps(repoAppsDir).map((app) => [app.id, app]));
+  const imp = impServers(repoAppsDir);
   const drafts: AppInfo[] = [];
   const root = path.join(dataDir, "code");
 
@@ -81,7 +107,7 @@ export function storedApps(
     }
 
     try {
-      return appInfo(readAppFiles(dir), id);
+      return appInfo(withImpServer(readAppFiles(dir), imp.get(id)), id);
     } catch (error) {
       log(
         `studio: skipped ${dir}: ${error instanceof Error ? error.message : String(error)}`

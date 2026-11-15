@@ -25,13 +25,16 @@ Versions run in slots. An app's live version runs in the slot named by its id. A
 
 An app can read your services and keep a copy current in its database ([Build an app](building-apps.md#reading-a-service)). What it may reach is in its code, as `connections`, and the preview's bar says it before you save: "Reads api.github.com with your github key, every 15 min." The host holds every `app.fetch` to those hosts, to reads, and to the keys the connections name (`host/src/apps/connections.ts`), and sends it from the host (`host/src/secrets/app-fetch.ts`), so the app's code never holds a key.
 
-The host runs an app's `sync` on its live version only, never on a draft, and never wakes the computer for it:
+The host runs an app's `sync` on its live version only, never on a draft:
 
 - when you open the app's tab and its copy is due,
-- when you press **Sync now** on the app's bar, and
-- on schedule, while the host is connected to the computer.
+- when you press **Sync now** on the app's bar,
+- on schedule, while the host is connected to the computer, and
+- when a URL the sync watches changed.
 
-On E2B, where the computer pauses after 10 minutes unused, a schedule alone does not keep it running: a sync then waits until you open the app or the imp uses the computer. A computer of yours never pauses.
+On E2B, where the computer pauses after 10 minutes unused, a schedule alone does not keep it running: a scheduled sync waits until you open the app or the imp uses the computer. A computer of yours never pauses.
+
+A watched URL (`sync.watch`, at most five, each on one of the app's connections) is how an app hears about a change without waking the computer to look (`host/src/apps/watch.ts`). The host asks each one itself, with your key, as often as the service's `X-Poll-Interval` allows and at least a minute apart, sending the `ETag` and `Last-Modified` it saw last. An answer of nothing new (304) costs neither the service's rate limit nor the computer. Only an answer whose body differs from the last one runs the sync, and that is the one time a sync wakes the computer. The host keeps what it saw in `DATA_DIR/apps/watch.json`, so a restart is not a change. A URL that fails is asked again later, twice as late each time, up to an hour. The bar says what the app watches: "Reads api.github.com with your github key, every 15 min, and when api.github.com/notifications changes."
 
 The bar says how the last sync went ("Synced 3 min ago", or "Sync failing for 20 min: GitHub answered 401"). The host keeps that in `DATA_DIR/apps/sync.json`, outside the app's database, so an app cannot make it up. A failed sync is tried again later, twice as late each time, up to once a day.
 
@@ -69,5 +72,9 @@ Undo's history, which holds the data too, lasts 48 hours. The code lasts longer:
 **Backup** in Settings connects GitHub with the GitHub CLI's device code sign-in, shown like the ChatGPT one. The host keeps that sign-in in `DATA_DIR/gh` and never takes a token from its environment. It finds or creates a private `<you>/imp-apps` repository and pushes each version there. A failed push is shown in Settings and retried on the next save.
 
 Only code is backed up. The apps' data stays on the host, so back up `DATA_DIR` for that. The host needs `git` for the history and `gh` for GitHub, and Settings says which one is missing.
+
+## Apps Imp ships
+
+An app in `client/apps/` whose `app.json` says `"server": "imp"` keeps Imp's server code. Its screen is yours to change, like any app's, but its `server.ts` and `app.json` are Imp's: the host always runs the repository's copy of them under the screen you saved (`host/src/studio/code.ts`), at start, in a preview and on Undo, so Imp's updates to them reach you and your screen stays yours. A preview that changes them is refused, and the imp is told to say what data the screen is missing instead.
 
 To write an app yourself, see [Build an app](building-apps.md).

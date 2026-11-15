@@ -41,6 +41,11 @@ export type AppInfo = {
   readonly symbol: string;
   /** The app's engraved cover in the shell, a client asset path such as "assets/art/todos.jpg"; "" for none. */
   readonly cover: string;
+  /**
+   * Whether its server.ts and app.json are Imp's (`"server": "imp"` in app.json): an app Imp ships whose screen is
+   * the person's to change, and whose server code Imp's updates replace (studio/code.ts).
+   */
+  readonly impServer: boolean;
   readonly files: AppFiles;
   /** server.ts without its types: what the worker runs. */
   readonly code: string;
@@ -55,6 +60,7 @@ const appJson = compile(
       description: opt(str()),
       symbol: opt(str()),
       cover: opt(str()),
+      server: opt(str()),
     },
     { open: true }
   )
@@ -92,6 +98,7 @@ export function appInfo(files: AppFiles, id: string): AppInfo {
     symbol: meta.symbol?.startsWith("symbol:") ? meta.symbol : "symbol:layers",
     cover:
       meta.cover && /^assets\/[\w/.-]+$/.test(meta.cover) ? meta.cover : "",
+    impServer: meta.server === "imp",
     files,
     code,
     hash: createHash("sha256").update(code).digest("hex").slice(0, 16),

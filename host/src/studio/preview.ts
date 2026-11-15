@@ -2,13 +2,14 @@
 // its server code on a copy of the data, builds the shell with its screen, and only then makes it the app's draft,
 // which the shell shows in the app's tab with Save and Discard.
 import {
+  type AppFiles,
   appInfo,
   type AppGateway,
   type Which,
   type Manifest,
 } from "../apps/apps.ts";
 import type { ShellBuilds } from "./builds.ts";
-import type { CodeFolders } from "./code.ts";
+import type { CodeFolders, ImpServers } from "./code.ts";
 import { type AgentWorkspace, requireAppId } from "./workspace.ts";
 
 export type PreviewOptions = {
@@ -16,9 +17,29 @@ export type PreviewOptions = {
   readonly workspace: AgentWorkspace;
   readonly folders: CodeFolders;
   readonly builds: ShellBuilds;
+  /** The apps whose server code is Imp's (code.ts). */
+  readonly imp: ImpServers;
   /** Tells the open shells that the apps changed. */
   readonly appsChanged: () => void;
 };
+
+/**
+ * Throws, for an app whose server code is Imp's, when a version changes it: its server.ts and app.json come with Imp,
+ * and only its screen is the person's.
+ */
+export function requireImpServer(files: AppFiles, imp: AppFiles | undefined) {
+  const changed = imp
+    ? (["server.ts", "app.json"] as const).filter(
+        (name) => files[name] !== imp[name]
+      )
+    : [];
+
+  if (changed.length > 0) {
+    throw new Error(
+      `This app's server.ts and app.json come with Imp, and Imp's updates replace them, so only its screen (app.contract) is the user's to change. Put back ${changed.join(" and ")} as app_code wrote them. If the screen needs data the app does not give, tell the user what is missing.`
+    );
+  }
+}
 
 /** Whether data that had the migrations `had` reaches `schema` by adding migrations: none of its own changed. */
 const leadsTo = (had: readonly string[], schema: readonly string[]) =>
@@ -77,7 +98,11 @@ export function appPreview(options: PreviewOptions) {
   return async function preview(id: string) {
     requireAppId(id);
 
-    const app = appInfo(await workspace.read(id), id);
+    const files = await workspace.read(id);
+
+    requireImpServer(files, options.imp.get(id));
+
+    const app = appInfo(files, id);
     const { manifest, keepDraftData } = await check(app);
 
     // The shell, with this version's screen.

@@ -8,8 +8,8 @@
 // actions always reach the live version unless they ask for the draft.
 //
 // A live app may read outside services it names (connections.ts), and keep a copy of them current with its sync
-// (sync.ts). The host holds every `app.fetch` to the app's connections and sends it with `send`, which the owner's
-// secrets provide.
+// (sync.ts), which the host also runs when a URL the sync watches changes (watch.ts). The host holds every `app.fetch`,
+// and every watched URL it asks, to the app's connections and sends it with `send`, which the owner's secrets provide.
 import path from "node:path";
 import type { Registry } from "@earendil-works/pi-durable";
 import { bool, compile, obj, str } from "@earendil-works/pi-schema";
@@ -21,6 +21,7 @@ import { type AppMachine, appMachine } from "./socket.ts";
 import { appSync, SYNC_TOPIC } from "./sync.ts";
 import { appTools } from "./tools.ts";
 import { appVersions } from "./versions.ts";
+import { appWatch } from "./watch.ts";
 import type { Topics } from "../kernel/live.ts";
 import type { Machine } from "../machine/machine.ts";
 import {
@@ -100,16 +101,18 @@ export function appGateway(options: GatewayOptions) {
   const { topics } = options;
   const data = openAppData(path.join(options.dataDir, "apps"));
 
+  const log =
+    options.log ??
+    ((message: string) => {
+      console.log(message);
+    });
+
   const machine = appMachine({
     slots: options.apps.map((app) => [app.id, app] as const),
     machine: options.machine,
     data,
     topics,
-    log:
-      options.log ??
-      ((message) => {
-        console.log(message);
-      }),
+    log,
     fetch: async (slot, request) =>
       await checkedFetch(machine, options, { slot, request }),
   });
@@ -127,6 +130,16 @@ export function appGateway(options: GatewayOptions) {
     changed: () => {
       topics.changed(SYNC_TOPIC);
     },
+  });
+
+  const watch = appWatch({
+    dataDir: path.join(options.dataDir, "apps"),
+    slots: () => slots,
+    known: machine.known,
+    ask: async (slot, request) =>
+      await checkedFetch(machine, options, { slot, request }),
+    changed: sync.now,
+    log,
   });
 
   options.registry.install(
@@ -199,6 +212,7 @@ export function appGateway(options: GatewayOptions) {
       machine.disconnect();
     },
     close() {
+      watch.stop();
       sync.stop();
       machine.disconnect();
       data.closeAll();
@@ -244,7 +258,7 @@ const EVERY_WORDS = {
 } as const;
 
 /** What a version reads, in words; "" when it reads nothing. */
-function readsLine({ connections, every }: Manifest) {
+function readsLine({ connections, every, watch }: Manifest) {
   if (connections.length === 0) {
     return "";
   }
@@ -253,7 +267,9 @@ function readsLine({ connections, every }: Manifest) {
     secret ? `${host} with your ${secret} key` : host
   );
 
-  return `Reads ${hosts.join(", ")}${every ? `, ${EVERY_WORDS[every]}` : ""}.`;
+  const watched = watch.map((url) => url.replace(/^https:\/\//, ""));
+
+  return `Reads ${hosts.join(", ")}${every ? `, ${EVERY_WORDS[every]}` : ""}${watched.length > 0 ? `, and when ${watched.join(" or ")} changes` : ""}.`;
 }
 
 /** The saved apps: the ones in the slot named by their id. */

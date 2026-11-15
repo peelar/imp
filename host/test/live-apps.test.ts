@@ -3,11 +3,15 @@
 // reads; and it holds every app.fetch to the app's connections, to reads, and away from the host's own network.
 // The apps are written into the host's data directory before it starts, as the studio keeps saved code and drafts.
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../sdk/app.ts";
 import { checkFetch, isInternal } from "../src/apps/connections.ts";
+import { appWatch } from "../src/apps/watch.ts";
+import { impServers, storedApps } from "../src/studio/code.ts";
+import { requireImpServer } from "../src/studio/preview.ts";
 import {
   call,
   dataDir,
@@ -204,4 +208,108 @@ test("app.fetch refuses a host that resolves to the host's own network", async (
     (await checkFetch(rules(["93.184.215.14"]), request)).address,
     "93.184.215.14"
   );
+});
+
+test("a watched URL runs the sync when its answer changed, and not when nothing is new", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "imp-watch-"));
+  const url = "https://api.example.com/notifications";
+  const sent: Record<string, string>[] = [];
+  const changed: string[] = [];
+  let answer = { status: 200, headers: { etag: '"1"' }, body: "[1]" };
+
+  /** A watcher as the host starts it, which asks once and lets the answer settle. */
+  const askOnce = async () => {
+    const watch = appWatch({
+      dataDir: dir,
+      // The live version watches the URL; a draft beside it is never asked.
+      slots: () =>
+        new Map([
+          ["reader", { id: "reader" }],
+          ["reader~draft", { id: "reader" }],
+        ]),
+      known: () => ({ manifest: { watch: [url] } }),
+      ask: async (_slot, request) => {
+        sent.push(request.headers);
+
+        return answer;
+      },
+      changed: async (id) => {
+        changed.push(id);
+
+        return "";
+      },
+      log: () => {},
+    });
+
+    watch.tick();
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+    watch.stop();
+  };
+
+  // The first answer is new.
+  await askOnce();
+  assert.deepEqual(changed, ["reader"]);
+
+  // After a restart, the host asks with what it saw: nothing new, nothing runs.
+  answer = { status: 304, headers: { etag: '"1"' }, body: "" };
+  await askOnce();
+  assert.deepEqual(sent.at(-1), { "if-none-match": '"1"' });
+  assert.deepEqual(changed, ["reader"]);
+
+  // A new ETag on the same body is not a change; another body is.
+  answer = { status: 200, headers: { etag: '"2"' }, body: "[1]" };
+  await askOnce();
+  assert.deepEqual(changed, ["reader"]);
+  answer = { status: 200, headers: { etag: '"3"' }, body: "[1,2]" };
+  await askOnce();
+  assert.deepEqual(changed, ["reader", "reader"]);
+  assert.equal(sent.length, 4);
+});
+
+test("an app Imp ships keeps Imp's server code under the person's screen", () => {
+  const repo = mkdtempSync(path.join(tmpdir(), "imp-repo-"));
+  const data = mkdtempSync(path.join(tmpdir(), "imp-data-"));
+
+  const files = (server: string, screen: string) => ({
+    "app.json": JSON.stringify({ id: "hub", name: "Hub", server: "imp" }),
+    "app.contract": screen,
+    "server.ts": server,
+  });
+
+  const ours = files(reader("api.example.com"), contract);
+
+  for (const [dir, version] of [
+    [path.join(repo, "hub"), ours],
+    // A version the person saved before Imp's update changed the server code.
+    [
+      path.join(data, "code", "hub", "live"),
+      files(
+        "export default { operations: {} };",
+        'component Screen\n  view\n    text "Mine"\n'
+      ),
+    ],
+  ] as const) {
+    mkdirSync(dir, { recursive: true });
+
+    for (const [name, text] of Object.entries(version)) {
+      writeFileSync(path.join(dir, name), text);
+    }
+  }
+
+  const hub = storedApps(data, repo, () => {}).live.find(
+    ({ id }) => id === "hub"
+  );
+
+  assert.equal(hub?.files["server.ts"], ours["server.ts"]);
+  assert.match(hub?.files["app.contract"] ?? "", /Mine/);
+
+  // A preview may change the screen, and nothing else.
+  const imp = impServers(repo).get("hub");
+
+  requireImpServer({ ...ours, "app.contract": "changed" }, imp);
+  assert.throws(() => {
+    requireImpServer({ ...ours, "server.ts": "changed" }, imp);
+  }, /Put back server.ts as app_code wrote them/);
 });

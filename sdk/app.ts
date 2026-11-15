@@ -113,12 +113,19 @@ export type AppServer = {
   readonly connections?: readonly Connection[];
   /**
    * Brings outside data into `app.db`, so the operations answer from the last good copy. The host runs it on the live
-   * version, never a draft: when its tab opens and the data is older than `every`, on Sync now, and on schedule while
-   * the computer is awake (it never wakes it for a sync). Fetch everything first, then write it in one `app.db.batch`,
+   * version, never a draft: when its tab opens and the data is older than `every`, on Sync now, on schedule while the
+   * computer is awake (a schedule never wakes it), and when a `watch` URL changed (which does). Fetch everything first, then write it in one `app.db.batch`,
    * so a failure halfway keeps the last copy whole.
    */
   readonly sync?: {
     readonly every: SyncEvery;
+    /**
+     * URLs that say when the service has something new, such as "https://api.github.com/notifications": the host asks
+     * them itself, as often as the service allows (at least a minute apart), with the ETag or Last-Modified it saw
+     * last, so an answer of "nothing new" (304) costs neither the service's rate limit nor the computer. When one
+     * changes, the host runs the sync, waking the computer if it must. Each is a GET to one of the app's connections.
+     */
+    readonly watch?: readonly string[];
     readonly run: (app: AppContext) => void | Promise<void>;
   };
 };

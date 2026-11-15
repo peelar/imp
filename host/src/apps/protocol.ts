@@ -56,6 +56,8 @@ const reportedManifest = obj({
   connections: opt(unknown()),
   /** The app's `sync.every`; absent when it has no sync. */
   every: opt(unknown()),
+  /** The app's `sync.watch`. */
+  watch: opt(unknown()),
 });
 
 const dbRequest = union([
@@ -127,6 +129,8 @@ export type Manifest = {
   readonly connections: readonly Connection[];
   /** How often the app syncs; absent when it has no sync. */
   readonly every?: SyncEvery | undefined;
+  /** The URLs whose change starts the sync (connections.ts, checkWatch). */
+  readonly watch: readonly string[];
 };
 
 /** What a call runs when its name is this: the app's sync, which no operation can be named (they are camelCase). */
