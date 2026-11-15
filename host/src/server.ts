@@ -7,18 +7,17 @@
 //                 otherwise the owner picks it in Settings
 //   MODEL         the ChatGPT model (default gpt-6.1-sol)
 //   OWNER_LOGIN   the one Tailscale login allowed in (default: everyone on the tailnet)
-//   IMP_HOME      set by scripts/install-host.sh: the installed host, which updates itself (update.ts)
+//   IMP_HOME      set by scripts/install-host.sh: the installed host, which updates itself (update/update.ts)
 //   IMP_AUTO_UPDATE  "0" keeps an installed host at its release
 //   IMP_REPO      the GitHub repository releases come from (default peelar/imp)
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
-import { openCredentialStore } from "./credentials.ts";
+import { openCredentialStore, CHATGPT } from "./account/account.ts";
 import { startHost } from "./host.ts";
-import { localProvider } from "./machine-local.ts";
-import { CHATGPT } from "./signin.ts";
-import { runningVersion, startUpdater } from "./update.ts";
+import { localProvider } from "./computer/computer.ts";
+import { runningVersion, startUpdater } from "./update/update.ts";
 
 const root = path.join(import.meta.dirname, "..", "..");
 

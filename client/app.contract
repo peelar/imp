@@ -5,7 +5,7 @@
 // black ink, engraved art, square corners, mono labels and one cobalt action.
 //
 // The host writes each app's part between the `// <apps:…>` markers from the props of the app's `component Screen`
-// (host/src/shell.ts); `node host/scripts/shell.ts` writes them for the apps in apps/. Do not edit between them.
+// (host/src/studio/shell.ts); `node host/scripts/shell.ts` writes them for the apps in apps/. Do not edit between them.
 // <apps:use>
 use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 // </apps:use>
@@ -318,7 +318,7 @@ fn repoPath(link: string): string =
   link.includes(" ") ? "" : link.startsWith("https://github.com/") ? link.slice(19) : link.startsWith("github.com/") ? link.slice(11) : ""
 fn repoLink(link: string): string = repoPath(link).split("/").filter(p => p != "").length >= 2 ? `https://github.com/${repoPath(link)}` : ""
 // What the person asks for when they install an app from GitHub, in their own words. How the imp does it (clone,
-// copy the app's folder into its workspace, preview) is the studio's to tell it (host/src/studio-tools.ts).
+// copy the app's folder into its workspace, preview) is the studio's to tell it (host/src/studio/tools.ts).
 fn installAsk(repo: string): string = `Install the app from github.com/${repoPath(repo)} so I can try it.`
 // The directory's apps. Mock entries for now, except Todos, which this repository ships: the rest name repositories
 // that do not exist yet, so the imp cannot install them.

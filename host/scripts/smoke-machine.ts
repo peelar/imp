@@ -16,18 +16,18 @@ import {
 } from "@earendil-works/pi-durable";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type RawData, WebSocket } from "ws";
-import { Topics } from "../src/live.ts";
-import type { MachineProvider } from "../src/machine.ts";
-import { e2bProvider } from "../src/machine-e2b.ts";
-import { localProvider } from "../src/machine-local.ts";
-import { machineImage } from "../src/machine-runtime.ts";
-import { sshProvider } from "../src/machine-ssh.ts";
+import { Topics } from "../src/kernel/live.ts";
+import type { MachineProvider } from "../src/machine/machine.ts";
+import { e2bProvider } from "../src/computer/e2b.ts";
+import { localProvider } from "../src/computer/local.ts";
+import { machineImage } from "../src/computer/runtime.ts";
+import { sshProvider } from "../src/computer/ssh.ts";
 import {
   type FromAgentd,
   fromAgentdCheck,
   type ToAgentd,
-} from "../src/protocol.ts";
-import { openSecrets } from "../src/secrets.ts";
+} from "../src/apps/protocol.ts";
+import { openSecrets } from "../src/secrets/secrets.ts";
 
 const started = Date.now();
 
@@ -165,7 +165,7 @@ const toAgentd = (message: ToAgentd) => {
   ws.send(JSON.stringify(message));
 };
 
-/** What agentd says next, checked against the protocol as the host checks it (src/app-machine.ts). */
+/** What agentd says next, checked against the protocol as the host checks it (src/apps/socket.ts). */
 const fromAgentd = async (): Promise<FromAgentd> => {
   const frame = await nextFrame(ws, "the app socket");
   const message: unknown = JSON.parse(frame);
@@ -282,7 +282,7 @@ if (!signIn) {
   throw new Error("the secrets extension has no sign_in tool");
 }
 
-// SAFETY: secret-tools.ts's sign_in reads only its arguments: it never touches the harness's API.
+// SAFETY: secrets/tools.ts's sign_in reads only its arguments: it never touches the harness's API.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the smoke test runs the tool without a harness.
 const noHarness = {} as ToolExecutionApi;
 

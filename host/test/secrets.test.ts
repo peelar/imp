@@ -1,6 +1,6 @@
 // The owner's secrets, as the client uses them: the imp asks for a key or a login it lacks, and the owner adds, deletes
 // or turns it down in Settings. They ride on the account stream. The vault is a real OpenBao, which the host downloads the
-// first time (src/tools.ts). What a command then does with a key is the smoke script's part (scripts/smoke-machine.ts).
+// first time (src/secrets/programs.ts). What a command then does with a key is the smoke script's part (scripts/smoke-machine.ts).
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { Json } from "../../sdk/app.ts";

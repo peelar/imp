@@ -4,7 +4,7 @@ The imp remembers what it learns about you, and about itself (a name you give it
 
 ## The default: a knowledge graph
 
-The default memory is the Model Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory), used as a library (`host/src/memory-graph.ts`). What the imp knows is a graph of **entities** (a person, a project, a place), the **facts** it observed about each, and **relations** between them.
+The default memory is the Model Context Protocol's [reference memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory), used as a library (`host/src/memory/graph.ts`). What the imp knows is a graph of **entities** (a person, a project, a place), the **facts** it observed about each, and **relations** between them.
 
 It lives in one file, `DATA_DIR/memory.jsonl`, one JSON object per line, which you can open in any editor. Two entities are the imp's own: `user`, the person it works for, and `imp`, itself.
 
@@ -17,7 +17,7 @@ Every conversation starts with a prompt section that holds what it already knows
 
 ## The contract
 
-A memory system implements `MemorySystem` in `host/src/memory.ts` and is passed to `startHost()` as `memory`. Mem0, Letta, Graphiti or a folder of Markdown notes would each fit. Nothing else in the host knows which one runs.
+A memory system implements `MemorySystem` in `host/src/memory/memory.ts` and is passed to `startHost()` as `memory`. Mem0, Letta, Graphiti or a folder of Markdown notes would each fit. Nothing else in the host knows which one runs.
 
 ```ts
 interface MemoryProvider {

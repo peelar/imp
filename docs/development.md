@@ -18,12 +18,13 @@ The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspace
 | Path | What it holds |
 | --- | --- |
 | `host/` | The host: the agent, the app gateway, the studio, memory, the vault and the HTTP API. Node runs its TypeScript directly. |
+| `host/src/<context>/` | One part of the host each, such as `apps/` or `secrets/`, which the others reach only through `<context>/<context>.ts`. [Architecture](architecture.md#the-hosts-contexts) lists them and what each may use. |
 | `host/machine/` | What runs on the agent's computer: agentd and `setup.sh`, which decides what is installed there. |
 | `client/` | The app you open, in [Exact](https://github.com/expo/exact)'s Contract language. |
 | `client/apps/<id>/` | One app per folder: `app.json`, its screen (`app.contract`) and its server code (`server.ts`). |
 | `sdk/` | The typed surface an app's server code is written against. |
 | `docs/` | These docs, in plain Markdown. |
-| `scripts/` | Setup, packaging, the host and Mac installers, and the lint policy's probes. |
+| `scripts/` | Setup, packaging, the host and Mac installers, the check of the host's context map (`boundaries.ts`), and the lint policy's probes. |
 
 `AGENTS.md` holds the conventions code in the repository follows, and `.agents/setup` sets up an [Amp](https://ampcode.com) orb with `npm run setup`.
 
@@ -31,7 +32,7 @@ The repository is a [Turborepo](https://turborepo.com) monorepo on npm workspace
 
 | Command | Where | What it checks |
 | --- | --- | --- |
-| `npm run check` | root | Lint, the lint policy, formatting and types. CI runs it. |
+| `npm run check` | root | Lint, the host's context map, the lint policy, formatting and types. CI runs it. |
 | `npm test` | root | The host's HTTP API tests, each against its own host with a scripted model. CI runs it. |
 | `bun exact.mjs test web` | `client/` | The client against a host with a fake model. |
 | `node scripts/smoke-machine.ts` | `host/` | One machine adapter on its own. |

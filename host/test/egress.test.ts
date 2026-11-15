@@ -10,8 +10,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { after, before, test } from "node:test";
-import { freePort } from "../src/ports.ts";
-import { tool } from "../src/tools.ts";
+import { freePort } from "../src/kernel/ports.ts";
+import { tool } from "../src/secrets/programs.ts";
 import { repo } from "./harness.ts";
 
 const VALUE = "ghp_REALVALUE_abcdef123456";

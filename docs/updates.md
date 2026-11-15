@@ -9,7 +9,7 @@ An installed host runs from `~/.imp/current`, a link to one unpacked release und
 3. waits until the agent is idle, then exits, and
 4. the service manager (systemd or launchd) starts it again from the new release.
 
-The web client is built into the release, so the same restart updates it. Open pages notice that the host they reconnected to is another release, and reload. `host/src/update.ts` is the whole updater.
+The web client is built into the release, so the same restart updates it. Open pages notice that the host they reconnected to is another release, and reload. `host/src/update/update.ts` is the whole updater.
 
 Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to keep a host at its release. A checkout never updates itself: it is the developer's to move.
 

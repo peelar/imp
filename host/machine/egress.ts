@@ -5,19 +5,19 @@
 // itself. Every other request goes out from here directly, as it would without the proxy. The rule list holds host
 // names only; values never come to the machine.
 //
-// The host strips this file's types and installs it beside agentd.mjs (src/machine-runtime.ts). Import only types,
+// The host strips this file's types and installs it beside agentd.mjs (src/computer/runtime.ts). Import only types,
 // Node's own modules and ws.
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
 import path from "node:path";
 import { createWebSocketStream, type RawData, WebSocket } from "ws";
-import type { FromEgress, ToEgress } from "../src/egress-protocol.ts";
+import type { FromEgress, ToEgress } from "../src/secrets/egress-protocol.ts";
 
 export type EgressProxyOptions = {
   /** Where the proxy listens, on the machine's loopback. */
   readonly port: number;
-  /** Where the CA certificate and the bundle with it are kept (see egressEnv in src/machine-runtime.ts). */
+  /** Where the CA certificate and the bundle with it are kept (see egressEnv in src/computer/runtime.ts). */
   readonly dir: string;
 };
 
@@ -180,7 +180,7 @@ function hostControl(writeCa: (pem: string) => void) {
       current?.close(4000, "replaced by a newer host connection");
       current = ws;
       ws.on("message", (data) => {
-        // SAFETY: only the host holds the token, and it sends ToEgress (src/egress.ts).
+        // SAFETY: only the host holds the token, and it sends ToEgress (src/secrets/egress.ts).
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- JSON.parse is typed `any`.
         configure(ws, JSON.parse(text(data)) as ToEgress);
       });

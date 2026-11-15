@@ -1,4 +1,4 @@
-"""The egress proxy's addon (see host/src/egress.ts): mitmproxy runs it on the host, for the agent's HTTPS requests to
+"""The egress proxy's addon (see host/src/secrets/egress.ts): mitmproxy runs it on the host, for the agent's HTTPS requests to
 the hosts the owner's secrets are for.
 
 For each request it reads the secrets the host's rules name for that host from OpenBao, with a token that can only

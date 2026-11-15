@@ -2,7 +2,7 @@
 # version job runs `changeset version`, which bumps host/package.json (Imp's version is the host's) and writes
 # host/CHANGELOG.md, and commits that to main. When the version then has no GitHub release, the same run builds and
 # publishes release v<version>, with its CHANGELOG.md section as notes. Installed hosts and Mac apps update to it:
-#   imp-host-vX.Y.Z.tar.gz   the host, its production dependencies and the built web client (host/src/update.ts)
+#   imp-host-vX.Y.Z.tar.gz   the host, its production dependencies and the built web client (host/src/update/update.ts)
 #   Imp-macos.zip            the ad-hoc signed Mac app (scripts/install-mac.sh)
 #   install-host.sh          the host installer
 # A push without a changeset releases nothing.

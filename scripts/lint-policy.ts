@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { violations } from "./boundaries.ts";
 
 const branches = (count: number) =>
   Array.from(
@@ -89,6 +90,69 @@ const probes = [
     code: 'declare const value: string | number;\nexport const text = typeof value === "string" ? value : "";',
   },
 ] as const;
+
+// The context map (boundaries.ts) must refuse each of these too: host/src's folders are the architecture only while a
+// file that crosses one the wrong way is refused. Each crossing is a set of files by their path in host/src.
+const crossings = [
+  {
+    crosses: "an import of another context's inner file",
+    files: [
+      ["studio/studio.ts", 'import { openAppData } from "../apps/data.ts";'],
+    ],
+    says: "from outside apps/, import apps/apps.ts",
+  },
+  {
+    crosses: "an import of an inner file split over lines",
+    files: [
+      [
+        "studio/studio.ts",
+        'import type {\n  AppData,\n} from "../apps/data.ts";',
+      ],
+    ],
+    says: "studio/studio.ts imports apps/data.ts",
+  },
+  {
+    crosses: "an inner file imported at run time",
+    files: [
+      ["studio/studio.ts", 'const data = await import("../apps/data.ts");'],
+    ],
+    says: "studio/studio.ts imports apps/data.ts",
+  },
+  {
+    crosses: "a use of a context the map does not list",
+    files: [["apps/apps.ts", 'import { studio } from "../studio/studio.ts";']],
+    says: "uses studio/, which apps/ may not",
+  },
+  {
+    crosses: "a context using the files that put the host together",
+    files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
+    says: "a context never uses the files that put the host together",
+  },
+  {
+    crosses: "a folder that is not a context",
+    files: [["notes/notes.ts", ""]],
+    says: "host/src/notes/ is not a context",
+  },
+  {
+    crosses: "a context without its entry",
+    files: [["studio/preview.ts", ""]],
+    says: "studio/ has no entry",
+  },
+  {
+    crosses: "a package kept to one file",
+    files: [["computer/computer.ts", 'import { Sandbox } from "e2b";']],
+    says: "imports e2b, which only computer/e2b.ts may",
+  },
+] as const;
+
+for (const { crosses, files, says } of crossings) {
+  assert.ok(
+    violations(new Map(files)).some((problem) => problem.includes(says)),
+    `The context map did not refuse ${crosses}`
+  );
+}
+
+console.log(`The context map refuses all ${crossings.length} crossings.`);
 
 // Inside host/src, so the probes are linted and type-checked as the host's own files are.
 const folder = mkdtempSync(path.resolve("host/src/.lint-policy-"));

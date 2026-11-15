@@ -112,7 +112,7 @@ component Screen
           text todo.title flex=1
 ```
 
-The screen keeps its own `state`, `derive`s and `action`s, and may declare more components and `fn`s in the same file. It cannot declare resources or mutations: only the shell's root can, and the host writes the root's part for every app (`host/src/shell.ts`).
+The screen keeps its own `state`, `derive`s and `action`s, and may declare more components and `fn`s in the same file. It cannot declare resources or mutations: only the shell's root can, and the host writes the root's part for every app (`host/src/studio/shell.ts`).
 
 Use Imp's Catalogue colours (`ink.strong`, `ink.muted`, `line.subtle`, `surface.page`, `AccentColor`, …) and fonts (`family.display`, `family.text`, `family.mono`) so the app looks like the rest of Imp.
 

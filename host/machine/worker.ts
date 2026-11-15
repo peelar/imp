@@ -1,7 +1,7 @@
 // One app's server code, in a worker of its own. The module's default export is the app (see sdk/app.ts); its
 // database lives on the host, so every `app.db` call goes to the host and back.
 //
-// The host strips this file's types and installs it on the machine as worker.mjs (src/machine-runtime.ts), where it
+// The host strips this file's types and installs it on the machine as worker.mjs (src/computer/runtime.ts), where it
 // runs with no packages: import only types and Node's own modules.
 import { parentPort, workerData } from "node:worker_threads";
 import type { AppContext, Json, SqlValue } from "../../sdk/app.ts";
@@ -11,7 +11,7 @@ import type {
   FromWorker,
   ReportedManifest,
   ToWorker,
-} from "../src/protocol.ts";
+} from "../src/apps/protocol.ts";
 
 type Start = { readonly appId: string; readonly code: string };
 
@@ -25,7 +25,7 @@ type Run = (
 
 /**
  * What the agent's module exports, which is a claim until checked. This worker checks only that every operation has
- * a `run` function, which it alone can see; the host checks the rest from the manifest (src/app-manifest.ts).
+ * a `run` function, which it alone can see; the host checks the rest from the manifest (src/apps/manifest.ts).
  */
 type Claimed = {
   readonly schema?: ReportedManifest["schema"];
@@ -71,7 +71,7 @@ const db = async (request: DbRequest) => {
   });
 };
 
-// SAFETY: the host answers each request with what its SQLite returned for it (src/app-data.ts): rows for `all`, a
+// SAFETY: the host answers each request with what its SQLite returned for it (src/apps/data.ts): rows for `all`, a
 // row or null for `get`, the change counts for `run` and `batch`. The types are the ones sdk/app.ts promises the app.
 /* oxlint-disable typescript/no-unsafe-type-assertion -- a database answer crosses the wire as JSON */
 const app: AppContext = Object.freeze({

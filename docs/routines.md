@@ -1,6 +1,6 @@
 # Routines
 
-A routine is an instruction the imp carries out on a schedule, such as "every weekday at 8, check my pull requests and put what needs me in my Todos". You ask for one in the chat. The imp saves it with its `save_routine` tool (`host/src/routine-tools.ts`), and the sidebar lists it under **Routines**.
+A routine is an instruction the imp carries out on a schedule, such as "every weekday at 8, check my pull requests and put what needs me in my Todos". You ask for one in the chat. The imp saves it with its `save_routine` tool (`host/src/routines/tools.ts`), and the sidebar lists it under **Routines**.
 
 ## Where a run happens
 
@@ -14,7 +14,7 @@ A run teaches the [memory](memory.md) nothing, since you said nothing in it. A r
 
 The schedule is five-field cron (minute, hour, day of the month, month, day of the week), read on the clock of an IANA time zone, such as `0 8 * * 1-5` in `Europe/Warsaw`. Without a time zone a routine uses the host's. Cron's ranges, steps and names work (`*/30`, `9-17`, `mon-fri`), and a schedule follows its time zone across daylight saving changes. Two runs of one routine are at least 15 minutes apart, so a routine cannot use up your ChatGPT plan.
 
-The host keeps the routines in `DATA_DIR/routines.json` and their conversations with the others in `DATA_DIR/conversations.json` (`host/src/routines.ts`, `host/src/routine-schedule.ts`). Every 20 seconds it looks for a routine that is due, and runs it once:
+The host keeps the routines in `DATA_DIR/routines.json` and their conversations with the others in `DATA_DIR/conversations.json` (`host/src/routines/routines.ts`, `host/src/routines/schedule.ts`). Every 20 seconds it looks for a routine that is due, and runs it once:
 
 - **you are signed in to ChatGPT**, and
 - **the imp is idle.** It has one computer and one browser, so a routine waits while you are in the middle of a chat, and routines run one at a time. Run now puts a routine first in line.

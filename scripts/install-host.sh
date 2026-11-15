@@ -6,7 +6,7 @@
 # Everything lives in IMP_HOME (default ~/.imp): releases/<tag> holds each unpacked release, `current` links the one
 # that runs, data/ is the host's data and `env` holds the few settings the app does not have. It serves the host on
 # your tailnet with `tailscale serve`, and prints the one link to open: everything else, such as the agent's computer,
-# is set up in the app. The host then keeps itself at the latest release (host/src/update.ts); IMP_AUTO_UPDATE=0 in
+# is set up in the app. The host then keeps itself at the latest release (host/src/update/update.ts); IMP_AUTO_UPDATE=0 in
 # `env` stops that. Running this again updates and restarts it.
 set -eu
 

@@ -51,7 +51,7 @@ Chrome on the computer is started without the proxy, so a web page the imp opens
 
 ## OpenBao, run by the host
 
-The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp Vault, which the host runs itself in `DATA_DIR/vault`. There is nothing to install or unlock: on first use the host downloads a pinned build, checks its SHA-256, and starts it (`host/src/vault.ts`, `host/src/tools.ts`). mitmproxy is fetched the same way.
+The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp Vault, which the host runs itself in `DATA_DIR/vault`. There is nothing to install or unlock: on first use the host downloads a pinned build, checks its SHA-256, and starts it (`host/src/secrets/vault.ts`, `host/src/secrets/programs.ts`). mitmproxy is fetched the same way.
 
 |  |  |
 | --- | --- |

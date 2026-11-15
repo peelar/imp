@@ -1,6 +1,6 @@
 // Writes the shell's part for the apps in client/apps into client/app.contract and client/app.ts, built as "repo":
 // the client the repository builds and tests on its own. The host writes the same parts for the apps it holds when it
-// builds (src/shell.ts). Run it after changing an app's Screen props or operations: `node scripts/shell.ts`.
+// builds (src/studio/shell.ts). Run it after changing an app's Screen props or operations: `node scripts/shell.ts`.
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,8 +16,8 @@ import {
   str,
   union,
 } from "@earendil-works/pi-schema";
-import { readAppFiles, readApps } from "../src/app-folders.ts";
-import { generate, type ShellApp } from "../src/shell.ts";
+import { readAppFiles, readApps } from "../src/apps/folders.ts";
+import { generate, type ShellApp } from "../src/studio/shell.ts";
 
 const description = opt(str());
 const optional = opt(bool());

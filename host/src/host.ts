@@ -16,28 +16,29 @@ import {
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
-import { type AppGateway, appGateway } from "./apps.ts";
-import { appBackup } from "./backup.ts";
-import { TOPIC as CHAT } from "./chat.ts";
-import { openChats } from "./chats.ts";
-import { type Computer, openComputer } from "./computer.ts";
+import { type AppGateway, appGateway } from "./apps/apps.ts";
+import { appBackup } from "./backup/backup.ts";
+import { TOPIC as CHAT, openChats } from "./chats/chats.ts";
+import {
+  type Computer,
+  openComputer,
+  screenSockets,
+} from "./computer/computer.ts";
 import { serveHttp } from "./http.ts";
-import { openRoutines } from "./routines.ts";
-import { routinesExtension } from "./routine-tools.ts";
-import { openTricks } from "./tricks.ts";
-import { Topics } from "./live.ts";
-import type { Machine, MachineProvider } from "./machine.ts";
+import { openRoutines, routinesExtension } from "./routines/routines.ts";
+import { openTricks } from "./tricks/tricks.ts";
+import { Topics } from "./kernel/live.ts";
+import type { Machine, MachineProvider } from "./machine/machine.ts";
 import {
   TOPIC as MEMORY,
   type MemoryProvider,
   type MemorySystem,
-} from "./memory.ts";
-import { graphMemory } from "./memory-graph.ts";
-import { screenSockets } from "./screen.ts";
-import { openSecrets, type Secrets } from "./secrets.ts";
+  graphMemory,
+} from "./memory/memory.ts";
+import { openSecrets, type Secrets } from "./secrets/secrets.ts";
 import { shellApi } from "./shell-api.ts";
-import { type ChatGPTAccount, chatgptAccount } from "./signin.ts";
-import { storedApps, studio } from "./studio.ts";
+import { type ChatGPTAccount, chatgptAccount } from "./account/account.ts";
+import { storedApps, studio } from "./studio/studio.ts";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -60,7 +61,7 @@ export type HostOptions = {
   readonly port: number;
   /** The Tailscale login allowed in, such as "adrian@github". Absent: everyone on the tailnet. */
   readonly owner?: string | undefined;
-  /** What the imp remembers about its person, and how (memory.ts). Default: the knowledge graph in memory-graph.ts. */
+  /** What the imp remembers about its person, and how (memory/memory.ts). Default: the knowledge graph in memory/graph.ts. */
   readonly memory?: MemorySystem | undefined;
   /** The running release's tag ("dev" in a checkout). Open pages reload when the host they reconnect to has another. */
   readonly version?: string | undefined;
@@ -70,9 +71,9 @@ export type HostOptions = {
   readonly macInstaller?: string | undefined;
   /** An E2B API key for Imp cloud machines; the owner can also enter one in Settings. Default: E2B_API_KEY. */
   readonly cloudKey?: string | undefined;
-  /** Where the programs the host downloads are kept (tools.ts). Default: DATA_DIR/tools. */
+  /** Where the programs the host downloads are kept (secrets/programs.ts). Default: DATA_DIR/tools. */
   readonly toolsDir?: string | undefined;
-  /** The GitHub CLI the backup signs in and creates its repository with (backup.ts). Default: gh on PATH. */
+  /** The GitHub CLI the backup signs in and creates its repository with (backup/backup.ts). Default: gh on PATH. */
   readonly gh?: string | undefined;
 };
 
@@ -94,7 +95,7 @@ function hostSecret(dataDir: string) {
   return readFileSync(file, "utf-8").trim();
 }
 
-/** How the imp uses the web: agent-browser on its computer, and the tricks it keeps (tricks.ts). */
+/** How the imp uses the web: agent-browser on its computer, and the tricks it keeps (tricks/tricks.ts). */
 const BROWSER =
   'To use the web, drive the browser on your computer with the agent-browser CLI in bash: it opens Chrome on your computer\'s screen, where the user can watch you and sign in to sites for you. Before your first browser task, read `agent-browser skills get core`. Every browser session is recorded, so a task you did once can become a trick (agent-browser calls it a saved flow) that later runs in a second without the page. When `open` or `agent-browser flow list` shows a trick that fits the task, run it with `agent-browser flow run`, and use the page only if that fails. After a browser task the user may ask for again, keep it as a trick: if it only read, save it yourself with `agent-browser flow save <name> --description "<what it does, such as Search Hacker News>" --param <name>=<each value you typed>` and say so in one short sentence; if it changed something (sent, bought, booked, posted, deleted), ask the user before saving it. The user sees your tricks in the app; call them tricks.';
 

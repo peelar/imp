@@ -17,8 +17,8 @@ import {
   type FauxResponseFactory,
 } from "@earendil-works/pi-ai/providers/faux";
 import { startHost } from "../src/host.ts";
-import { localProvider } from "../src/machine-local.ts";
-import { CHATGPT } from "../src/signin.ts";
+import { localProvider } from "../src/computer/local.ts";
+import { CHATGPT } from "../src/account/account.ts";
 
 type Content =
   Parameters<FauxResponseFactory>[0]["messages"][number]["content"];

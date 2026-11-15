@@ -13,7 +13,7 @@ An operation marked `agent: false` is the screen's alone. The host checks every 
 
 ## Where an app runs
 
-`host/src/apps.ts` is the app gateway. It opens one WebSocket to agentd's `/apps` on the computer, and agentd runs each app's server code in a worker of its own (`host/machine/worker.ts`). A new version replaces the old worker, and terminating a worker frees everything it held.
+`host/src/apps/apps.ts` is the app gateway. It opens one WebSocket to agentd's `/apps` on the computer, and agentd runs each app's server code in a worker of its own (`host/machine/worker.ts`). A new version replaces the old worker, and terminating a worker frees everything it held.
 
 The app's database is a SQLite file on the host, `DATA_DIR/apps/<id>.sqlite`. Every `app.db` call in the worker crosses the socket to the host and back. That is why a computer can be switched, suspended or replaced without losing a single row: the computer holds the code, the host holds the data.
 
@@ -50,7 +50,7 @@ The host keeps the last three web builds in `DATA_DIR/builds/`, and `builds/curr
 
 ## Every version, kept in git
 
-Undo's history, which holds the data too, lasts 48 hours. The code lasts longer: every save and undo commits the live apps' code to a git repository in `DATA_DIR/backup`, a folder per app (`host/src/backup.ts`). The host also commits at start, so apps from before backup existed are kept too.
+Undo's history, which holds the data too, lasts 48 hours. The code lasts longer: every save and undo commits the live apps' code to a git repository in `DATA_DIR/backup`, a folder per app (`host/src/backup/backup.ts`). The host also commits at start, so apps from before backup existed are kept too.
 
 **Backup** in Settings connects GitHub with the GitHub CLI's device code sign-in, shown like the ChatGPT one. The host keeps that sign-in in `DATA_DIR/gh` and never takes a token from its environment. It finds or creates a private `<you>/imp-apps` repository and pushes each version there. A failed push is shown in Settings and retried on the next save.
 

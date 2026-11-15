@@ -1,21 +1,19 @@
-// What the shell reads and changes, by name. Each read is a live source (live.ts) and each change answers a Reply,
+// What the shell reads and changes, by name. Each read is a live source (kernel/live.ts) and each change answers a Reply,
 // `{ ok, error }`. The shell's own names start with one of a few words (account, chat, routines, apps, build,
-// version, computer, memory, secrets, backup), which no app may take as its id (app-folders.ts); every other name goes to the
+// version, computer, memory, secrets, backup), which no app may take as its id (apps/folders.ts); every other name goes to the
 // app that owns it, such as `todosSetDone` to the todos app's `setDone`.
 import type { Json } from "../../sdk/app.ts";
-import type { AppGateway } from "./apps.ts";
-import { TOPIC as CHAT } from "./chat.ts";
-import type { Chats } from "./chats.ts";
-import { TOPIC as COMPUTER, type Computer } from "./computer.ts";
-import type { Answer, LiveSource } from "./live.ts";
-import { type AppBackup, TOPIC as BACKUP } from "./backup.ts";
-import { TOPIC as MEMORY, type MemoryProvider } from "./memory.ts";
-import { TOPIC as SECRETS, type Secrets } from "./secrets.ts";
-import { TOPIC as ACCOUNT, type ChatGPTAccount } from "./signin.ts";
-import { TOPIC as ROUTINES, type Routines } from "./routines.ts";
-import { TOPIC as TRICKS, type Tricks } from "./tricks.ts";
-import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio.ts";
-import { appTopic } from "./app-folders.ts";
+import { type AppGateway, appTopic } from "./apps/apps.ts";
+import { TOPIC as CHAT, type Chats } from "./chats/chats.ts";
+import { TOPIC as COMPUTER, type Computer } from "./computer/computer.ts";
+import type { Answer, LiveSource } from "./kernel/live.ts";
+import { type AppBackup, TOPIC as BACKUP } from "./backup/backup.ts";
+import { TOPIC as MEMORY, type MemoryProvider } from "./memory/memory.ts";
+import { TOPIC as SECRETS, type Secrets } from "./secrets/secrets.ts";
+import { TOPIC as ACCOUNT, type ChatGPTAccount } from "./account/account.ts";
+import { TOPIC as ROUTINES, type Routines } from "./routines/routines.ts";
+import { TOPIC as TRICKS, type Tricks } from "./tricks/tricks.ts";
+import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio/studio.ts";
 
 export type ShellApiOptions = {
   readonly account: ChatGPTAccount;
@@ -162,7 +160,7 @@ function shellSources(options: ShellApiOptions) {
       "build",
       { topics: [BUILD_TOPIC], load: async () => ({ id: studio.buildId() }) },
     ],
-    // The computer's screen is a page of its own (screen.html), which shows the computer's state above it.
+    // The computer's screen is a page of its own (computer/screen.html), which shows the computer's state above it.
     [
       "computer",
       { topics: [COMPUTER], load: async () => await computer.load() },
