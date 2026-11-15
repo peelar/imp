@@ -1,5 +1,17 @@
 # @imp/host
 
+## 0.8.0
+
+### Minor Changes
+
+- 617f561: An app's sync can watch URLs that say when a service has something new, such as your GitHub notifications. The host asks them about once a minute without waking your computer, and runs the sync only when something changed, so the app stays current even while you are away. Apps Imp ships keep Imp's server code: you can change their screen, and Imp's updates still reach the rest.
+- 00c1013: Imp ships a GitHub app: what needs you on GitHub in one inbox, with the pull requests waiting for your review, your own, what's assigned to you and your unread notifications. Filter it, search it, and mark items done or snooze them; a done item comes back when it changes on GitHub. It reads GitHub with your key named github (notifications need a classic token with the notifications scope), stays current by watching your notifications, and your imp can act on any item from the chat beside it. Its screen is yours to change.
+- 292402e: Apps can read your services and keep a copy current. An app names the hosts it reads and the key each one needs, and the preview says so before you save ("Reads api.github.com with your github key, every 15 min."). Its server code reads with `app.fetch`, which only reads and which the host sends with your key, so the app never holds it, and Recent use names the app. Its sync runs when you open the app, on Sync now, and on schedule while your computer is awake, never waking it; the app's bar says how the last sync went.
+
+### Patch Changes
+
+- 837611d: The egress proxy on the imp's computer takes requests only from the imp's commands, which carry its password in `HTTPS_PROXY`. Apps' server code runs with no environment, so it no longer sees agentd's token, and the proxy refuses its requests.
+
 ## 0.7.0
 
 ### Minor Changes
