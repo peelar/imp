@@ -39,6 +39,22 @@ Writes name the topics they change, so a change by the imp and a change by you r
 
 The microphone button in the composer dictates a message with the browser's own speech recognition (Exact's `@exact/speech-recognition`), so the host never hears the audio. Words join the draft as the recognizer settles on them, and the ones it is still unsure of show above the field. Sending while dictating sends those too. The browser chooses where recognition runs: Chrome and Safari send the audio to Google's or Apple's speech service. Browsers without speech recognition, and the Mac app, show no microphone.
 
+Each command with a shortcut is a button that declares its chord (`aria-keyshortcuts`), so the chord works only while that button is on the screen, and the Mac app lists it in its menu bar:
+
+| Keys | What it does | Where |
+| --- | --- | --- |
+| ⌘N | New chat | Every page: the sidebar's New chat beside the chat on a wide window, the page header's button elsewhere |
+| ⌘1 to ⌘9 | Open the chat, then each app and the Computer in the bar's order | Always |
+| ⌘, | Open Settings | Always |
+| ⌘. | Stop the imp | While it works and the message box is empty |
+| ⌘S | Save an app's preview | While the app shows one |
+| ⌘R | Run the open routine now | In a routine's conversation |
+| ⌃⌘S | Open or close the conversations drawer | The chat on a narrow window |
+| Escape | Close the drawer | While it is open |
+| ⌃⌘C | Show or hide the chat beside an app | An app on a wide window |
+
+In the Mac app (or an installed desktop web app, so not in a browser tab, where the browser keeps ⌘N and ⌘1 to ⌘9 for itself), New chat shows its keys in the sidebar, and holding ⌘ alone for a moment puts each visible control's keys on its corner until ⌘ is let go.
+
 > [!NOTE]
 > The Contract compiler finds Exact's modules in a `node_modules` folder. `scripts/link-exact.sh` links the ones `client/app.contract` uses from the Exact checkout into `client/node_modules`, and setup, CI and releases run it. The host links them the same way into the copy of the client it builds.
 

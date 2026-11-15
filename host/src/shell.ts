@@ -235,7 +235,7 @@ function wire(app: ShellApp) {
     refresh: props.flatMap((prop) => prop.refresh),
     screen: [
       `                  if e.name == "${id}"`,
-      `                    AppPage(id="${id}", draft=hasDraft("${id}", apps), undo=undoKind("${id}", apps), save=saveApp, discard=discardApp, undoSave=undoApp)`,
+      `                    AppPage(id="${id}", draft=hasDraft("${id}", apps), undo=undoKind("${id}", apps), save=saveApp, discard=discardApp, undoSave=undoApp, keys=keys)`,
       `                      ${cap}Screen(${props.map((prop) => prop.binding).join(", ")})`,
     ],
     mutations: props.flatMap((prop) => prop.mutations),

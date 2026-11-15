@@ -237,6 +237,11 @@ shape Reply
 shape Media
   prefersReducedMotion: bool
   width: number
+  pointer: string
+  displayMode: string
+
+shape Page
+  hasFocus: bool
 
 shape Time
   epochAtZero: number
@@ -250,6 +255,18 @@ style Label
   letter-spacing = "0.12em"
   text-transform = "uppercase"
   color = "ink.muted"
+
+// A shortcut's keys, as a keycap: the labels' mono in a hairline box.
+style Key
+  font-family = "family.mono"
+  font-size = "0.6875rem"
+  font-weight = 500
+  line-height = 1.4
+  white-space = "nowrap"
+  color = "ink.muted"
+  padding = "0 5px"
+  border = "1px solid line.strong"
+  background-color = "surface.page"
 
 style Rule
   height = 1
@@ -266,6 +283,11 @@ keyframes pulse
 fn builtVersion(): string = "repo"
 // </apps:version>
 fn tabTitle(name: string, wide: bool, apps: AppTile[]): string = name == "chat" ? (wide ? "Chat" : "Imp") : tabLabel(name, apps)
+// The chord that opens a tab: ⌘1 for the chat, then the apps in order up to ⌘9, and ⌘, for Settings, as on a Mac.
+fn tabChord(name: string, i: number): string = name == "settings" ? "Meta+," : i < 9 ? `Meta+${i + 1}` : ""
+// A chord as the Mac writes it: "Control+Meta+S" is ⌃⌘S.
+fn keysOf(chord: string): string =
+  chord.replaceAll("Control+", "⌃").replaceAll("Alt+", "⌥").replaceAll("Shift+", "⇧").replaceAll("Meta+", "⌘")
 fn capitalized(s: string): string = s == "" ? "" : `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
 fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUpperCase()
 fn localPart(email: string): string = email.includes("@") ? email.slice(0, email.indexOf("@")) : email
@@ -363,6 +385,10 @@ component App
   state recognitionId = ""
   state dictated = 0
   state dictationEnd = ""
+  // ⌘ held on its own, before any other key (a chord): held for a moment, it shows each control's shortcut.
+  state metaAlone = false
+  state keysShown = false
+  resource page = exactPage() as shape Page
   resource speech = speechRecognitionStatus() as shape SpeechRecognitionStatus else empty()
   resource heard = speechRecognitionState(recognition=recognitionId) when recognitionId != "" as shape SpeechRecognitionState else empty()
   resource media = exactViewport() as shape Media
@@ -404,6 +430,10 @@ component App
   derive wide = media.width >= 960
   derive onApp = nav.tab != "chat" and nav.tab != "settings"
   derive docked = wide and onApp and chatDocked
+  // The ⌘ chords are the app's in the Mac app (and an installed desktop app), where no browser takes them first: only
+  // there does the screen hint at them.
+  derive keyboard = media.pointer == "fine" and media.displayMode != "browser"
+  derive keys = keyboard and keysShown and page.hasFocus
   // Beside the chat on a wide window: the conversations and the tricks.
   derive sidebar = wide and nav.tab == "chat"
   // The apps the top bar lists: the installed ones this build has a screen (a tab) for.
@@ -458,9 +488,27 @@ component App
     change(dictationOff)
   task putBack when sendLost and unsent != ""
     after(1, restoreUnsent)
+  task revealKeys when keyboard and metaAlone and not keysShown
+    after(400, showKeys)
+  // A key let go while another window has the focus sends no keyup.
+  task releaseKeys when (metaAlone or keysShown) and not page.hasFocus
+    after(1, hideKeys)
 
   action applyScheme
     setScheme(scheme)
+  // Every key, wherever the focus is. ⌘ pressed on its own starts the wait for the hints; any other key ends it,
+  // and the hints already shown stay while ⌘ does.
+  action keyDown(k: string, e: KeyboardEvent)
+    metaAlone = k == "Meta" and not e.shiftKey and not e.ctrlKey and not e.altKey
+    keysShown = keysShown and e.metaKey
+  action keyUp(k: string, e: KeyboardEvent)
+    if not e.metaKey
+      hideKeys()
+  action showKeys
+    keysShown = metaAlone
+  action hideKeys
+    metaAlone = false
+    keysShown = false
   action tick
     now = performanceNow()
   action restoreUnsent
@@ -701,7 +749,7 @@ component App
     copyText(backup.code)
 
   view
-    main navigationKey=`${top(nav).id}` navigate=follow testId="app" width="100%" height="100%"
+    main navigationKey=`${top(nav).id}` navigate=follow key=keyDown keyup=keyUp testId="app" width="100%" height="100%"
       display="flex" flex-direction="column" position="relative" viewport-fit="cover" interactive-widget="resizes-content"
       background-color="surface.page"
       color="ink.strong" font-family="family.text"
@@ -720,10 +768,12 @@ component App
                     row width="100%" max-width="46rem" align-items="center" gap=12 padding=(wide ? "22px 0 0" : "12px 0 11px")
                       if e.name == "chat" and not wide
                         button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
-                          testId="drawer-toggle" appearance="none" width=32 height=32 padding=0 display="flex"
-                          align-items="center" justify-content="center" border="1px solid line.strong"
-                          background-color="transparent" color="ink.strong"
+                          aria-keyshortcuts="Control+Meta+S" testId="drawer-toggle" appearance="none" width=32 height=32
+                          padding=0 display="flex" align-items="center" justify-content="center"
+                          border="1px solid line.strong" background-color="transparent" color="ink.strong" position="relative"
                           image "symbol:menu" width=16 height=16
+                          if keys
+                            KeyBadge(chord="Control+Meta+S", inside=false)
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
                       Initialled(word=(e.name == "chat" and pane != "chat" ? paneTitle(pane) : e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
@@ -735,12 +785,27 @@ component App
                       else if not wide
                         text formatDate(shown, time.utcOffset, "medium") class=Label
                       if wide and e.name != "chat" and e.name != "settings"
-                        button press=toggleDock aria-pressed=chatDocked testId="dock-toggle" appearance="none"
-                          display="flex" align-items="center" gap=7 padding="7px 10px" border="1px solid line.strong"
+                        // Named for what it does, as the View menu's item for it is.
+                        button press=toggleDock aria-label=(chatDocked ? "Hide chat" : "Show chat")
+                          aria-keyshortcuts="Control+Meta+C" testId="dock-toggle" appearance="none" display="flex"
+                          align-items="center" gap=7 padding="7px 10px" border="1px solid line.strong" position="relative"
                           background-color=(chatDocked ? "ink.strong" : "transparent")
                           color=(chatDocked ? "surface.page" : "ink.strong")
                           image "symbol:icon.panel" width=14 height=14 aria-hidden=true
                           text "Chat" class=Label color="inherit"
+                          if keys
+                            KeyBadge(chord="Control+Meta+C", inside=false)
+                      // New chat from any page; beside the chat on a wide window the sidebar has it.
+                      if not sidebar
+                        button press=newChat aria-label="New chat" aria-keyshortcuts="Meta+N" testId=`new-chat-${e.name}`
+                          appearance="none" width=32 height=32 padding=0 display="flex" align-items="center"
+                          justify-content="center" border="1px solid line.strong" background-color="transparent"
+                          color="ink.strong" position="relative"
+                          :hover
+                            background-color="surface.soft"
+                          image "symbol:compose" width=15 height=15
+                          if keys
+                            KeyBadge(chord="Meta+N", inside=false)
                   if e.name == "chat" and pane == "tricks"
                     TrickList(tricks=tricks, use=useTrick)
                   else if e.name == "chat" and pane == "directory"
@@ -749,7 +814,7 @@ component App
                   else if e.name == "chat"
                     for r in routines.filter(r => r.id == chat.current) key=r.id
                       RoutineBar(routine=r, busy=(pending(routineRan) or pending(routinePaused) or pending(routineDeleted)),
-                        run=runRoutine, pause=pauseRoutine, remove=askDeleteRoutine)
+                        run=runRoutine, pause=pauseRoutine, remove=askDeleteRoutine, keys=keys)
                     dialog id="confirm-routine-delete" role="alertdialog" aria-label="Delete this routine?"
                       text "It stops running, and its conversation goes with it."
                       button commandfor="confirm-routine-delete" command="close" testId="routine-delete-cancel"
@@ -853,7 +918,7 @@ component App
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
-                      canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate)
+                      canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=32 box-sizing="border-box" width="100%"
@@ -912,7 +977,7 @@ component App
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=pick("settings"))
                   // <apps:screens>
                   if e.name == "todos"
-                    AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp)
+                    AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, keys=keys)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The conversations and the tricks, beside the chat on a wide window.
@@ -922,7 +987,7 @@ component App
             aria-label="Conversations, routines and tricks"
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, pane=pane, tricks=tricks.length,
               routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, openRoutine=showRoutine,
-              openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder)
+              openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard)
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
         if docked
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
@@ -956,7 +1021,7 @@ component App
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
             Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
-              canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate)
+              canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys)
         // The apps, drawn: on a wide window a dock floating over the bottom of the page (Chat, each app's cover, and
         // Settings at the end; the open one shows its name), on a phone a bar of symbols along the bottom.
         row role="tablist" appearance="none" testId="tabs" position="absolute" box-sizing="border-box"
@@ -967,9 +1032,10 @@ component App
           align-items=(wide ? "center" : "stretch") background-color="surface.page"
           border=(wide ? "1px solid line.strong" : "none") border-top=(wide ? "1px solid line.strong" : "1px solid line.subtle")
           box-shadow=(wide ? "0 10px 28px -12px rgba(0, 0, 0, 0.35)" : "none")
-          for t in nav.tabs.filter(t => t.name != "computer" or computer.status != "none") key=t.name
+          for t, i in nav.tabs.filter(t => t.name != "computer" or computer.status != "none") key=t.name
             button role="tab" aria-controls=`panel-${t.name}` aria-selected=(nav.tab == t.name) press=pick(t.name)
-              aria-label=tabLabel(t.name, apps) title=tabLabel(t.name, apps) testId=`tab-${t.name}` appearance="none" display="flex"
+              aria-keyshortcuts=tabChord(t.name, i) aria-label=tabLabel(t.name, apps) title=tabLabel(t.name, apps)
+              testId=`tab-${t.name}` appearance="none" display="flex"
               align-items="center" justify-content="center" position="relative"
               flex-direction=(wide ? "row" : "column") flex=(wide ? "0 0 auto" : "1 1 0") gap=(wide ? 9 : 4)
               height=(wide ? "2.75rem" : "auto") min-width=(wide ? "2.75rem" : "0px") box-sizing="border-box"
@@ -997,6 +1063,8 @@ component App
               else if not wide
                 text tabLabel(t.name, apps) font-family="family.mono" font-size="0.625rem" font-weight=500
                   letter-spacing="0.1em" text-transform="uppercase" aria-hidden=true
+              if keys and tabChord(t.name, i) != ""
+                KeyBadge(chord=tabChord(t.name, i), inside=(not wide))
         // On a narrow window the sidebar opens as a drawer over everything.
         if drawer and not wide
           row position="absolute" inset=0 testId="drawer"
@@ -1005,8 +1073,10 @@ component App
               aria-label="Conversations, routines and tricks"
               Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, pane=pane,
                 tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat,
-                openRoutine=showRoutine, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder)
-            button press=toggleDrawer aria-label="Close" testId="drawer-close" appearance="none" flex=1 border="none"
+                openRoutine=showRoutine, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder,
+                keyboard=keyboard)
+            button press=toggleDrawer aria-label="Close" aria-keyshortcuts="Escape" testId="drawer-close" appearance="none"
+              flex=1 border="none"
               background-color="ink.strong" opacity=0.25
         // The masthead above everything on a wide window: the wordmark and the day.
         if wide
@@ -1375,15 +1445,20 @@ component Sidebar
     openTricks: action
     openDirectory: action
     toggleOlder: action
+    keyboard: bool
   view
     column flex=1 min-height=0 testId=`${prefix}sidebar`
       column gap=2 padding="14px 10px 12px" border-bottom="1px solid line.subtle"
-        button press=newChat testId=`${prefix}chat-new` appearance="none" display="flex" align-items="center" gap=10
-          padding="9px 10px" border="none" background-color="transparent" color="ink.strong" text-align="start"
+        // Beside the chat on a wide window ⌘N is this button's; on a narrow one, the page header's (under the drawer).
+        button press=newChat aria-keyshortcuts=(prefix == "" ? "Meta+N" : "") testId=`${prefix}chat-new`
+          appearance="none" display="flex" align-items="center" gap=10 padding="9px 10px" border="none"
+          background-color="transparent" color="ink.strong" text-align="start"
           :hover
             background-color="surface.soft"
           image "symbol:compose" width=15 height=15 aria-hidden=true
-          text "New chat" font-size="0.9375rem"
+          text "New chat" font-size="0.9375rem" flex=1
+          if keyboard
+            text "⌘N" class=Key border-color="line.subtle" testId=`${prefix}chat-new-keys` aria-hidden=true
         button press=openTricks aria-pressed=(pane == "tricks") testId=`${prefix}tricks-entry` appearance="none"
           display="flex" align-items="center" gap=10 padding="9px 10px" border="none" text-align="start"
           background-color=(pane == "tricks" ? "surface.soft" : "transparent") color="ink.strong"
@@ -1477,6 +1552,7 @@ component RoutineBar
     run: action
     pause: action
     remove: action
+    keys: bool
   view
     row justify-content="center" padding="0 20px" border-bottom="1px solid line.subtle" testId="routine-bar"
       column width="100%" max-width="46rem" gap=8 padding="14px 0"
@@ -1490,11 +1566,13 @@ component RoutineBar
           text routineLast(routine) font-size="0.875rem" color=(routine.failed ? "-exact-system-red" : "ink.muted")
             flex=1 min-width="10rem" testId="routine-last"
           row gap=8
-            button press=run(routine.id) disabled=(busy or routine.running or routine.asked) testId="routine-run"
-              display="flex" align-items="center" gap=7 padding="7px 10px" border="1px solid ink.strong"
-              background-color="ink.strong" color="surface.page"
+            button press=run(routine.id) disabled=(busy or routine.running or routine.asked) aria-keyshortcuts="Meta+R"
+              testId="routine-run" display="flex" align-items="center" gap=7 padding="7px 10px"
+              border="1px solid ink.strong" background-color="ink.strong" color="surface.page" position="relative"
               image "symbol:play" width=12 height=12 aria-hidden=true
               text "Run now" class=Label color="inherit"
+              if keys
+                KeyBadge(chord="Meta+R", inside=false)
             button press=pause(routine.id, not routine.paused) disabled=busy testId="routine-pause" padding="7px 10px"
               border="1px solid line.strong" background-color="transparent" color="ink.strong"
               :hover
@@ -1775,6 +1853,7 @@ component AppPage
     save: action
     discard: action
     undoSave: action
+    keys: bool
   slot
   view
     column flex=1 min-height=0
@@ -1787,9 +1866,11 @@ component AppPage
           button press=discard(id) testId="preview-discard" padding="7px 12px" border="1px solid ink.on-fill"
             background-color="transparent" color="ink.on-fill"
             text "Discard" class=Label color="inherit"
-          button press=save(id) testId="preview-save" padding="7px 12px" border="1px solid ink.on-fill"
-            background-color="ink.on-fill" color="fill.preview"
+          button press=save(id) aria-keyshortcuts="Meta+S" testId="preview-save" padding="7px 12px"
+            border="1px solid ink.on-fill" background-color="ink.on-fill" color="fill.preview" position="relative"
             text "Save" class=Label color="inherit"
+            if keys
+              KeyBadge(chord="Meta+S", inside=false)
       else if undo != ""
         // In line with the page's title and its Chat button above.
         row justify-content="center" padding="8px 20px 0"
@@ -1805,6 +1886,18 @@ component AppPage
             text "Undo"
       scroll id=`${id}-screen` flex=1 min-height=0
         children
+
+// A shortcut's keys on the corner of its control (which is position="relative"), shown while ⌘ is held: over its
+// corner, or `inside` a wide control that meets the window's edge (a tab along a narrow window's bottom), beside the
+// symbol at its centre.
+component KeyBadge
+  props
+    chord: string
+    inside: bool
+  view
+    text keysOf(chord) class=Key position="absolute" top=(inside ? "6px" : "-8px")
+      left=(inside ? "calc(50% + 16px)" : "auto") right=(inside ? "auto" : "-8px")
+      z-index=2 pointer-events="none" aria-hidden=true testId=`keys-${chord}`
 
 component Initialled
   props
@@ -2112,6 +2205,7 @@ component Composer
     dictating: bool
     heard: string
     dictate: action
+    keys: bool
   derive said = withSpoken(draft, heard).trim()
   // Enter sends, as a chat's composer does; Shift+Enter breaks the line, and the Enter that picks an input method's
   // candidate stays the input method's.
@@ -2144,10 +2238,12 @@ component Composer
               color=(dictating ? "-exact-system-red" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
               image "symbol:microphone" width=16 height=16
           if busy and said == ""
-            button press=stop disabled=stopping aria-label="Stop" testId=`${prefix}stop` width=38 height=38
-              min-width=38 padding=0 border="none" background-color="ink.strong" color="surface.page"
-              display="flex" align-items="center" justify-content="center"
+            button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
+              width=38 height=38 min-width=38 padding=0 border="none" background-color="ink.strong"
+              color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
               image "symbol:stop-fill" width=13 height=13
+              if keys
+                KeyBadge(chord="Meta+.", inside=false)
           else
             button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
               testId=`${prefix}send` width=38 height=38 min-width=38 padding=0 border="none"
