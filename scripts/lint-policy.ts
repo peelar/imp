@@ -124,6 +124,16 @@ const crossings = [
     says: "uses studio/, which apps/ may not",
   },
   {
+    crosses: "a context the notices watch, using the notices",
+    files: [
+      [
+        "routines/routines.ts",
+        'import type { Notices } from "../notices/notices.ts";',
+      ],
+    ],
+    says: "uses notices/, which routines/ may not",
+  },
+  {
     crosses: "a context using the files that put the host together",
     files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
     says: "a context never uses the files that put the host together",

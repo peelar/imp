@@ -36,6 +36,7 @@ import {
   graphMemory,
 } from "./memory/memory.ts";
 import { openSecrets, type Secrets } from "./secrets/secrets.ts";
+import { openNotices } from "./notices/notices.ts";
 import { shellApi } from "./shell-api.ts";
 import { type ChatGPTAccount, chatgptAccount } from "./account/account.ts";
 import { storedApps, studio } from "./studio/studio.ts";
@@ -296,7 +297,10 @@ async function openAgent(
     followTurn().catch(report("chat"));
   });
 
-  return { harness, chats, routines, tricks };
+  // What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished.
+  const notices = openNotices({ topics, chats, routines, secrets });
+
+  return { harness, chats, routines, tricks, notices };
 }
 
 export async function startHost(options: HostOptions) {
@@ -363,7 +367,7 @@ export async function startHost(options: HostOptions) {
 
   const account = chatgptAccount(options.models, topics);
 
-  const { harness, chats, routines, tricks } = await openAgent(parts, {
+  const { harness, chats, routines, tricks, notices } = await openAgent(parts, {
     gateway,
     secrets,
     account,
@@ -386,6 +390,7 @@ export async function startHost(options: HostOptions) {
       account,
       chats,
       routines,
+      notices,
       tricks,
       computer,
       memory,

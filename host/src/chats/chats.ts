@@ -27,6 +27,7 @@ import {
   type AppLabel,
   conversationState,
   lastFailed,
+  lastReply,
   firstWords,
   liveState,
   TOPIC,
@@ -38,7 +39,7 @@ import { withAppContext } from "./origin.ts";
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { TOPIC } from "./chat.ts";
 
-export { isRoutineRun, routineRun } from "./origin.ts";
+export { isRoutineRun, routineRun, saidNothingNew } from "./origin.ts";
 
 type Id = Conversation["id"];
 
@@ -142,15 +143,15 @@ function watched(options: ChatsOptions) {
 
       return await opening;
     },
-    /** Whether the imp is at work in any conversation in use. */
-    busy: async () => {
+    /** The conversations in use that the imp is at work in. */
+    working: async () => {
+      const ids = [...opened.keys()];
+
       const states = await Promise.all(
-        [...opened.keys()].map(
-          async (id) => await liveState(harness, id, context)
-        )
+        ids.map(async (id) => await liveState(harness, id, context))
       );
 
-      return states.some((live) => live.busy);
+      return ids.flatMap((id, i) => (states[i]?.busy ? [String(id)] : []));
     },
     /** The model or machine changed: every conversation in use runs with it from its next start. */
     configure: async () => {
@@ -322,7 +323,24 @@ export async function openChats(options: ChatsOptions) {
     /** The open conversation's id. */
     current: () => String(index.current),
     /** Whether the imp is at work in any conversation. */
-    busy: conversations.busy,
+    busy: async () => (await conversations.working()).length > 0,
+    /** The conversations the imp is at work in, by id. */
+    working: conversations.working,
+    /**
+     * How a conversation's last turn ended, for telling the person: its name, whether a routine runs in it, what the
+     * imp last said, and why the model failed if it did. Undefined for a conversation that is gone.
+     */
+    async outcome(id: string) {
+      const kept = index.list.find((c) => String(c.id) === id);
+
+      return kept
+        ? {
+            title: kept.title,
+            routine: kept.routine === true,
+            ...(await lastReply(await conversation(kept.id), context)),
+          }
+        : undefined;
+    },
     /** The person writes in the open conversation; its first message names it in the sidebar. */
     async submit(text: string, app: AppLabel | undefined) {
       const shown = index.list.find((c) => c.id === index.current);

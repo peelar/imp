@@ -18,9 +18,19 @@ export const withAppContext = (
 // routine's instruction, and memory's reflection skips the run, since the person said nothing in it.
 const ROUTINE = /^\[Routine: [^\]\n]*\]\n\n/;
 
+// A run that found nothing answers these words alone, so the person is not told about it (notices/notices.ts).
+const NOTHING_NEW = "Nothing new.";
+
 /** The message that starts a run of a routine. */
 export const routineRun = (name: string, instruction: string) =>
-  `[Routine: ${name.replaceAll(/[\]\n]/g, " ")}. It runs on its schedule while the person is away: do it, then answer with what they should know in a few lines, or say there is nothing new. If it needs them (a key, a choice, anything destructive or irreversible), stop and say what you need.]\n\n${instruction}`;
+  `[Routine: ${name.replaceAll(/[\]\n]/g, " ")}. It runs on its schedule while the person is away, and your answer reaches them as a notification: do it, then answer with what they should know in a few lines, its most important line first, or answer only "${NOTHING_NEW}" when there is nothing new. If it needs them (a key, a choice, anything destructive or irreversible), stop and say what you need.]\n\n${instruction}`;
+
+/** Whether a routine's run answered that it found nothing new, give or take emphasis and the full stop. */
+export const saidNothingNew = (reply: string) =>
+  reply
+    .replaceAll(/[*_`.!]/g, "")
+    .trim()
+    .toLowerCase() === "nothing new";
 
 /** Whether the person's side of a message is a routine's run, which they did not write. */
 export const isRoutineRun = (text: string) => ROUTINE.test(text);

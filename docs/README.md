@@ -30,6 +30,7 @@ These docs are for the people who run an Imp: how to install it, how its parts f
 - [Machines](machines.md): the adapter contract every machine provider implements
 - [Apps](apps.md): how an app runs, where its data lives, and how a new version reaches your screen
 - [Routines](routines.md): what the imp does on a schedule
+- [Notifications](notifications.md): what the imp tells you while you are away, and where
 - [Memory](memory.md): what the imp remembers, and how to plug in another memory system
 - [The secrets vault](vault.md): how the imp uses your API keys without ever seeing them
 - [Security model](security.md): who can reach your Imp, and where every credential lives

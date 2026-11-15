@@ -9,6 +9,7 @@
 // <apps:use>
 use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 // </apps:use>
+use showNotification, closeNotification, setAppBadge, clearAppBadge, notificationStatus, requestNotificationPermission, notificationclick, NotificationStatus, NotificationEvent from "@exact/notifications"
 use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
 
 font "Instrument Serif" = "assets/fonts/InstrumentSerif-Regular.ttf"
@@ -51,6 +52,7 @@ shape Account
   backup: Backup
   tricks: Trick[]
   routines: Routine[]
+  notices: Notice[]
 
 // A row of the transcript: "user", "assistant" (Markdown), "activity" (a tool call, in words) or "error".
 shape ChatMessage
@@ -230,6 +232,17 @@ shape Routine
   running: bool
   asked: bool
 
+// Something the person is told while they are away (host/src/notices/notices.ts), the newest first. `kind` is
+// "routine" (a run ended with something to say), "key" (the imp asks for a key or login) or "reply" (the imp finished
+// replying); `conversation` is the one it opens ("" for a key, which Settings takes). `at` grows with every notice.
+shape Notice
+  id: string
+  kind: string
+  title: string
+  body: string
+  conversation: string
+  at: number
+
 shape Reply
   ok: bool
   error: string
@@ -337,6 +350,11 @@ fn directory(): DirectoryApp[] = [
     repo="https://github.com/kuba/imp-people", symbol="symbol:people"),
   DirectoryApp(id="journal", name="Journal", description="A line a day. Your imp can write it for you from your chats.",
     repo="https://github.com/imp-apps/journal", symbol="symbol:pencil")]
+// The notice at a place in the list, or none (an empty one, from before every notice) past its end.
+fn noticeAt(notices: Notice[], i: number): Notice =
+  match notices.at(i) { case some(n) => n, case none => Notice(id="", kind="", title="", body="", conversation="", at=0) }
+// A notice's notification: one per conversation, so a newer one replaces the last, and one for the keys asked for.
+fn noticeTag(n: Notice): string = n.kind == "key" ? "key" : `conversation-${n.conversation}`
 fn routineStatus(r: Routine): string =
   r.running ? "Running now" : r.asked ? "Starting soon" : r.paused ? "Paused" : r.next == "" ? "Not scheduled" : `Next ${r.next}`
 fn routineLast(r: Routine): string = r.last == "" ? "Not run yet" : r.failed ? `Last run failed ${r.last}` : `Last ran ${r.last}`
@@ -388,11 +406,15 @@ component App
   // ⌘ held on its own, before any other key (a chord): held for a moment, it shows each control's shortcut.
   state metaAlone = false
   state keysShown = false
+  // The newest notice this page has taken in, by its `at`; -1 before the first. A page tells only what comes after:
+  // opening Imp does not tell again what happened before.
+  state noticedAt = -1
   resource page = exactPage() as shape Page
   resource speech = speechRecognitionStatus() as shape SpeechRecognitionStatus else empty()
   resource heard = speechRecognitionState(recognition=recognitionId) when recognitionId != "" as shape SpeechRecognitionState else empty()
   resource media = exactViewport() as shape Media
   resource time = exactTime() as shape Time
+  resource alerts = notificationStatus() as shape NotificationStatus
   resource host = hostOrigin(hostAddress) as shape Host else empty()
   resource account = account() when host.origin != "" as shape Account else empty()
   resource chat = chat() when signedIn as shape ChatState else empty()
@@ -423,6 +445,7 @@ component App
   mutation backupStarted as shape Reply
   mutation backupCancelled as shape Reply
   mutation backupDisconnected as shape Reply
+  mutation alertsAsked as shape NotificationStatus
   mutation listening as shape SpeechRecognitionInfo then listened
   mutation unheard as shape SpeechRecognitionInfo
   derive still = media.prefersReducedMotion
@@ -472,6 +495,11 @@ component App
   derive backup = account.backup
   derive switchError = match computerSwitched { case some(r) => r.error, case none => "" }
   derive keyError = match computerKeySaved { case some(r) => r.error, case none => "" }
+  // Notifications: what the host noticed since this page last looked, shown while no Imp window is in front, and
+  // what waits on the person (routines with a run they have not opened, keys the imp asked for) on the app's badge.
+  derive newest = noticeAt(account.notices, 0)
+  derive canNotify = alerts.available and alerts.state == "granted"
+  derive waiting = routines.filter(r => r.unread).length + secrets.requests.length
 
   task appearance mount
     after(1, applyScheme)
@@ -493,6 +521,10 @@ component App
   // A key let go while another window has the focus sends no keyup.
   task releaseKeys when (metaAlone or keysShown) and not page.hasFocus
     after(1, hideKeys)
+  task announce when signedIn key=newest.at
+    change(announceNotices)
+  task badge when signedIn and alerts.badge key=waiting
+    change(showWaiting)
 
   action applyScheme
     setScheme(scheme)
@@ -642,12 +674,45 @@ component App
     nav = select(nav, "chat")
     if id != chat.current
       send chatChanged = chatShow(id)
+    seen(id)
   // A routine's conversation, which shows what each run found and takes the person's reply.
   action showRoutine(id: string)
     pane = "chat"
     drawer = false
     nav = select(nav, "chat")
     send routineOpened = routinesOpen(id)
+    seen(id)
+  // A conversation the person opened: its notification has nothing more to tell.
+  action seen(id: string)
+    if canNotify
+      closeNotification(tag=`conversation-${id}`)
+  // New notices, while no Imp window is in front: the person is elsewhere. One answer can bring two, such as a key
+  // the imp asked for and the reply that followed it; up to three are shown, the oldest first.
+  action announceNotices
+    if noticedAt >= 0 and canNotify and not page.hasFocus
+      notify(noticeAt(account.notices, 2))
+      notify(noticeAt(account.notices, 1))
+      notify(noticeAt(account.notices, 0))
+    noticedAt = newest.at
+  action notify(n: Notice)
+    if n.at > noticedAt
+      showNotification(title=n.title, body=n.body, tag=noticeTag(n), data=`${n.kind}:${n.conversation}`)
+  // A notification clicked: its conversation opens, or Settings for a key the imp asked for.
+  action openNotice(tag: string, e: NotificationEvent)
+    let about = match e.data { case some(d) => d, case none => "" }
+    if about.startsWith("routine:")
+      showRoutine(about.slice(8))
+    else if about.startsWith("reply:")
+      showChat(about.slice(6))
+    else if about.startsWith("key:")
+      pick("settings")
+  action showWaiting
+    if waiting > 0
+      setAppBadge(contents=waiting)
+    else
+      clearAppBadge()
+  action allowNotifications
+    send alertsAsked = requestNotificationPermission()
   action runRoutine(id: string)
     send routineRan = routinesRun(id)
   action pauseRoutine(id: string, paused: bool)
@@ -763,7 +828,7 @@ component App
     copyText(backup.code)
 
   view
-    main navigationKey=`${top(nav).id}` navigate=follow key=keyDown keyup=keyUp testId="app" width="100%" height="100%"
+    main navigationKey=`${top(nav).id}` navigate=follow key=keyDown keyup=keyUp notificationclick=openNotice testId="app" width="100%" height="100%"
       display="flex" flex-direction="column" position="relative" viewport-fit="cover" interactive-widget="resizes-content"
       background-color="surface.page"
       color="ink.strong" font-family="family.text"
@@ -959,6 +1024,7 @@ component App
                           SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
                             loginError=loginError, deleteError=secretDeleteError, save=saveSecret, saveLogin=saveLogin,
                             remove=deleteSecret, dismiss=dismissSecret)
+                        NotificationSettings(alerts=alerts, asking=pending(alertsAsked), allow=allowNotifications)
                         BackupSettings(backup=backup, busy=(pending(backupStarted) or pending(backupDisconnected)),
                           connect=connectBackup, cancel=cancelBackup, disconnect=disconnectBackup, copyCode=copyBackupCode)
                         column
@@ -1774,6 +1840,36 @@ component MemorySettings
 
 // Where the apps' code is kept besides the host: every version in the host's history, and a private GitHub repository
 // the host pushes each one to, connected with a device code like the ChatGPT sign-in.
+// Whether this device tells the person what needs them. The browser or the system asks once; after a no, only its own
+// settings can turn notifications back on.
+component NotificationSettings
+  props
+    alerts: NotificationStatus
+    asking: bool
+    allow: action
+  view
+    column testId="notifications"
+      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+        text "Notifications" class=Label color="ink.strong" role="heading" aria-level=2
+        if alerts.available
+          text (alerts.state == "granted" ? "On" : "Off") class=Label testId="notifications-state"
+      text "Your imp tells you when a routine finds something, when it needs a key from you, and when it finishes a reply while you are elsewhere. This device shows them while Imp is open on it."
+        font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
+      if not alerts.available
+        text "This browser can't show notifications." font-style="italic" color="ink.muted" padding-top=12
+          testId="notifications-unavailable"
+      else if alerts.state == "denied"
+        text "Notifications are blocked for Imp. Allow them in your browser's settings for this site, or in System Settings for the app."
+          font-style="italic" color="ink.muted" padding-top=12 testId="notifications-denied"
+      else if alerts.state != "granted"
+        button press=allow disabled=asking testId="notifications-allow" align-self="flex-start"
+          margin-top=16 padding="10px 14px" border="none" background-color="AccentColor" color="ink.on-fill"
+          font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+          :disabled
+            background-color="surface.soft"
+            color="ink.faint"
+          text "Turn on notifications"
+
 component BackupSettings
   props
     backup: Backup

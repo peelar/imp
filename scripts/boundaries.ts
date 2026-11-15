@@ -21,6 +21,7 @@ export const CONTEXTS = new Map<string, readonly string[]>([
   ["tricks", []],
   ["chats", []],
   ["routines", ["chats"]],
+  ["notices", ["chats", "routines", "secrets"]],
   ["memory", ["chats"]],
   ["apps", ["machine"]],
   ["studio", ["apps"]],

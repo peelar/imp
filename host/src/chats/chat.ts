@@ -415,5 +415,30 @@ export async function lastFailed(conversation: Conversation, context: Context) {
   return message?.role === "assistant" && Boolean(message.errorMessage);
 }
 
+/** What the assistant last said in a conversation, and why the model failed if it did ("" when it did not). */
+export async function lastReply(conversation: Conversation, context: Context) {
+  const page = await conversation.entries(
+    { order: "descending" },
+    20,
+    undefined,
+    context
+  );
+
+  for (const entry of page.items) {
+    const [message] = entry.model ?? [];
+
+    if (entry.kind === "pi.assistant" && message?.role === "assistant") {
+      const text = messageText(message.content);
+      const error = message.errorMessage ?? "";
+
+      if (text || error) {
+        return { text, error };
+      }
+    }
+  }
+
+  return { text: "", error: "" };
+}
+
 /** A conversation's name in the sidebar: its first message, on one line. */
 export const titleOf = (text: string) => oneLine(text, 60);

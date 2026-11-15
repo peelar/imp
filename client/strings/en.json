@@ -1,4 +1,5 @@
 {
   "purpose.microphone": "Listens while you dictate a message to your imp.",
-  "purpose.dictation": "Writes down what you say as a message to your imp."
+  "purpose.dictation": "Writes down what you say as a message to your imp.",
+  "purpose.notifications": "Tells you when a routine finds something, when your imp needs a key, and when it finishes a reply."
 }

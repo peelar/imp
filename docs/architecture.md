@@ -41,6 +41,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `studio/` | Making apps: previews, Save, Discard and Undo, the code the host keeps, and the web builds with the apps in them | `apps` |
 | `chats/` | The conversations, and the lines the host adds to a message, such as a routine's |  |
 | `routines/` | What the imp does on a schedule, each in a conversation of its own | `chats` |
+| `notices/` | What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished | `chats`, `routines`, `secrets` |
 | `memory/` | The memory contract and the knowledge graph behind it | `chats` |
 | `secrets/` | The vault, the egress proxy and typing logins into Chrome | `machine` |
 | `computer/` | The owner's choice of computer, every machine provider, the runtime the host installs, and the screen | `machine` |

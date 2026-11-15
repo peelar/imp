@@ -4,7 +4,8 @@
 // user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
 // "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for a login: <site>", "sign in: <login>",
 // "run: <command>" and "save routine: <name> | <cron> | <instruction>" make it call the memory's, the studio's, the
-// secrets', the shell's and the routines' tools the same way. Its agent-browser knows two tricks. TEST_DATA_DIR names
+// secrets', the shell's and the routines' tools the same way, and "reply: <words>" makes it answer those words. Its
+// agent-browser knows two tricks. TEST_DATA_DIR names
 // the host's data directory, for a test that starts the host again on it.
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -96,6 +97,22 @@ const toolCall = (text: string) =>
     return asked === undefined ? [] : [call(asked.trim())];
   }).at(0);
 
+/** What the memory section put in the system prompt about the person, latest version last, as the model says it. */
+function recalled(context: Parameters<FauxResponseFactory>[0]) {
+  const sections = context.messages.flatMap((m) =>
+    m.role === "system" && m.sections?.memory ? [m.sections.memory] : []
+  );
+
+  const known = sections
+    .at(-1)
+    ?.match(/about the person:\n([^]*?)(?:\n\n|\n<\/memory>|$)/)?.[1]
+    ?.trim();
+
+  return known
+    ? `I know: ${known.replaceAll(/^- /gm, "").replaceAll("\n", "; ")}`
+    : "Nothing yet.";
+}
+
 const respond: FauxResponseFactory = (context) => {
   // A prompt section that changed since the last turn (the memory's, say) arrives as a system message after the
   // message it answers to, so the turn's last word is the last message that is not one.
@@ -137,22 +154,16 @@ const respond: FauxResponseFactory = (context) => {
     return fauxAssistantMessage(call, { stopReason: "toolUse" });
   }
 
-  // "What do you know about me?" answers with what the memory section put in the system prompt, latest version last.
+  // "reply: <words>" answers those words, as a routine's run that found something, or nothing new, does.
+  const [, words] = /\breply: ([^]+)$/.exec(text) ?? [];
+
+  if (words !== undefined) {
+    return fauxAssistantMessage(words);
+  }
+
+  // "What do you know about me?" answers with what the memory section put in the system prompt.
   if (text.includes("know about me")) {
-    const sections = context.messages.flatMap((m) =>
-      m.role === "system" && m.sections?.memory ? [m.sections.memory] : []
-    );
-
-    const known = sections
-      .at(-1)
-      ?.match(/about the person:\n([^]*?)(?:\n\n|\n<\/memory>|$)/)?.[1]
-      ?.trim();
-
-    return fauxAssistantMessage(
-      known
-        ? `I know: ${known.replaceAll(/^- /gm, "").replaceAll("\n", "; ")}`
-        : "Nothing yet."
-    );
+    return fauxAssistantMessage(recalled(context));
   }
 
   return fauxAssistantMessage("Hello from the test model.");
