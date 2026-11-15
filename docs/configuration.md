@@ -36,7 +36,7 @@ Everything that is yours lives in `DATA_DIR`, on the host. Back it up, and you h
   - `gh/`: your GitHub sign-in, for backing apps up to GitHub
   - `builds/`: the web client builds the host serves
   - `vault/`: the secrets vault (OpenBao)
-  - `egress/`: the egress proxy's CA and rules
+  - `egress/`: the egress proxy's CA, rules and password
 
 If one of the small JSON files the host keeps there is damaged, say by a full disk, the host still starts: it reads that file as empty and names it in its log. A lost `computer.json` means picking the computer again in Settings.
 

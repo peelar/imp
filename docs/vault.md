@@ -42,7 +42,7 @@ The imp uses it like the real token (`gh pr create`, `curl -H "Authorization: Be
                                                api.github.com
 ```
 
-1. agentd runs an HTTPS (CONNECT) proxy on the computer's loopback, `127.0.0.1:7071`. Every command the agent runs gets `HTTPS_PROXY`, the stand-ins, and the variables that make common tools trust Imp's CA (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`).
+1. agentd runs an HTTPS (CONNECT) proxy on the computer's loopback, `127.0.0.1:7071`. Every command the agent runs gets `HTTPS_PROXY`, the stand-ins, and the variables that make common tools trust Imp's CA (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`). `HTTPS_PROXY` carries a password (`http://imp:<password>@127.0.0.1:7071`), which curl, git, gh, Node and Python send on every CONNECT. The proxy refuses a request without it (407). The host keeps the password in `DATA_DIR/egress/proxy-password` and sends agentd only its SHA-256, so the apps' server code, which runs inside agentd with no environment, has neither.
 2. A request to a host that has a secret goes to the Imp host through the `/egress` WebSocket, which the host opened. The computer can't reach the host (it listens on localhost behind Tailscale), but the host can reach agentd on every kind of computer, the same way it reaches `/apps`. Every other host connects directly.
 3. On the host, [mitmproxy](https://mitmproxy.org) (`mitmdump` with a small addon, `host/egress/inject.py`) ends TLS with Imp's own CA, reads the value from the vault, swaps the stand-in for it or sets the configured header, and forwards the request. It removes the value from response headers and bodies before they go back, which covers endpoints that echo what they were sent.
 4. Each use is logged: in OpenBao's audit log, and as a row in **Settings → Secrets → Recent use**.
@@ -94,7 +94,8 @@ Once typed, the password is in that page on the computer, where root could read 
 
 ## Limits
 
-- **Injection gives use, not reading.** Anything on the computer can still use a key against that key's own hosts. Keep rule hosts to API hosts, and watch Recent use.
+- **Injection gives use, not reading.** The imp's commands, and anything they start, can still use a key against that key's own hosts. Keep rule hosts to API hosts, and watch Recent use.
+- **The proxy password stops the easy path, not a determined one.** An app's server code runs as the same user as the imp's commands, so code written to look for it can read the password from a running command's environment (`/proc/<pid>/environ`). Keeping app code fully away from the proxy needs it to run as another user.
 - **Clients that pin their own CA** won't trust Imp's, and fail with a TLS error on hosts that have a secret.
 - **A large response is scrubbed as it streams.** A body over 1 MB with a known length gets the value replaced by as many asterisks, so its length stays right; one without a length gets the stand-in. A compressed response is held whole and scrubbed once decoded.
 

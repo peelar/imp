@@ -179,8 +179,18 @@ const fromAgentd = async (): Promise<FromAgentd> => {
   return message;
 };
 
-const code =
-  "export default { operations: { ping: { kind: 'read', description: 'Answers pong.', params: {}, run: () => 'pong' } } }";
+// `probe` reports what app code reaches: whether it sees agentd's token, and what agentd's egress proxy (see below)
+// answers its request without the proxy password.
+const code = `import net from "node:net";
+export default { operations: {
+  ping: { kind: "read", description: "Answers pong.", params: {}, run: () => "pong" },
+  probe: { kind: "read", description: "What app code reaches.", params: { port: { type: "integer" } }, run: ({ port }) =>
+    new Promise((resolve) => {
+      const proxy = net.connect(port, "127.0.0.1", () => proxy.write("CONNECT httpbin.org:443 HTTP/1.1\\r\\nHost: httpbin.org:443\\r\\n\\r\\n"));
+      proxy.once("data", (data) => { proxy.destroy(); resolve({ token: "AGENTD_TOKEN" in process.env, proxy: data.toString().split("\\r\\n")[0] }); });
+      proxy.once("error", (error) => resolve({ error: error.message }));
+    }) },
+} };`;
 
 toAgentd({ t: "load", app: "smoke", hash: "1", code });
 
@@ -189,8 +199,6 @@ lap(`app socket: ${JSON.stringify(await fromAgentd())}`);
 toAgentd({ t: "call", id: "1", app: "smoke", name: "ping", args: {} });
 
 lap(`app call: ${JSON.stringify(await fromAgentd())}`);
-
-ws.close();
 
 // A secret for httpbin.org's basic-auth check: the request from the machine gets 200 only with the real value, which
 // the host's egress proxy adds; the machine holds only the stand-in, in its environment and nowhere else.
@@ -233,6 +241,10 @@ await withSecrets.exec(
   [
     "curl -sS -o /dev/null -w 'curl %{http_code}\\n' https://httpbin.org/basic-auth/imp/smoke-pass",
     `node -e "fetch('https://httpbin.org/basic-auth/imp/smoke-pass').then((r) => console.log('fetch', r.status))"`,
+    `node -e "require('https').get('https://httpbin.org/basic-auth/imp/smoke-pass', (r) => { console.log('https', r.statusCode); process.exit(); })"`,
+    "curl -sS -o /dev/null -w 'another host %{http_code}\\n' https://example.com",
+    // The proxy password is in HTTPS_PROXY; without it the proxy refuses the request (407).
+    `curl -sS -o /dev/null -w 'no password %{http_connect}\\n' --proxy "http://\${HTTPS_PROXY#*@}" https://httpbin.org/get 2>/dev/null`,
     "echo stand-in $SMOKE_KEY",
     `echo copies of the value: $( (grep -rl '${value}' ~ /proc/*/environ 2>/dev/null || true) | wc -l)`,
   ].join("; "),
@@ -245,6 +257,23 @@ await withSecrets.exec(
 );
 
 lap(`egress:\n${out.trim()}\nuses: ${JSON.stringify(secrets.state().uses)}`);
+
+// App code has neither agentd's token nor the proxy password, so the proxy refuses it too.
+const proxyPort = Number(
+  new URL((await machine.egress()).env.HTTPS_PROXY ?? "").port
+);
+
+toAgentd({
+  t: "call",
+  id: "2",
+  app: "smoke",
+  name: "probe",
+  args: { port: proxyPort },
+});
+
+lap(`app code: ${JSON.stringify(await fromAgentd())}`);
+
+ws.close();
 
 // A login for a public test site: the agent opens its sign-in page with agent-browser, and the host types the login
 // into that browser over DevTools; the site's next page is its members' area, /secure, which the agent's own

@@ -360,6 +360,8 @@ function load({ app, hash, code }: Extract<ToAgentd, { t: "load" }>) {
   const worker = new Worker(path.join(here, "worker.mjs"), {
     workerData: { appId: app, code },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
+    // App code gets no environment: not agentd's token, nor anything a command gets.
+    env: {},
     stdout: false,
     stderr: false,
   });

@@ -5,9 +5,13 @@
 // itself. Every other request goes out from here directly, as it would without the proxy. The rule list holds host
 // names only; values never come to the machine.
 //
+// The proxy takes a request only with the proxy password (Proxy-Authorization: Basic), which the host gives the
+// commands it starts in their proxy variables. The proxy keeps only the password's hash, which the host sends on the
+// control socket, so app code in agentd's workers, which does not get those variables, cannot use the proxy.
+//
 // The host strips this file's types and installs it beside agentd.mjs (src/computer/runtime.ts). Import only types,
 // Node's own modules and ws.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
 import path from "node:path";
@@ -108,24 +112,35 @@ export function egressProxy({ port, dir }: EgressProxyOptions) {
     tunnel.socket.resume();
   };
 
+  /** Sends a request with the proxy password to the host or straight out; refuses any other. */
+  const route = async (socket: Socket, head: Buffer, end: number) => {
+    const target = connectTarget(head);
+
+    if (!target) {
+      refuse(
+        socket,
+        "405 Method Not Allowed",
+        "Imp's proxy only carries HTTPS (CONNECT).\n"
+      );
+    } else if (!(await control.allows(proxyPassword(head, end)))) {
+      refuse(
+        socket,
+        "407 Proxy Authentication Required",
+        "Imp's proxy takes requests only from the commands Imp starts, with the password in their HTTPS_PROXY.\n"
+      );
+    } else if (control.handles(target.hostname) && target.port === "443") {
+      await viaHost(socket, head);
+    } else {
+      direct(socket, target, head.subarray(end + 4));
+    }
+  };
+
   const server = createServer((socket) => {
     readHead(socket, (head, end) => {
-      const target = connectTarget(head);
-
-      if (!target) {
-        refuse(
-          socket,
-          "405 Method Not Allowed",
-          "Imp's proxy only carries HTTPS (CONNECT).\n"
-        );
-      } else if (control.handles(target.hostname) && target.port === "443") {
-        viaHost(socket, head).catch((cause: unknown) => {
-          console.error(`egress proxy: ${String(cause)}`);
-          socket.destroy();
-        });
-      } else {
-        direct(socket, target, head.subarray(end + 4));
-      }
+      route(socket, head, end).catch((cause: unknown) => {
+        console.error(`egress proxy: ${String(cause)}`);
+        socket.destroy();
+      });
     });
   });
 
@@ -151,9 +166,13 @@ export function egressProxy({ port, dir }: EgressProxyOptions) {
   };
 }
 
-/** The host's control socket: the newest one, the host names it sent, and the requests waiting for it. */
+const sha256 = (text: string) => createHash("sha256").update(text).digest();
+
+/** The host's control socket: the newest one, what it sent, and the requests waiting for it. */
 function hostControl(writeCa: (pem: string) => void) {
   let current: WebSocket | undefined;
+  /** The hash of the proxy password; undefined until the host first sent it. */
+  let passwordHash: Buffer | undefined;
   /** The host names whose requests go to the host. */
   let hosts = new Set<string>();
   /** Waiting for the host's control socket: called with it. */
@@ -161,6 +180,7 @@ function hostControl(writeCa: (pem: string) => void) {
 
   const configure = (ws: WebSocket, message: ToEgress) => {
     hosts = new Set(message.hosts.map((host) => host.toLowerCase()));
+    passwordHash = Buffer.from(message.passwordHash, "hex");
 
     if (message.ca) {
       writeCa(message.ca);
@@ -173,9 +193,44 @@ function hostControl(writeCa: (pem: string) => void) {
     }
   };
 
+  /** The control socket: the open one, else the next one once it sent its rules; undefined after `ms` without one. */
+  const within = async (ms: number) => {
+    if (current?.readyState === WebSocket.OPEN) {
+      return current;
+    }
+
+    return await new Promise<WebSocket | undefined>((resolve) => {
+      const done = (ws: WebSocket) => {
+        clearTimeout(timer);
+        resolve(ws);
+      };
+
+      const timer = setTimeout(() => {
+        waiters = waiters.filter((waiter) => waiter !== done);
+        resolve(undefined);
+      }, ms);
+
+      waiters.push(done);
+    });
+  };
+
   return {
     /** Whether requests to `hostname` go to the host. */
     handles: (hostname: string) => hosts.has(hostname.toLowerCase()),
+    /**
+     * Whether `password` is the proxy password. A restarted agentd learns its hash when the host connects again, so it
+     * waits up to 10 seconds for that.
+     */
+    allows: async (password: string) => {
+      if (!passwordHash) {
+        await within(10_000);
+      }
+
+      return (
+        passwordHash !== undefined &&
+        timingSafeEqual(sha256(password), passwordHash)
+      );
+    },
     accept: (ws: WebSocket) => {
       current?.close(4000, "replaced by a newer host connection");
       current = ws;
@@ -190,26 +245,7 @@ function hostControl(writeCa: (pem: string) => void) {
         }
       });
     },
-    /** The control socket: the open one, else the next one once it sent its rules; undefined after `ms` without one. */
-    within: async (ms: number) => {
-      if (current?.readyState === WebSocket.OPEN) {
-        return current;
-      }
-
-      return await new Promise<WebSocket | undefined>((resolve) => {
-        const done = (ws: WebSocket) => {
-          clearTimeout(timer);
-          resolve(ws);
-        };
-
-        const timer = setTimeout(() => {
-          waiters = waiters.filter((waiter) => waiter !== done);
-          resolve(undefined);
-        }, ms);
-
-        waiters.push(done);
-      });
-    },
+    within,
   };
 }
 
@@ -292,9 +328,27 @@ function connectTarget(head: Buffer): Target | undefined {
     : undefined;
 }
 
+/** The password in a request's Proxy-Authorization (Basic) header; empty when it has none. */
+function proxyPassword(head: Buffer, end: number) {
+  const [, encoded = ""] =
+    /^proxy-authorization:[ \t]*basic[ \t]+(\S+)/im.exec(
+      head.subarray(0, end).toString("latin1")
+    ) ?? [];
+
+  const credentials = Buffer.from(encoded, "base64").toString("utf-8");
+  const colon = credentials.indexOf(":");
+
+  return colon === -1 ? "" : credentials.slice(colon + 1);
+}
+
 function refuse(socket: Socket, status: string, reason: string) {
+  // A client that waits to be asked for the password before it sends it is asked.
+  const challenge = status.startsWith("407")
+    ? 'proxy-authenticate: Basic realm="imp"\r\n'
+    : "";
+
   socket.end(
-    `HTTP/1.1 ${status}\r\ncontent-type: text/plain\r\ncontent-length: ${Buffer.byteLength(reason)}\r\nconnection: close\r\n\r\n${reason}`
+    `HTTP/1.1 ${status}\r\n${challenge}content-type: text/plain\r\ncontent-length: ${Buffer.byteLength(reason)}\r\nconnection: close\r\n\r\n${reason}`
   );
 }
 

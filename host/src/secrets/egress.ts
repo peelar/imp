@@ -5,7 +5,13 @@
 // (egress-proxy.ts). mitmproxy ends TLS with Imp's own CA, which agentd adds to the machine's CA bundle, and its addon
 // (egress/inject.py) puts the secret on the request and takes it out of the response. The host records each use.
 //
+// agentd's proxy takes a request only with the proxy password, which the host puts in the commands' proxy variables
+// and sends the proxy as a hash. The app workers run in agentd's process and get neither, so app code cannot ride on the
+// owner's secrets, or on the proxy at all.
+//
 // This file owns the host's sockets to the machine: the control socket, and one stream socket per tunnel.
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -54,13 +60,42 @@ function parse(frame: RawData): FromEgress | undefined {
   }
 }
 
+/**
+ * The password agentd's proxy takes requests with. It is kept in DATA_DIR/egress, so the commands a host started
+ * before it restarted can still use the proxy.
+ */
+function proxyPassword(dir: string) {
+  const file = path.join(dir, "proxy-password");
+  const kept = existsSync(file) ? readFileSync(file, "utf-8").trim() : "";
+
+  if (/^[0-9a-f]{64}$/.test(kept)) {
+    return kept;
+  }
+
+  const made = randomBytes(32).toString("hex");
+
+  writeFileSync(file, made, { mode: 0o600 });
+
+  return made;
+}
+
+/** A proxy URL such as http://127.0.0.1:7071 with the proxy password in it, which clients send on every CONNECT. */
+const withPassword = (proxy: string, password: string) =>
+  proxy.replace("://", `://imp:${password}@`);
+
 export function openEgress(options: EgressOptions) {
+  const dir = path.join(options.dataDir, "egress");
+
   const proxy = mitmProxy({
-    dir: path.join(options.dataDir, "egress"),
+    dir,
     toolsDir: options.toolsDir,
     vault: options.vault,
     onUse: options.onUse,
   });
+
+  // mitmProxy made the folder.
+  const password = proxyPassword(dir);
+  const passwordHash = createHash("sha256").update(password).digest("hex");
 
   /** The control socket to the current machine's agentd. */
   let control: Control | undefined;
@@ -70,6 +105,7 @@ export function openEgress(options: EgressOptions) {
       t: "config",
       hosts: proxy.hosts(),
       ca: proxy.caCertificate(),
+      passwordHash,
     } satisfies ToEgress);
 
   /** A tunnel agentd asked for: a stream socket to it, piped into mitmproxy. */
@@ -152,6 +188,14 @@ export function openEgress(options: EgressOptions) {
         control.ws.send(config());
       }
     },
+    /** A command's environment for the machine's proxy, its proxy variables given the proxy password. */
+    commandEnv: (env: Readonly<Record<string, string>>) =>
+      Object.fromEntries(
+        Object.entries(env).map(([name, value]) => [
+          name,
+          /^https?_proxy$/i.test(name) ? withPassword(value, password) : value,
+        ])
+      ),
     /** The agent moved to another machine: drop the control socket; the next command opens one there. */
     disconnect: () => {
       control?.ws.close();

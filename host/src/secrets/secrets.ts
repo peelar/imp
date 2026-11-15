@@ -156,7 +156,7 @@ async function commandEnv({
       egress.connect(running),
     ]);
 
-    return { ...env, ...standIns(secrets) };
+    return { ...egress.commandEnv(env), ...standIns(secrets) };
   } catch (cause) {
     // The command still runs; its requests to a secret's hosts fail with the proxy's reason.
     console.error(`secrets: ${why(cause)}`);
