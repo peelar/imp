@@ -118,9 +118,9 @@ test("the computer's state rides on the account stream, and the screen's page ha
   assert.equal(account.computer.kind, "dev");
   assert.equal(account.computer.name, "This computer (development)");
 
-  // host/src/screen.html is a tab of its own and reads the computer's state from here.
+  // host/src/screen.html, in a tab of its own, reads the computer's state from here.
   const computer = await first("computer");
-  const page = await fetch(`${base}/computer`);
+  const page = await fetch(`${base}/computer/screen`);
 
   assert.ok(isRow(computer));
   assert.equal(computer.name, "This computer (development)");

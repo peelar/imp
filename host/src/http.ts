@@ -162,7 +162,7 @@ function serveFile(options: HttpOptions, { req, res, url }: Request): boolean {
     return true;
   }
 
-  // The computer's screen, in a tab of its own.
+  // The computer's screen, which the shell's Computer tab embeds; /computer itself is the shell's.
   if (serveScreenPage(pathname, res)) {
     return true;
   }

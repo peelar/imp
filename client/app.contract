@@ -25,6 +25,8 @@ routes nav
   // <apps:tabs>
   tab todos "/todos"
   // </apps:tabs>
+  // The imp's computer: its screen, beside the chat on a wide window, as an app's page is.
+  tab computer "/computer"
   tab settings "/settings"
 
 // Where the host answers: the page's own origin on the web, API_BASE_URL in a native build.
@@ -272,9 +274,9 @@ fn givenName(email: string): string =
 fn hourOf(ms: number, offset: number): number = floor(((ms + offset * 60000) % 86400000) / 3600000)
 fn greeting(hour: number): string = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
 fn tabLabel(name: string, apps: AppTile[]): string =
-  name == "chat" ? "Chat" : name == "settings" ? "Settings" : match first(apps.filter(a => a.id == name)) { case some(a) => a.name, case none => capitalized(name) }
+  name == "chat" ? "Chat" : name == "settings" ? "Settings" : name == "computer" ? "Computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.name, case none => capitalized(name) }
 fn tabSymbol(name: string, apps: AppTile[]): string =
-  name == "chat" ? "symbol:messages" : name == "settings" ? "symbol:settings" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:layers" }
+  name == "chat" ? "symbol:messages" : name == "settings" ? "symbol:settings" : name == "computer" ? "symbol:icon.computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:layers" }
 fn tabCover(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.cover, case none => "" }
 fn hasDraft(name: string, apps: AppTile[]): bool =
@@ -406,7 +408,7 @@ component App
   derive sidebar = wide and nav.tab == "chat"
   // The apps the top bar lists: the installed ones this build has a screen (a tab) for.
   derive shownApps = apps.filter(a => nav.tabs.map(t => t.name).includes(a.id))
-  derive openAppName = match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
+  derive openAppName = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
   derive signedIn = account.status == "signedIn"
   derive shown = time.epochAtZero + now
   derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
@@ -662,10 +664,10 @@ component App
     send computerKeySaved = computerSetCloudKey(key)
   action retryComputer
     send computerRetried = computerRetry()
-  // The computer's screen, which the host serves: on the web a new tab, in the apps the default browser. It takes the
-  // app's appearance along.
+  // The computer's screen in a window of its own, which the host serves: on the web a new tab, in the apps the default
+  // browser. It takes the app's appearance along. The Computer tab shows the same page.
   action openScreen
-    openURL(`${host.origin}/computer?scheme=${scheme}`)
+    openURL(`${host.origin}/computer/screen?scheme=${scheme}`)
   action copyComputerCommand
     copyText(computer.command)
   action copyComputerPolicy
@@ -799,9 +801,9 @@ component App
                                   text a.name font-family="family.display" font-size="1.375rem" line-height=1.1
                                   text a.description font-size="0.9375rem" color="ink.muted" line-clamp=1
                                 text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
-                            // The imp's computer, as an app: its screen opens in a tab, to watch the imp work or take over.
+                            // The imp's computer, as an app: its screen, to watch the imp work or take over.
                             if computer.status != "none"
-                              button press=openScreen display="flex" align-items="center" gap=14 padding="14px 0"
+                              button press=pick("computer") display="flex" align-items="center" gap=14 padding="14px 0"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId="app-computer"
                                 transition="background-color 120ms ease"
@@ -814,7 +816,7 @@ component App
                                   text "Computer" font-family="family.display" font-size="1.375rem" line-height=1.1
                                   text `${computer.name}. Watch your imp work, or take over.` font-size="0.9375rem"
                                     color="ink.muted" line-clamp=1
-                                text "↗" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+                                text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
                             button press=startApp display="flex" align-items="center" gap=14 padding="14px 0"
                               background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                               text-align="start" color="ink.strong" testId="app-new"
@@ -872,7 +874,7 @@ component App
                         ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
                           switchError=(keyError != "" ? keyError : switchError), setCloudKey=setCloudKey,
                           refreshing=pending(computerRefreshed), useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
-                          retry=retryComputer, openScreen=openScreen, copyCommand=copyComputerCommand, copyPolicy=copyComputerPolicy)
+                          retry=retryComputer, openScreen=pick("computer"), copyCommand=copyComputerCommand, copyPolicy=copyComputerPolicy)
                         MemorySettings(memory=memory, forget=forget)
                         for r in [secretRound] key=`${r}`
                           SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
@@ -905,6 +907,9 @@ component App
                         text "Cancel"
                       button press=signOut commandfor="confirm-signout" command="close" destructive=true testId="signout-confirm"
                         text "Sign out"
+                  if e.name == "computer"
+                    ComputerScreen(computer=computer, src=`${host.origin}/computer/screen?embed&scheme=${scheme}`,
+                      shown=(nav.tab == "computer"), openTab=openScreen, setUp=pick("settings"))
                   // <apps:screens>
                   if e.name == "todos"
                     AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp)
@@ -945,7 +950,8 @@ component App
             if chat.messages.length == 0 and not chat.busy
               column flex=1 min-height=0 justify-content="flex-end" padding="24px 18px" gap=8 testId="side-empty"
                 Initialled(word=`Ask about ${openAppName}.`, size="1.75rem", heading=3)
-                text "Your imp can read it, change it, and build on it while you watch." font-style="italic" color="ink.muted"
+                text (nav.tab == "computer" ? "Ask your imp to do something on it, and watch it work." : "Your imp can read it, change it, and build on it while you watch.")
+                  font-style="italic" color="ink.muted"
             else
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
             Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
@@ -961,7 +967,7 @@ component App
           align-items=(wide ? "center" : "stretch") background-color="surface.page"
           border=(wide ? "1px solid line.strong" : "none") border-top=(wide ? "1px solid line.strong" : "1px solid line.subtle")
           box-shadow=(wide ? "0 10px 28px -12px rgba(0, 0, 0, 0.35)" : "none")
-          for t in nav.tabs key=t.name
+          for t in nav.tabs.filter(t => t.name != "computer" or computer.status != "none") key=t.name
             button role="tab" aria-controls=`panel-${t.name}` aria-selected=(nav.tab == t.name) press=pick(t.name)
               aria-label=tabLabel(t.name, apps) title=tabLabel(t.name, apps) testId=`tab-${t.name}` appearance="none" display="flex"
               align-items="center" justify-content="center" position="relative"
@@ -1825,6 +1831,49 @@ component Feature
         text title font-family="family.display" font-size="1.375rem" line-height=1.15
         text message color="ink.muted" font-size="0.9375rem" line-height=1.45
 
+// The Computer tab: the computer's live screen, which the host serves as a page of its own, while the computer is ready;
+// otherwise what it is doing, or a way to choose one.
+component ComputerScreen
+  props
+    computer: Computer
+    src: string
+    shown: bool
+    openTab: action
+    setUp: action
+  view
+    column flex=1 min-height=0 testId="computer-page"
+      row align-items="center" gap=10 padding="10px 20px" border-bottom="1px solid line.subtle"
+        row width=6 height=6 aria-hidden=true
+          background-color=(computer.status == "ready" ? "-exact-system-green" : computer.status == "failed" ? "-exact-system-red" : "ink.faint")
+        text (computer.name == "" ? "No computer yet" : computer.name) font-size="0.9375rem" flex=1 min-width=0
+          line-clamp=1 testId="computer-page-name"
+        text computerStatus(computer.status) class=Label testId="computer-page-status"
+        if computer.status == "ready"
+          button press=openTab testId="computer-new-tab" display="flex" align-items="center" gap=6 padding="6px 10px"
+            border="1px solid line.strong" background-color="transparent" color="ink.strong"
+            :hover
+              background-color="surface.soft"
+            text "New window" class=Label color="inherit"
+            text "↗" aria-hidden=true font-family="family.mono"
+      // Connected only while the tab is open: a watched screen keeps the computer awake.
+      if computer.status == "ready" and shown
+        iframe src=src title="Your imp's computer" testId="computer-frame" flex=1 min-height=0 width="100%"
+          border="none"
+      else if computer.status != "ready"
+        column flex=1 min-height=0 align-items="center" justify-content="center" gap=12 padding="24px 20px"
+          text-align="center" testId="computer-waiting"
+          image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=28 height=28 aria-hidden=true
+          text (computer.status == "none" ? "Your imp has no computer yet." : computer.status == "failed" ? `Could not reach ${computer.name}.` : `Starting ${computer.name}…`)
+            font-family="family.display" font-size="1.625rem" line-height=1.2 max-width="30rem"
+          text (computer.status == "none" ? "Give it Imp cloud, or a Linux computer of yours on Tailscale." : computer.status == "failed" ? computer.error : "A computer that slept wakes up in a few seconds.")
+            color="ink.muted" font-size="0.9375rem" max-width="34rem" overflow-wrap="anywhere"
+          if computer.status == "none" or computer.status == "failed"
+            button press=setUp testId="computer-set-up" padding="8px 12px" border="1px solid line.strong"
+              background-color="transparent" color="ink.strong"
+              :hover
+                background-color="surface.soft"
+              text "Open Settings" class=Label color="inherit"
+
 // Where the agent works: the machine now, Imp cloud's sizes, and the computers on the person's tailnet with the two
 // things to do once so one of them can be chosen.
 component ComputerSettings
@@ -1877,7 +1926,7 @@ component ComputerSettings
             :hover
               background-color="surface.soft"
             text "Open screen"
-            text "↗" aria-hidden=true
+            text "→" aria-hidden=true
       if computer.status == "failed" and computer.error != ""
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"

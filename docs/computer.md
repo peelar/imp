@@ -1,6 +1,6 @@
 # The agent's computer
 
-The imp works on a Linux computer of its own. Its read, write, edit and bash tools run there, each app's server code runs there in a worker, and it has a desktop with Chrome that you can watch and take over from **Computer** in the app.
+The imp works on a Linux computer of its own. Its read, write, edit and bash tools run there, each app's server code runs there in a worker, and it has a desktop with Chrome that you can watch and take over from the **Computer** tab in the app. On a wide window the screen sits beside the chat, so you can ask the imp to do something and watch it work; **New window** opens it on its own. The screen connects only while the tab is open, because a watched computer stays awake.
 
 You pick the computer in **Settings**. Both kinds sit behind the same [machine adapter contract](machines.md), and wherever the computer runs, the host decides what is installed on it.
 

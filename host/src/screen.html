@@ -1,6 +1,9 @@
 <!doctype html>
 <!-- The computer's screen: noVNC over the host's /api/computer/screen, with the computer's name and status from the
-     live `computer` source. Served by screen.ts at /computer. -->
+     live `computer` source. Served by screen.ts at /computer/screen. The shell's Computer tab embeds it as
+     /computer/screen?embed, shows it only while the computer is ready, and draws the name and status itself: the
+     embedded page has no header and opens no stream of its own, because the shell's streams already use five of the six
+     connections a browser opens to a host over HTTP/1.1. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -51,6 +54,7 @@
 	#overlay[hidden] { display: none; }
 	#message { font: 400 1.75rem/1.2 "Instrument Serif", Georgia, serif; max-width: 30rem; }
 	#detail { color: #9b9b97; max-width: 34rem; overflow-wrap: anywhere; }
+	body.embedded header { display: none; }
 	@media (max-width: 560px) { #fullscreen { display: none; } h1 { font-size: 1.25rem; } }
 </style>
 </head>
@@ -74,6 +78,8 @@
 	// The app opens this page with its appearance (?scheme=light or dark); "system" leaves it to the browser.
 	const scheme = new URLSearchParams(location.search).get("scheme");
 	if (scheme === "light" || scheme === "dark") document.documentElement.style.colorScheme = scheme;
+	const embedded = new URLSearchParams(location.search).has("embed");
+	document.body.classList.toggle("embedded", embedded);
 	const socket = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/computer/screen`;
 	let rfb;
 	let connected = false;
@@ -116,7 +122,8 @@
 			connected = true;
 			attempts = 0;
 			$("overlay").hidden = true;
-			rfb.focus();
+			// In the shell the screen takes the keyboard when clicked, not from the chat's composer as it connects.
+			if (!embedded) rfb.focus();
 			render();
 		});
 		rfb.addEventListener("disconnect", () => {
@@ -124,7 +131,7 @@
 			connected = false;
 			attempts++;
 			render();
-			if (computer.status !== "ready") return;
+			if (!embedded && computer.status !== "ready") return;
 			// The machine may still be setting its screen up, or have moved; try again, less often each time.
 			const wait = Math.min(30, 2 ** Math.min(attempts, 5));
 			show("The screen is not available right now.", `Trying again in ${wait} seconds.`);
@@ -132,13 +139,17 @@
 		});
 	}
 
-	// The host streams the computer's state; connect whenever it is ready.
-	const live = new EventSource("/api/live/computer");
-	live.onmessage = (event) => {
-		computer = JSON.parse(event.data);
-		render();
-		if (computer.status === "ready" && !rfb) connect();
-	};
+	if (embedded) {
+		connect();
+	} else {
+		// The host streams the computer's state; connect whenever it is ready.
+		const live = new EventSource("/api/live/computer");
+		live.onmessage = (event) => {
+			computer = JSON.parse(event.data);
+			render();
+			if (computer.status === "ready" && !rfb) connect();
+		};
+	}
 
 	$("reconnect").onclick = () => {
 		attempts = 0;

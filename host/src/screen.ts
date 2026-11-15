@@ -1,5 +1,5 @@
-// The computer's screen in a browser tab: /computer serves a noVNC page (screen.html), and its WebSocket,
-// /api/computer/screen, is bridged to the current machine's screen (`Machine.screen()`). Only the owner's pages reach
+// The computer's screen: /computer/screen serves a noVNC page (screen.html), which the shell's Computer tab embeds
+// (`?embed`) and which also opens in a tab of its own. Its WebSocket, /api/computer/screen, is bridged to the current machine's screen (`Machine.screen()`). Only the owner's pages reach
 // it: the host checks the Tailscale login as for every request, and the page's origin, so another site the owner has
 // open cannot connect.
 import { readFileSync } from "node:fs";
@@ -32,12 +32,12 @@ export type ScreenUpgrade = {
 
 export type ScreenSockets = ReturnType<typeof screenSockets>;
 
-/** Serves the page at /computer and noVNC's modules under /computer/novnc/; false for any other path. */
+/** Serves the page at /computer/screen and noVNC's modules under /computer/novnc/; false for any other path. */
 export function serveScreenPage(
   pathname: string,
   res: ServerResponse
 ): boolean {
-  if (pathname === "/computer" || pathname === "/computer/") {
+  if (pathname === "/computer/screen" || pathname === "/computer/screen/") {
     res.writeHead(200, {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-cache",
