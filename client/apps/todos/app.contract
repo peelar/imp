@@ -1,5 +1,5 @@
-// The Todos app's screen. The shell feeds it: each prop names an operation in server.ts, `list` the read and `add`
-// and `setDone` the writes (see host/src/shell.ts).
+// The Todos app's screen. The shell feeds it: each prop names an operation in server.ts, `list` the read and `add`,
+// `setDone`, `rename` and `remove` the writes (see host/src/shell.ts).
 
 shape Todo
   id: string
@@ -8,7 +8,6 @@ shape Todo
 
 fn leftText(n: number): string = `${n} ${n == 1 ? "todo" : "todos"} left`
 fn percent(done: number, all: number): string = all == 0 ? "0%" : `${done * 100 / all}%`
-fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
 
 // A square check: an empty box while open, filled in ink once done.
 component Check
@@ -27,25 +26,103 @@ component Check
       if todo.done
         image "symbol:checkmark" width=12 height=12 aria-hidden=true
 
+// A small square button with a symbol, for a row's Rename and Delete.
+component RowButton
+  props
+    symbol: string
+    label: string
+    testId: string
+    press: action
+  view
+    button press=press aria-label=label title=label testId=testId appearance="none" width=28 height=28 min-width=28
+      padding=0 display="flex" align-items="center" justify-content="center" border="none"
+      background-color="transparent" color="ink.faint"
+      :hover
+        color="ink.strong"
+        background-color="surface.soft"
+      image symbol width=14 height=14 aria-hidden=true
+
+// One todo: its check, its title (a field while it is renamed), and Rename and Delete.
+component TodoRow
+  props
+    todo: Todo
+    editing: bool
+    editDraft: string
+    toggle: action
+    startEdit: action
+    editTitle: action
+    saveEdit: action
+    cancelEdit: action
+    remove: action
+  action editKey(k: string)
+    if k == "Escape"
+      preventDefault()
+      cancelEdit()
+  view
+    row align-items="center" gap=14 padding="13px 0" border-bottom="1px solid line.subtle"
+      Check(todo=todo, toggle=toggle)
+      if editing
+        input id=`todo-rename-${todo.id}` value=editDraft input=editTitle submit=saveEdit key=editKey autofocus=true
+          aria-label=`Rename ${todo.title}` testId=`todo-rename-${todo.id}` flex=1 min-width=0 padding="4px 8px"
+          border="1px solid line.strong" background-color="transparent" outline="none" font-family="family.text"
+          font-size="1.0625rem" color="ink.strong"
+        button press=saveEdit disabled=(editDraft.trim() == "") testId=`todo-rename-save-${todo.id}` padding="6px 10px"
+          border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.6875rem"
+          letter-spacing="0.1em" text-transform="uppercase"
+          :disabled
+            background-color="surface.soft"
+            color="ink.faint"
+          text "Save"
+        button press=cancelEdit testId=`todo-rename-cancel-${todo.id}` padding="6px 4px" border="none"
+          background-color="transparent" color="ink.muted" font-family="family.mono" font-size="0.6875rem"
+          letter-spacing="0.1em" text-transform="uppercase"
+          :hover
+            color="ink.strong"
+          text "Cancel"
+      else
+        text todo.title flex=1 min-width=0 overflow-wrap="break-word" font-size="1.0625rem"
+          color=(todo.done ? "ink.muted" : "ink.strong")
+          text-decoration-line=(todo.done ? "line-through" : "none") testId=`todo-${todo.id}`
+        RowButton(symbol="symbol:pencil", label=`Rename ${todo.title}`, testId=`todo-edit-${todo.id}`,
+          press=startEdit(todo.id, todo.title))
+        RowButton(symbol="symbol:delete", label=`Delete ${todo.title}`, testId=`todo-delete-${todo.id}`,
+          press=remove(todo.id))
+
 component Screen
   props
     list: Todo[]
     add: action
     setDone: action
+    rename: action
+    remove: action
   state draft = ""
+  // The todo being renamed, and its title as it is typed.
+  state editing = ""
+  state editDraft = ""
   action edit(value: string)
     draft = value
   action addDraft
     if draft.trim() != ""
       add(draft.trim())
       draft = ""
+  action startEdit(id: string, title: string)
+    editing = id
+    editDraft = title
+  action editTitle(value: string)
+    editDraft = value
+  action saveEdit
+    if editDraft.trim() != ""
+      rename(editing, editDraft.trim())
+      editing = ""
+  action cancelEdit
+    editing = ""
   view
     column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=28 box-sizing="border-box" width="100%"
       column gap=12
         row align-items="baseline" justify-content="space-between" gap=10
           text leftText(list.filter(t => not t.done).length) font-family="family.display" font-size="2.25rem"
             line-height=1.05 testId="todos-left"
-          text `${numbered(list.filter(t => t.done).length)} done` font-family="family.mono" font-size="0.6875rem"
+          text `${list.filter(t => t.done).length} done` font-family="family.mono" font-size="0.6875rem"
             letter-spacing="0.12em" text-transform="uppercase" color="ink.muted"
         row height=2 background-color="line.subtle" overflow="hidden" aria-hidden=true
           row height=2 width=percent(list.filter(t => t.done).length, list.length) background-color="AccentColor"
@@ -67,22 +144,19 @@ component Screen
             text "Open" font-family="family.mono" font-size="0.6875rem" font-weight=500 letter-spacing="0.12em"
               text-transform="uppercase" role="heading" aria-level=2
           for t in list.filter(x => not x.done) key=t.id
-            row align-items="center" gap=14 padding="13px 0" border-bottom="1px solid line.subtle"
-              Check(todo=t, toggle=setDone)
-              text t.title flex=1 min-width=0 overflow-wrap="break-word" font-size="1.0625rem" testId=`todo-${t.id}`
+            TodoRow(todo=t, editing=(editing == t.id), editDraft=editDraft, toggle=setDone, startEdit=startEdit,
+              editTitle=editTitle, saveEdit=saveEdit, cancelEdit=cancelEdit, remove=remove)
       if list.filter(t => t.done).length > 0
         column
           row padding-bottom=10 border-bottom="1px solid ink.strong"
             text "Completed" font-family="family.mono" font-size="0.6875rem" font-weight=500 letter-spacing="0.12em"
               text-transform="uppercase" role="heading" aria-level=2
           for t in list.filter(x => x.done) key=t.id
-            row align-items="center" gap=14 padding="13px 0" border-bottom="1px solid line.subtle"
-              Check(todo=t, toggle=setDone)
-              text t.title flex=1 min-width=0 overflow-wrap="break-word" color="ink.muted" font-size="1.0625rem"
-                text-decoration-line="line-through" testId=`todo-${t.id}`
+            TodoRow(todo=t, editing=(editing == t.id), editDraft=editDraft, toggle=setDone, startEdit=startEdit,
+              editTitle=editTitle, saveEdit=saveEdit, cancelEdit=cancelEdit, remove=remove)
       if list.length == 0
         column gap=14 align-items="center" padding-top=16 testId="todos-empty"
-          image "assets/art/list.jpg" alt="An engraving of a hand ticking a checklist" width=128 height=128
+          image "assets/art/todos.jpg" alt="An engraving of a hand ticking a checklist" width=128 height=128
             object-fit="cover" border="1px solid line.subtle" box-sizing="border-box"
           text "Nothing to do" font-family="family.display" font-size="1.625rem" role="heading" aria-level=2
-          text "Add a todo above, or ask the assistant in Chat." color="ink.muted" font-style="italic" text-align="center"
+          text "Add a todo above, or ask your imp in Chat." color="ink.muted" font-style="italic" text-align="center"

@@ -16,7 +16,8 @@ const SHOWN = 80;
 
 /**
  * One row of the transcript. `role` is "user", "assistant" (Markdown in `text`), "activity" (a tool call: `title`,
- * `detail`, `icon`, and `failed` when it errored), "error" (the model failed: `text` says why), or "thinking" (the
+ * `detail`, `icon`, and `failed` when it errored, with a title that says so and `text` the error), "error" (the model
+ * failed: `text` says why), or "thinking" (the
  * last row while the assistant works with no words on the way).
  */
 export type ChatMessage = {
@@ -96,27 +97,75 @@ function describeAction(args: ToolArgs, apps: readonly AppLabel[]) {
 
   const subject = values.find((value) => isText(value) && !/^\d+$/.test(value));
 
+  const title = `${app?.name ?? oneLine(args.app)} · ${humanize(oneLine(args.action))}`;
+
   return {
-    title: `${app?.name ?? oneLine(args.app)} · ${humanize(oneLine(args.action))}`,
+    title,
+    failedTitle: `${title} failed`,
     detail: subject === undefined ? "" : oneLine(subject),
     icon: app?.symbol ?? "symbol:layers",
   };
 }
 
-/** The tools the person reads about in their own words: the title, the icon, and the argument that says which. */
-const KNOWN = new Map<string, readonly [string, string, string]>([
-  ["bash", ["Ran a command", "symbol:icon.terminal", "command"]],
-  ["powershell", ["Ran a command", "symbol:icon.terminal", "command"]],
-  ["read", ["Read a file", "symbol:document", "path"]],
-  ["write", ["Wrote a file", "symbol:compose", "path"]],
-  ["edit", ["Edited a file", "symbol:pencil", "path"]],
-  ["app_code", ["Opened an app's code", "symbol:document", "app"]],
-  ["preview_app", ["Built a preview", "symbol:sparkles", "app"]],
-  ["find_app_actions", ["Looked up app actions", "symbol:search", "query"]],
-  ["request_secret", ["Asked for a secret", "symbol:lock", "service"]],
-  ["sign_in", ["Signed in", "symbol:lock", "secret"]],
-  ["save_routine", ["Saved a routine", "symbol:repeat", "name"]],
-  ["delete_routine", ["Deleted a routine", "symbol:repeat", "name"]],
+/**
+ * The tools the person reads about in their own words: the title, the title when the tool failed, the icon, and the
+ * argument that says which.
+ */
+const KNOWN = new Map<string, readonly [string, string, string, string]>([
+  [
+    "bash",
+    ["Ran a command", "A command failed", "symbol:icon.terminal", "command"],
+  ],
+  [
+    "powershell",
+    ["Ran a command", "A command failed", "symbol:icon.terminal", "command"],
+  ],
+  ["read", ["Read a file", "Couldn't read a file", "symbol:document", "path"]],
+  [
+    "write",
+    ["Wrote a file", "Couldn't write a file", "symbol:compose", "path"],
+  ],
+  ["edit", ["Edited a file", "Couldn't edit a file", "symbol:pencil", "path"]],
+  [
+    "app_code",
+    [
+      "Opened an app's code",
+      "Couldn't open an app's code",
+      "symbol:document",
+      "app",
+    ],
+  ],
+  [
+    "preview_app",
+    ["Built a preview", "Couldn't build a preview", "symbol:sparkles", "app"],
+  ],
+  [
+    "find_app_actions",
+    [
+      "Looked up app actions",
+      "Couldn't look up app actions",
+      "symbol:search",
+      "query",
+    ],
+  ],
+  [
+    "request_secret",
+    [
+      "Asked for a secret",
+      "Couldn't ask for a secret",
+      "symbol:lock",
+      "service",
+    ],
+  ],
+  ["sign_in", ["Signed in", "Couldn't sign in", "symbol:lock", "secret"]],
+  [
+    "save_routine",
+    ["Saved a routine", "Couldn't save a routine", "symbol:repeat", "name"],
+  ],
+  [
+    "delete_routine",
+    ["Deleted a routine", "Couldn't delete a routine", "symbol:repeat", "name"],
+  ],
 ]);
 
 export type ToolUse = {
@@ -139,15 +188,23 @@ function browserStep(command: string) {
   const [, saved] = /\bflow\s+save\s+(\S+)/.exec(command) ?? [];
 
   if (saved !== undefined) {
-    const title = "Learned a trick";
-
-    return { title, detail: oneLine(described(command) ?? saved), icon };
+    return {
+      title: "Learned a trick",
+      failedTitle: "Couldn't learn a trick",
+      detail: oneLine(described(command) ?? saved),
+      icon,
+    };
   }
 
   const [, ran] = /\bflow\s+run\s+([^\n;&|]+)/.exec(command) ?? [];
 
   if (ran !== undefined) {
-    return { title: "Ran a trick", detail: oneLine(ran), icon };
+    return {
+      title: "Ran a trick",
+      failedTitle: "A trick failed",
+      detail: oneLine(ran),
+      icon,
+    };
   }
 
   const [, opened] =
@@ -156,11 +213,13 @@ function browserStep(command: string) {
   return opened === undefined
     ? {
         title: "Used the browser",
+        failedTitle: "The browser failed",
         detail: oneLine(command.replace(/^[^]*?\bagent-browser\s+/, "")),
         icon: "symbol:link",
       }
     : {
         title: "Opened a page",
+        failedTitle: "Couldn't open a page",
         detail: oneLine(opened.replaceAll(/^["']|["']$/g, "")),
         icon: "symbol:link",
       };
@@ -181,13 +240,32 @@ export function describeTool({ name, args, apps }: ToolUse) {
   const known = KNOWN.get(name);
 
   if (!known) {
-    return { title: humanize(name), detail: "", icon: "symbol:sparkles" };
+    const title = humanize(name);
+
+    return {
+      title,
+      failedTitle: `${title} failed`,
+      detail: "",
+      icon: "symbol:sparkles",
+    };
   }
 
-  const [title, icon, subject] = known;
+  const [title, failedTitle, icon, subject] = known;
 
-  return { title, detail: oneLine(args[subject]), icon };
+  return { title, failedTitle, detail: oneLine(args[subject]), icon };
 }
+
+/**
+ * A tool's error as the person reads it: what the tool said, such as a command's output, without the harness's notes
+ * after it ("[error] Command exited with code 1"); the notes alone, unwrapped, when the tool said nothing.
+ */
+const whyFailed = (text: string) => {
+  const said = text.replaceAll(/<harness>[^]*?<\/harness>/g, "").trim();
+
+  return said === ""
+    ? text.replaceAll(/<\/?harness>|\[(?:error|warning|info)\]\s*/g, "").trim()
+    : said;
+};
 
 const row = (
   id: string,
@@ -249,17 +327,25 @@ function transcript(
     if (entry.kind === "pi.tool-result" && message?.role === "toolResult") {
       const call = calls.get(message.toolCallId);
 
-      const described = describeTool({
+      const { title, failedTitle, detail, icon } = describeTool({
         name: message.toolName || (call?.name ?? "tool"),
         args: call?.args ?? {},
         apps,
       });
 
+      // A failed step says so in its title, and its text is why.
       return [
         row(id, "activity", {
-          ...described,
+          title: message.isError ? failedTitle : title,
+          detail,
+          icon,
           failed: message.isError,
-          text: oneLine(messageText(message.content), 300),
+          text: oneLine(
+            message.isError
+              ? whyFailed(messageText(message.content))
+              : messageText(message.content),
+            300
+          ),
         }),
       ];
     }

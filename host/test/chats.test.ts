@@ -84,7 +84,7 @@ test("the tricks the machine's agent-browser knows ride on the account stream, b
   ]);
 });
 
-/** The transcript's row for the command the agent ran: its title and its detail. */
+/** The transcript's row for the command the agent ran: its title, its detail, and for a failed one, why. */
 async function commandRow(command: string) {
   await toolRow(`Please run: ${command}`);
 
@@ -93,25 +93,35 @@ async function commandRow(command: string) {
     chatsWhen(() => true)
   );
 
-  const { title, detail } = messages.at(-2) ?? {};
+  const { title, detail, failed, text } = messages.at(-2) ?? {};
 
-  return [title, detail];
+  return failed === true ? [title, detail, text] : [title, detail];
 }
 
+// The test host's agent-browser only lists tricks, so every other browser command fails, and its row says so.
 test("the transcript says what the imp did in the browser in words, not as a command", async () => {
   assert.deepEqual(
     await commandRow(
       "agent-browser flow save hn-search --description 'Search Hacker News' --param query=exact"
     ),
-    ["Learned a trick", "Search Hacker News"]
+    [
+      "Couldn't learn a trick",
+      "Search Hacker News",
+      "agent-browser (test): only flow list",
+    ]
   );
   assert.deepEqual(
     await commandRow("agent-browser flow run hn-search --param query=expo"),
-    ["Ran a trick", "hn-search --param query=expo"]
+    [
+      "A trick failed",
+      "hn-search --param query=expo",
+      "agent-browser (test): only flow list",
+    ]
   );
   assert.deepEqual(await commandRow("agent-browser open example.com"), [
-    "Opened a page",
+    "Couldn't open a page",
     "example.com",
+    "agent-browser (test): only flow list",
   ]);
   assert.deepEqual(await commandRow("ls -la"), ["Ran a command", "ls -la"]);
 });

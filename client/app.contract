@@ -282,19 +282,24 @@ fn hasDraft(name: string, apps: AppTile[]): bool =
 fn undoKind(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.undo, case none => "" }
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
+// A memory entry's title inside a sentence: the person's own entry is "You", which reads "you" there.
+fn aboutTitle(title: string): string = title == "You" ? "you" : title
+// A secret as the person knows it: a known service's own name ("GitHub" for the key named github), else its name.
+fn shownName(x: Secret): string = x.name == x.service ? x.label : x.name
+fn secretLabel(name: string, secrets: Secret[]): string =
+  match first(secrets.filter(x => x.name == name)) { case some(x) => shownName(x), case none => name }
 fn paneTitle(pane: string): string = pane == "tricks" ? "Tricks" : "App directory"
 // A link to a GitHub repository, such as github.com/owner/app, as its path ("owner/app"), or "" for any other text.
 fn repoPath(link: string): string =
   link.includes(" ") ? "" : link.startsWith("https://github.com/") ? link.slice(19) : link.startsWith("github.com/") ? link.slice(11) : ""
 fn repoLink(link: string): string = repoPath(link).split("/").filter(p => p != "").length >= 2 ? `https://github.com/${repoPath(link)}` : ""
-// What the imp is asked when the person installs an app from GitHub: the studio's own loop (host/studio/GUIDE.md),
-// starting from the repository's folder instead of a starter.
-fn installAsk(repo: string): string =
-  `Install the app at ${repo}. Clone it on your computer, copy its app folder (app.json, app.contract and server.ts) to apps/<its id>/ in your workspace, and preview it.`
+// What the person asks for when they install an app from GitHub, in their own words. How the imp does it (clone,
+// copy the app's folder into its workspace, preview) is the studio's to tell it (host/src/studio-tools.ts).
+fn installAsk(repo: string): string = `Install the app from github.com/${repoPath(repo)} so I can try it.`
 // The directory's apps. Mock entries for now, except Todos, which this repository ships: the rest name repositories
 // that do not exist yet, so the imp cannot install them.
 fn directory(): DirectoryApp[] = [
-  DirectoryApp(id="todos", name="Todos", description="A list of things to do. The agent can read and change it.",
+  DirectoryApp(id="todos", name="Todos", description="A list of things to do. Your imp can read and change it.",
     repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:checkmark"),
   DirectoryApp(id="habits", name="Habits", description="A streak for each habit, ticked off once a day.",
     repo="https://github.com/imp-apps/habits", symbol="symbol:star"),
@@ -331,6 +336,8 @@ fn dictationTrouble(code: string): string =
 
 component App
   state draft = ""
+  // What the last send carried, until the host takes it: a send that never reaches the host puts it back in the box.
+  state unsent = ""
   state scheme = "system" persist
   state now = 0
   // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
@@ -404,7 +411,8 @@ component App
   derive shown = time.epochAtZero + now
   derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
   derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
-  derive sendError = match sent { case some(r) => r.error, case none => "" }
+  derive sendLost = failed(sent) and not pending(sent)
+  derive sendError = sendLost ? "Your imp couldn't be reached, so that wasn't sent. Send it again in a moment." : match sent { case some(r) => r.error, case none => "" }
   // Dictation takes the microphone through the browser's own recognizer (the Mac app's takes only a track, so it
   // offers none). The words it is still unsure of show above the field until they are final and join the draft.
   derive canDictate = speech.available and speech.state != "denied" and speech.inputs.includes("microphone")
@@ -446,11 +454,17 @@ component App
   // A refused start (no microphone, permission denied) runs no `then`.
   task dictationRefused when failed(listening) key=true
     change(dictationOff)
+  task putBack when sendLost and unsent != ""
+    after(1, restoreUnsent)
 
   action applyScheme
     setScheme(scheme)
   action tick
     now = performanceNow()
+  action restoreUnsent
+    if draft.trim() == ""
+      draft = unsent
+    unsent = ""
   action reconnect
     if hostLost
       refresh host
@@ -492,6 +506,7 @@ component App
     let message = withSpoken(draft, interimHeard).trim()
     if message != "" and not pending(sent)
       send sent = chatSend(message, where == "side-" ? nav.tab : "")
+      unsent = message
       draft = ""
       if dictating
         hush()
@@ -543,6 +558,7 @@ component App
   action suggest(text: string)
     if not pending(sent)
       send sent = chatSend(text, "")
+      unsent = text
   action startApp
     draft = "Build me an app that "
     focus("composer")
@@ -552,6 +568,8 @@ component App
     pane = "chat"
     drawer = false
     nav = select(nav, "chat")
+    // A new chat starts empty: what was typed for the last one stays behind with it.
+    draft = ""
     send chatChanged = chatNew()
     focus("composer")
   action showChat(id: string)
@@ -592,11 +610,13 @@ component App
     if not pending(sent)
       pane = "chat"
       send sent = chatSend(installAsk(repo), "")
+      unsent = ""
   action toggleOlder
     olderOpen = not olderOpen
   action toggleDrawer
     drawer = not drawer
   action toEnd
+    unsent = ""
     if docked
       scrollIntoView("side-transcript", lastId, block="end")
     else
@@ -624,6 +644,12 @@ component App
   mutation todosWroteSetDone as shape Reply queue
   action todosDoSetDone(arg1: string, arg2: bool)
     send todosWroteSetDone = todosSetDone(arg1, arg2)
+  mutation todosWroteRename as shape Reply queue
+  action todosDoRename(arg1: string, arg2: string)
+    send todosWroteRename = todosRename(arg1, arg2)
+  mutation todosWroteRemove as shape Reply queue
+  action todosDoRemove(arg1: string)
+    send todosWroteRemove = todosRemove(arg1)
   // </apps:members>
   action useCloud(size: string)
     send computerSwitched = computerUseCloud(size)
@@ -636,9 +662,10 @@ component App
     send computerKeySaved = computerSetCloudKey(key)
   action retryComputer
     send computerRetried = computerRetry()
-  // The computer's screen, which the host serves: on the web a new tab, in the apps the default browser.
+  // The computer's screen, which the host serves: on the web a new tab, in the apps the default browser. It takes the
+  // app's appearance along.
   action openScreen
-    openURL(`${host.origin}/computer`)
+    openURL(`${host.origin}/computer?scheme=${scheme}`)
   action copyComputerCommand
     copyText(computer.command)
   action copyComputerPolicy
@@ -715,7 +742,7 @@ component App
                   if e.name == "chat" and pane == "tricks"
                     TrickList(tricks=tricks, use=useTrick)
                   else if e.name == "chat" and pane == "directory"
-                    AppDirectory(entries=directory(), installed=apps.map(a => a.id), sending=pending(sent),
+                    AppDirectory(entries=directory(), installed=apps, sending=pending(sent),
                       install=installApp, open=pick)
                   else if e.name == "chat"
                     for r in routines.filter(r => r.id == chat.current) key=r.id
@@ -729,13 +756,13 @@ component App
                         testId="routine-delete-confirm"
                         text "Delete"
                     if chat.messages.length == 0 and not chat.busy and chat.routine == ""
-                      // Home with nothing said yet: the day, a greeting, the workshop, and the apps.
+                      // Home with nothing said yet: a greeting, the apps, what to try, and the workshop.
                       scroll id="home-scroll" flex=1 min-height=0
                         column max-width="48.5rem" margin="0 auto" padding="28px 20px 28px" gap=28 box-sizing="border-box"
                           width="100%" testId="home"
                           column gap=12
                             Initialled(word=salutation, size="2.5rem", heading=2)
-                            text "Ask for anything. I can use your apps, work on a computer of my own, and build new apps for you."
+                            text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
                               color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
                           if computer.status == "none"
                             button press=pick("settings") testId="home-no-computer" display="flex" align-items="center" gap=12
@@ -749,17 +776,11 @@ component App
                                 text "Imp cloud, or a Linux computer of yours on Tailscale. Pick one in Settings."
                                   font-size="0.9375rem" color="ink.muted"
                               text "→" font-family="family.mono" color="ink.muted" aria-hidden=true
-                          column gap=8
-                            image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
-                              width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover" border="1px solid line.subtle"
-                              box-sizing="border-box"
-                            text "Fig. 1 — The workshop, where your apps are made." font-style="italic" font-size="0.875rem"
-                              color="ink.muted"
                           column
                             row align-items="baseline" justify-content="space-between" padding-bottom=10
                               border-bottom="1px solid ink.strong"
                               text "Your apps" class=Label color="ink.strong" role="heading" aria-level=3
-                              text `No. ${numbered(apps.length)}` class=Label
+                              text `No. ${numbered(apps.length + (computer.status == "none" ? 0 : 1))}` class=Label
                             for a in apps key=a.id
                               button press=pick(a.id) display="flex" align-items="center" gap=14 padding="14px 0"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
@@ -819,6 +840,13 @@ component App
                                     border-color="ink.strong"
                                     background-color="surface.soft"
                                   text s
+                          // The workshop closes the page, under what the person came for.
+                          column gap=8
+                            image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
+                              width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover" border="1px solid line.subtle"
+                              box-sizing="border-box"
+                            text "Fig. 1 — The workshop, where your apps are made." font-style="italic" font-size="0.875rem"
+                              color="ink.muted"
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
@@ -876,11 +904,11 @@ component App
                       button commandfor="confirm-signout" command="close" testId="signout-cancel"
                         text "Cancel"
                       button press=signOut commandfor="confirm-signout" command="close" destructive=true testId="signout-confirm"
-                        text "Sign Out"
+                        text "Sign out"
                   // <apps:screens>
                   if e.name == "todos"
                     AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp)
-                      TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone)
+                      TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The conversations and the tricks, beside the chat on a wide window.
         if sidebar
@@ -917,7 +945,7 @@ component App
             if chat.messages.length == 0 and not chat.busy
               column flex=1 min-height=0 justify-content="flex-end" padding="24px 18px" gap=8 testId="side-empty"
                 Initialled(word=`Ask about ${openAppName}.`, size="1.75rem", heading=3)
-                text "I can read it, change it, and build on it while you watch." font-style="italic" color="ink.muted"
+                text "Your imp can read it, change it, and build on it while you watch." font-style="italic" color="ink.muted"
             else
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
             Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
@@ -935,7 +963,7 @@ component App
           box-shadow=(wide ? "0 10px 28px -12px rgba(0, 0, 0, 0.35)" : "none")
           for t in nav.tabs key=t.name
             button role="tab" aria-controls=`panel-${t.name}` aria-selected=(nav.tab == t.name) press=pick(t.name)
-              aria-label=tabLabel(t.name, apps) testId=`tab-${t.name}` appearance="none" display="flex"
+              aria-label=tabLabel(t.name, apps) title=tabLabel(t.name, apps) testId=`tab-${t.name}` appearance="none" display="flex"
               align-items="center" justify-content="center" position="relative"
               flex-direction=(wide ? "row" : "column") flex=(wide ? "0 0 auto" : "1 1 0") gap=(wide ? 9 : 4)
               height=(wide ? "2.75rem" : "auto") min-width=(wide ? "2.75rem" : "0px") box-sizing="border-box"
@@ -981,7 +1009,7 @@ component App
             row gap=9 align-items="center"
               image "symbol:icon.imp" width=26 height=26 aria-hidden=true
               text aria-label="Imp" font-family="family.display" font-size="1.625rem" line-height=1.05
-                text "I" font-family="family.script" font-size="1.18em" line-height=0.8
+                text "I" font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.04em"
                 text "mp"
             row flex=1
             text formatDate(shown, time.utcOffset, "medium") class=Label
@@ -1056,7 +1084,7 @@ component App
               column gap=24
                 column border-top="1px solid line.subtle"
                   Feature(number="01", title="Chat is home", message="Ask for anything. Your imp has a computer of its own.")
-                  Feature(number="02", title="Apps that stay", message="It builds tools for you, keeps them, and can use them for you.")
+                  Feature(number="02", title="Apps that stay", message="Ask for a tool and it builds one: a screen you keep, which your imp can use too.")
                   Feature(number="03", title="Yours", message="Runs on your server, behind your Tailscale login.")
                 column gap=12
                   if account.status == "failed"
@@ -1098,6 +1126,8 @@ component SecretSettings
   state envName = ""
   state username = ""
   state otp = ""
+  // The secret Delete asks about.
+  state deleting = ""
   derive replacing = secrets.secrets.filter(x => x.name == name).length > 0
   derive login = adding == "login"
   derive formLabel = match first(secrets.services.filter(x => x.id == adding)) { case some(x) => x.label, case none => "Other" }
@@ -1138,6 +1168,12 @@ component SecretSettings
     username = v
   action editOtp(v: string)
     otp = v
+  action askRemove(secret: string)
+    deleting = secret
+    showModal("confirm-secret-delete")
+  action confirmRemove
+    remove(deleting)
+    deleting = ""
   action submit
     if ready and not saving
       if login
@@ -1149,7 +1185,7 @@ component SecretSettings
       row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
         text "Secrets" class=Label color="ink.strong" role="heading" aria-level=2
         text `No. ${numbered(secrets.secrets.length)}` class=Label
-      text "API keys and logins your imp uses on its computer without seeing them. Its computer holds only a stand-in for a key, which your host puts on requests to the key's own hosts, and your host types a login only into its own site."
+      text "API keys and logins your imp uses without ever seeing them. Its computer gets a stand-in for each key, and your host swaps in the real one only on requests to that key's sites. A login is typed only into the site it belongs to."
         font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=10
       if secrets.status == "failed"
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
@@ -1179,21 +1215,29 @@ component SecretSettings
           row gap=12 align-items="center" padding="12px 0" border-bottom="1px solid line.subtle" testId=`secret-${i}`
             image (x.kind == "login" ? "symbol:person" : "symbol:lock") width=16 height=16 aria-hidden=true
             column flex=1 min-width=0 gap=2
-              text x.name font-size="1.0625rem" overflow-wrap="anywhere" testId=`secret-name-${i}`
+              text shownName(x) font-size="1.0625rem" overflow-wrap="anywhere" testId=`secret-name-${i}`
               text x.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
                 testId=`secret-detail-${i}`
               text (x.lastUsed == "" ? `Added ${x.updated}, not used yet` : `Used ${x.lastUsed}`) font-size="0.8125rem"
                 color="ink.faint" testId=`secret-used-${i}`
-            button press=replace(x.service, x.name, x.site, x.username) testId=`secret-replace-${i}` appearance="none" padding="4px 0"
+            button press=replace(x.service, x.name, x.site, x.username) aria-label=`Replace ${shownName(x)}`
+              testId=`secret-replace-${i}` appearance="none" padding="4px 0"
               border="none" background-color="transparent" color="ink.muted"
               :hover
                 color="ink.strong"
               text "Replace" class=Label color="inherit"
-            button press=remove(x.name) aria-label=`Delete ${x.name}` testId=`secret-delete-${i}` appearance="none"
+            button press=askRemove(x.name) aria-label=`Delete ${shownName(x)}` testId=`secret-delete-${i}` appearance="none"
               padding="4px 0" border="none" background-color="transparent" color="ink.muted"
               :hover
                 color="-exact-system-red"
               text "Delete" class=Label color="inherit"
+      dialog id="confirm-secret-delete" role="alertdialog" aria-label=`Delete ${secretLabel(deleting, secrets.secrets)}?`
+        text "Your imp can no longer use it, and its value can't be brought back. Add it again to use it."
+        button commandfor="confirm-secret-delete" command="close" testId="secret-delete-cancel"
+          text "Cancel"
+        button press=confirmRemove commandfor="confirm-secret-delete" command="close" destructive=true
+          testId="secret-delete-confirm"
+          text "Delete"
       if deleteError != ""
         text deleteError color="-exact-system-red" font-size="0.9375rem" padding-top=10 testId="secret-delete-error"
       if adding == ""
@@ -1221,9 +1265,12 @@ component SecretSettings
               text "Login"
       else
         column gap=10 padding-top=16 testId="secret-form"
-          text (replacing ? `Replace ${name}` : login ? "Add a login" : adding == "other" ? "Add a key for another service" : `Add your ${formLabel} key`)
+          text (replacing ? `Replace ${secretLabel(name, secrets.secrets)}` : login ? "Add a login" : adding == "other" ? "Add a key for another service" : `Add your ${formLabel} key`)
             font-family="family.display" font-size="1.25rem"
             role="heading" aria-level=3
+          // Why the last save was refused, read before the fields it is about.
+          if formError != "" and not saving
+            text formError color="-exact-system-red" font-size="0.9375rem" testId="secret-error"
           if adding == "other" and not replacing
             column gap=8
               input value=name input=editName placeholder="Name, such as weather" aria-label="Name" testId="secret-name"
@@ -1233,7 +1280,7 @@ component SecretSettings
                 testId="secret-hosts" padding="9px 14px" border="1px solid line.strong" background-color="transparent"
                 font-family="family.mono" font-size="0.875rem" color="ink.strong"
               row gap=8
-                input value=header input=editHeader placeholder="Header: Authorization" aria-label="Header"
+                input value=header input=editHeader placeholder="Header, such as Authorization" aria-label="Header"
                   testId="secret-header" flex=1 min-width=0 padding="9px 14px" border="1px solid line.strong"
                   background-color="transparent" font-family="family.mono" font-size="0.875rem" color="ink.strong"
                 input value=prefix input=editPrefix placeholder="Before the key, such as Bearer" aria-label="Before the key"
@@ -1266,8 +1313,8 @@ component SecretSettings
                 text `Goes on requests to ${v.hosts}. Your imp reads it as ${v.env}.` font-size="0.875rem" color="ink.muted"
                   line-height=1.45
               case none
-                text "Write \"Bearer \" before the key if the service wants one, with its space." font-size="0.875rem"
-                  color="ink.muted" line-height=1.45
+                text "The key goes in the Authorization header unless you name another. If the service wants a word before the key, such as Bearer, write it in Before the key."
+                  font-size="0.875rem" color="ink.muted" line-height=1.45
           if login
             button press=submit disabled=(not ready or saving) testId="secret-save" align-self="flex-start"
               padding="9px 14px" border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
@@ -1288,8 +1335,6 @@ component SecretSettings
                   background-color="surface.soft"
                   color="ink.faint"
                 text (saving ? "Saving" : "Save")
-          if formError != "" and not saving
-            text formError color="-exact-system-red" font-size="0.9375rem" testId="secret-error"
           button press=cancel testId="secret-cancel" align-self="flex-start" padding="6px 0" border="none"
             background-color="transparent" color="ink.muted"
             :hover
@@ -1464,7 +1509,7 @@ component TrickList
     scroll id="tricks-list" flex=1 min-height=0
       column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=18 box-sizing="border-box" width="100%"
         testId="tricks"
-        text "What your imp learned to do in the browser. A trick runs in a second, without the page; tap one to ask for it."
+        text "What your imp learned to do in a browser. It repeats a trick in seconds instead of clicking through the site again. Pick one to ask for it."
           color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
         column
           row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
@@ -1484,7 +1529,7 @@ component TrickList
                 image "symbol:sparkles" width=18 height=18
               column gap=2 flex=1 min-width=0
                 text k.title font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`trick-title-${i}`
-                text (k.params.length == 0 ? k.site : `${k.site} · asks for ${k.params.join(", ")}`) font-size="0.9375rem"
+                text (k.params.length == 0 ? k.site : `${k.site} · asks for the ${k.params.join(" and the ")}`) font-size="0.9375rem"
                   color="ink.muted" line-clamp=1
               text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
 
@@ -1493,7 +1538,8 @@ component TrickList
 component AppDirectory
   props
     entries: DirectoryApp[]
-    installed: string[]
+    // The apps installed now: one of them opens instead, and shows its own cover.
+    installed: AppTile[]
     sending: bool
     install: action
     open: action
@@ -1535,15 +1581,20 @@ component AppDirectory
             text `No. ${numbered(entries.length)}` class=Label
           for a in entries key=a.id
             row align-items="center" gap=14 padding="14px 0" border-bottom="1px solid line.subtle" testId=`directory-${a.id}`
-              row width=44 height=44 min-width=44 align-items="center" justify-content="center"
-                border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                image a.symbol width=18 height=18
+              match first(installed.filter(x => x.id == a.id and x.cover != ""))
+                case some(x)
+                  image x.cover alt="" width=44 height=44 min-width=44 object-fit="cover"
+                    border="1px solid line.subtle" box-sizing="border-box"
+                case none
+                  row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                    border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                    image a.symbol width=18 height=18
               column gap=2 flex=1 min-width=0
                 text a.name font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`directory-name-${a.id}`
                 text a.description font-size="0.9375rem" color="ink.muted" line-height=1.4
                 text `${repoPath(a.repo)}` font-family="family.mono" font-size="0.75rem" color="ink.faint"
                   white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-              if installed.includes(a.id)
+              if installed.map(x => x.id).includes(a.id)
                 button press=open(a.id) aria-label=`Open ${a.name}` testId=`directory-open-${a.id}` padding="8px 12px"
                   border="1px solid line.strong" background-color="transparent" color="ink.strong" font-family="family.mono"
                   font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
@@ -1567,11 +1618,21 @@ component MemorySettings
   props
     memory: Memory
     forget: action
+  // The entry Forget asks about, by its id and title.
+  state forgetting = ""
+  state forgettingTitle = ""
+  action askForget(entry: string, title: string)
+    forgetting = entry
+    forgettingTitle = title
+    showModal("confirm-memory-forget")
+  action confirmForget
+    forget(forgetting, "")
+    forgetting = ""
   view
     column testId="memory"
       row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
         text "Memory" class=Label color="ink.strong" role="heading" aria-level=2
-        text `No. ${numbered(memory.entries.length)}` class=Label
+        text `No. ${numbered(sum(memory.entries.map(m => m.facts.length + m.links.length)))}` class=Label
       if memory.entries.length == 0
         text "Nothing yet. Your imp remembers what it learns as you talk: your name, the people and things in your life, how you like things done."
           font-size="0.9375rem" color="ink.muted" line-height=1.45 padding="14px 0" border-bottom="1px solid line.subtle"
@@ -1583,7 +1644,7 @@ component MemorySettings
               overflow-wrap="anywhere" testId=`memory-title-${j}`
             if m.kind != ""
               text m.kind class=Label
-            button press=forget(m.id, "") aria-label=`Forget everything about ${m.title}` testId=`memory-forget-${j}`
+            button press=askForget(m.id, m.title) aria-label=`Forget everything about ${aboutTitle(m.title)}` testId=`memory-forget-${j}`
               appearance="none" padding="4px 0" border="none" background-color="transparent" color="ink.muted"
               :hover
                 color="-exact-system-red"
@@ -1601,9 +1662,17 @@ component MemorySettings
                 image "symbol:close" width=11 height=11
           for l in m.links key=l
             text l font-family="family.mono" font-size="0.75rem" color="ink.muted" padding-left=20
+      dialog id="confirm-memory-forget" role="alertdialog" aria-label=`Forget everything about ${aboutTitle(forgettingTitle)}?`
+        text "Your imp loses every fact here. It may learn some of them again as you talk."
+        button commandfor="confirm-memory-forget" command="close" testId="memory-forget-cancel"
+          text "Cancel"
+        button press=confirmForget commandfor="confirm-memory-forget" command="close" destructive=true
+          testId="memory-forget-confirm"
+          text "Forget"
       if memory.name != ""
-        text `${memory.name}, kept on your host at ${memory.location}.` font-size="0.8125rem" font-style="italic"
-          color="ink.faint" padding-top=10 overflow-wrap="anywhere"
+        column gap=2 padding-top=10
+          text `${memory.name}, kept on your host.` font-size="0.8125rem" font-style="italic" color="ink.faint"
+          text memory.location font-family="family.mono" font-size="0.6875rem" color="ink.faint" overflow-wrap="anywhere"
 
 // Where the apps' code is kept besides the host: every version in the host's history, and a private GitHub repository
 // the host pushes each one to, connected with a device code like the ChatGPT sign-in.
@@ -1619,7 +1688,7 @@ component BackupSettings
     column testId="backup"
       row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
         text "Backup" class=Label color="ink.strong" role="heading" aria-level=2
-        text `${numbered(backup.versions)} ${backup.versions == 1 ? "version" : "versions"}` class=Label testId="backup-versions"
+        text `${backup.versions} ${backup.versions == 1 ? "version" : "versions"}` class=Label testId="backup-versions"
       text (backup.git ? "Your host keeps every version of your apps' code. Connect GitHub to keep a copy there too, in a private repository. Your apps' data stays on your host." : "Your host keeps no versions of your apps' code yet: it needs git. Install git on it, then restart Imp.")
         font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
       if backup.status == "on"
@@ -1704,7 +1773,7 @@ component AppPage
   view
     column flex=1 min-height=0
       if draft
-        row testId="preview-bar" align-items="center" gap=12 padding="10px 20px" background-color="AccentColor"
+        row testId="preview-bar" align-items="center" gap=12 padding="10px 20px" background-color="fill.preview"
           color="ink.on-fill" flex-wrap="wrap"
           text "Preview" class=Label color="ink.on-fill"
           text "A new version, on a copy of your data. Nothing you do here is kept." flex=1 min-width="12rem"
@@ -1713,13 +1782,15 @@ component AppPage
             background-color="transparent" color="ink.on-fill"
             text "Discard" class=Label color="inherit"
           button press=save(id) testId="preview-save" padding="7px 12px" border="1px solid ink.on-fill"
-            background-color="ink.on-fill" color="AccentColor"
+            background-color="ink.on-fill" color="fill.preview"
             text "Save" class=Label color="inherit"
       else if undo != ""
-        row justify-content="flex-end" padding="8px 20px 0"
-          button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
-            border="1px solid line.strong" background-color="transparent" color="ink.strong"
-            text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
+        // In line with the page's title and its Chat button above.
+        row justify-content="center" padding="8px 20px 0"
+          row width="100%" max-width="46rem" justify-content="flex-end"
+            button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
+              border="1px solid line.strong" background-color="transparent" color="ink.strong"
+              text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
         dialog id=`undo-${id}` role="alertdialog" aria-label="Undo the last save?"
           text (undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays.")
           button commandfor=`undo-${id}` command="close" testId="undo-cancel"
@@ -1737,7 +1808,8 @@ component Initialled
   view
     text role="heading" aria-level=heading font-family="family.display" font-size=size line-height=1.05
       letter-spacing="-0.01em"
-      text word.slice(0, 1) font-family="family.script" font-size="1.18em" line-height=0.8
+      // The script capital's swash leans into the next letter: a little room keeps the word readable.
+      text word.slice(0, 1) font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.08em"
       text word.slice(1)
 
 // One of onboarding's three promises, numbered like a catalogue entry.
@@ -1929,8 +2001,9 @@ component Transcript
     lastId: string
     still: bool
   view
+    // Its top edge fades, so a row scrolling under the page's title leaves it gently instead of cut in half.
     list id=`${prefix}transcript` appearance="none" virtualized=true scroll-start="end" scrollFollowEnd=true flex=1
-      min-height=0 testId=`${prefix}transcript`
+      min-height=0 mask-image="linear-gradient(to bottom, transparent 0px, black 20px)" testId=`${prefix}transcript`
       for m in messages key=m.id
         row justify-content="center" padding=(compact ? "0 18px" : "0 20px")
           column width="100%" max-width="46rem"
@@ -1941,13 +2014,17 @@ component Transcript
                   white-space="pre-wrap" background-color="surface.soft" font-size=(compact ? "0.9375rem" : "1rem") line-height=1.5
                   testId=`${prefix}message-${m.id}`
             else if m.role == "activity"
-              row gap=10 align-items="center" padding="5px 0" testId=`${prefix}message-${m.id}`
-                color=(m.failed ? "-exact-system-red" : "ink.muted")
-                image m.icon width=13 height=13 aria-hidden=true
-                text m.title class=Label color=(m.failed ? "-exact-system-red" : "ink.strong") white-space="nowrap"
-                if m.detail != ""
-                  text m.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" flex=1 min-width=0
-                    white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+              column gap=2 padding="5px 0" testId=`${prefix}message-${m.id}`
+                row gap=10 align-items="center" color=(m.failed ? "-exact-system-red" : "ink.muted")
+                  image m.icon width=13 height=13 aria-hidden=true
+                  text m.title class=Label color=(m.failed ? "-exact-system-red" : "ink.strong") white-space="nowrap"
+                  if m.detail != ""
+                    text m.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" flex=1 min-width=0
+                      white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                // A step that failed says why under its title.
+                if m.failed and m.text != ""
+                  text m.text font-size="0.8125rem" color="ink.muted" line-height=1.4 padding-left=23 line-clamp=2
+                    overflow-wrap="anywhere" testId=`${prefix}message-why-${m.id}`
             else if m.role == "thinking"
               row gap=6 align-items="center" padding="14px 0" aria-label="Your imp is working"
                 testId=`${prefix}thinking`
@@ -1987,6 +2064,13 @@ component Composer
     heard: string
     dictate: action
   derive said = withSpoken(draft, heard).trim()
+  // Enter sends, as a chat's composer does; Shift+Enter breaks the line, and the Enter that picks an input method's
+  // candidate stays the input method's.
+  action compose(k: string, e: KeyboardEvent)
+    if k == "Enter" and not e.shiftKey and not e.isComposing
+      preventDefault()
+      if said != "" and not sending
+        post(prefix)
   view
     row justify-content="center" padding=(compact ? "10px 14px 14px" : "10px 16px 14px")
       column width="100%" max-width="46rem" gap=8
@@ -1999,7 +2083,7 @@ component Composer
               font-size=(compact ? "0.9375rem" : "1rem") overflow-wrap="break-word" testId=`${prefix}dictation-heard`
         row align-items="flex-end" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
           background-color="surface.page"
-          textarea id=`${prefix}composer` value=draft input=edit rows=1 field-sizing="content" max-height=180
+          textarea id=`${prefix}composer` value=draft input=edit key=compose rows=1 field-sizing="content" max-height=180
             placeholder=placeholder aria-label="Message" testId=`${prefix}composer` flex=1 min-width=0
             padding="9px 0" border="none" background-color="transparent" outline="none" resize="none"
             font-family="family.text" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.5 color="ink.strong"

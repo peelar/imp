@@ -3,5 +3,5 @@
   "name": "Todos",
   "symbol": "symbol:checkmark",
   "cover": "assets/art/todos.jpg",
-  "description": "A list of things to do. The agent can read and change it."
+  "description": "A list of things to do. Your imp can read and change it."
 }

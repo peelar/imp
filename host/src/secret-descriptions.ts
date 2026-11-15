@@ -130,9 +130,12 @@ function ownPlacement(name: string, input: KeyInput): Placed {
     );
   }
 
+  // A word before the key (Bearer, Token) is followed by a space, whether or not the owner typed one.
+  const prefix = input.prefix.trim() === "" ? "" : `${input.prefix.trim()} `;
+
   return {
     ok: true,
-    rules: hosts.map((host) => ({ host, header, prefix: input.prefix })),
+    rules: hosts.map((host) => ({ host, header, prefix })),
     env: [envName],
   };
 }

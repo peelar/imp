@@ -6,6 +6,8 @@ tamber imp
 theme
   AccentColor = light-dark(#2341d6, #5b74f2)
   Highlight = light-dark(#dfe4fb, #26305e)
+  // The preview bar's fill: the accent, deep enough in the dark for its white labels to read.
+  fill.preview = light-dark(#2341d6, #3550e0)
   HighlightText = light-dark(#111111, #f2f2f0)
 
   ink.strong = light-dark(#111111, #f2f2f0)

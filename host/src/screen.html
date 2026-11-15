@@ -28,6 +28,8 @@
 		display: flex; align-items: center; gap: 14px; padding: 10px 16px;
 		padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--ink);
 	}
+	/* The shell's mark, in the page's ink, so it follows light and dark. */
+	.home { flex: none; width: 26px; height: 26px; background: var(--ink); mask: url(/assets/icons/imp.svg) center / contain no-repeat; }
 	h1 { margin: 0; font: 400 1.5rem/1.1 "Instrument Serif", Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 	.label { font: 500 0.6875rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 	.status { display: flex; align-items: center; gap: 8px; }
@@ -54,6 +56,7 @@
 </head>
 <body>
 <header>
+	<a class="home" href="/" title="Back to Imp" aria-label="Back to Imp"></a>
 	<h1 id="name">Computer</h1>
 	<div class="status"><div class="dot" id="dot"></div><span class="label" id="state">Connecting…</span></div>
 	<div class="spacer"></div>
@@ -68,6 +71,9 @@
 	import RFB from "/computer/novnc/core/rfb.js";
 
 	const $ = (id) => document.getElementById(id);
+	// The app opens this page with its appearance (?scheme=light or dark); "system" leaves it to the browser.
+	const scheme = new URLSearchParams(location.search).get("scheme");
+	if (scheme === "light" || scheme === "dark") document.documentElement.style.colorScheme = scheme;
 	const socket = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/computer/screen`;
 	let rfb;
 	let connected = false;

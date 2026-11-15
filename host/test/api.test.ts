@@ -101,7 +101,7 @@ test("the shell lists the installed apps and the running version", async () => {
     {
       id: "todos",
       name: "Todos",
-      description: "A list of things to do. The agent can read and change it.",
+      description: "A list of things to do. Your imp can read and change it.",
       symbol: "symbol:checkmark",
       cover: "assets/art/todos.jpg",
       draft: false,

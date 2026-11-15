@@ -87,6 +87,7 @@ test "what the imp is asked to remember shows in Settings, reaches its prompt, a
   clock until state memory.entries.0.facts.length == 0 within 5000
   expect tree missing "memory-fact-0-0"
   tap "memory-forget-0"
+  tap "memory-forget-confirm"
   clock until state memory.entries.length == 0 within 5000
   expect tree has "memory-empty"
 
@@ -109,7 +110,7 @@ test "a key added in Settings reaches the imp's commands as a stand-in, never as
   type "secret-value" "ghp_testvalue123"
   tap "secret-save"
   clock until state secrets.secrets.0.name == "github" within 20000
-  expect text "secret-name-0" == "github"
+  expect text "secret-name-0" == "GitHub"
   expect tree missing "secret-form"
   tap "secret-add-github"
   expect text "secret-value" == ""
@@ -136,8 +137,10 @@ test "the imp asks for a key it lacks, and the owner adds it from the request"
   expect tree missing "secret-request-0"
   clock until state secrets.secrets.length == 2 within 5000
   tap "secret-delete-0"
+  expect state secrets.secrets.length == 2
+  tap "secret-delete-confirm"
   clock until state secrets.secrets.length == 1 within 10000
-  expect text "secret-name-0" == "linear"
+  expect text "secret-name-0" == "Linear"
 
 test "the imp asks for a login, and the owner adds it with its one-time-code key"
   clock until state account.status == "signedIn" within 5000
@@ -171,7 +174,7 @@ test "settings back the apps' code up to GitHub, connected with a device code"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   clock until state backup.versions == 1 within 5000
-  expect text "backup-versions" == "01 version"
+  expect text "backup-versions" == "1 version"
   tap "backup-connect"
   clock until state backup.status == "waiting" within 5000
   expect text "backup-code" == "TEST-5678"
@@ -249,7 +252,7 @@ test "the app directory installs an app from a GitHub link through the imp, and 
   expect tree missing "directory-link-error"
   tap "directory-link-install"
   expect tree missing "directory"
-  clock until state chat.messages.0.text == "Install the app at https://github.com/someone/weather. Clone it on your computer, copy its app folder (app.json, app.contract and server.ts) to apps/<its id>/ in your workspace, and preview it." within 5000
+  clock until state chat.messages.0.text == "Install the app from github.com/someone/weather so I can try it." within 5000
   clock until state chat.busy == false within 10000
   tap "directory-entry"
   expect text "directory-link" == ""
@@ -300,3 +303,45 @@ test "the composer's microphone dictates until it is pressed again"
   tap "dictate"
   clock +100
   expect tree missing "dictation"
+
+test "a todo is renamed in place, and deleted"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-todos"
+  type "todo-draft" "Water plnts"
+  tap "todo-add"
+  clock until state todosReadList.3.title == "Water plnts" within 5000
+  tap "todo-edit-4"
+  type "todo-rename-4" "Water the plants"
+  type "todo-rename-4" key "Escape"
+  expect tree missing "todo-rename-4"
+  expect text "todo-4" == "Water plnts"
+  tap "todo-edit-4"
+  type "todo-rename-4" "Water the plants"
+  type "todo-rename-4" key "Enter"
+  clock until state todosReadList.3.title == "Water the plants" within 5000
+  expect text "todo-4" == "Water the plants"
+  tap "todo-delete-4"
+  clock until state todosReadList.length == 3 within 5000
+  expect tree missing "todo-4"
+
+test "Enter sends a message, Shift+Enter breaks its line, and one the host never got comes back to the box"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  type "composer" "First line"
+  type "composer" key "Shift+Enter"
+  expect state chat.messages.length == 0
+  type "composer" key "Enter"
+  clock until state chat.messages.0.text == "First line" within 5000
+  expect text "composer" == ""
+  clock until state chat.busy == false within 10000
+  fail fetch "http://127.0.0.1:8787/api/call/chatSend" times 1
+  type "composer" "Are you there?"
+  type "composer" key "Enter"
+  clock until state draft == "Are you there?" within 5000
+  expect tree has "send-error"
+  tap "send"
+  clock until state chat.messages.2.text == "Are you there?" within 5000
+  expect tree missing "send-error"

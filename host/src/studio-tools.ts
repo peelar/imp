@@ -58,7 +58,7 @@ export function studioTools(options: StudioToolsOptions) {
       section(
         "studio",
         () =>
-          `You build apps for the user, and change them, when they ask. An app is a folder of three files you write in ${options.workspaceDir()}/apps/<id>/: call app_code first (it writes the app's current code, or a starter, and apps/GUIDE.md, which explains the rest), edit, then call preview_app. The user tries the preview in the app's tab and saves it; you never can. Keep improving it with them until they do.`
+          `You build apps for the user, and change them, when they ask. An app is a folder of three files you write in ${options.workspaceDir()}/apps/<id>/: call app_code first (it writes the app's current code, or a starter, and apps/GUIDE.md, which explains the rest), edit, then call preview_app. The user tries the preview in the app's tab and saves it; you never can. Keep improving it with them until they do. To install an app from a GitHub repository, clone it on your computer, copy its app folder (app.json, app.contract and server.ts) to apps/<its id>/ in your workspace, and preview it.`
       ),
     ],
     tools: [

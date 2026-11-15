@@ -65,6 +65,29 @@ export default {
           : { ok: false, error: `No todo with id ${todo}.` };
       },
     },
+    rename: {
+      kind: "write",
+      description: "Change a todo's title.",
+      params: { id: { type: "string" }, title: { type: "string" } },
+      run: async ({ id, title }, app) => {
+        const todo = textOf(id);
+        const text = textOf(title).trim();
+
+        if (!text) {
+          return { ok: false, error: "A todo needs a title." };
+        }
+
+        const { changes } = await app.db.run(
+          "UPDATE todos SET title = ? WHERE id = ?",
+          text,
+          Number(todo)
+        );
+
+        return changes > 0
+          ? { ok: true, error: "" }
+          : { ok: false, error: `No todo with id ${todo}.` };
+      },
+    },
     remove: {
       kind: "write",
       description: "Delete a todo. Deleting cannot be undone.",

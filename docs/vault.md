@@ -66,7 +66,7 @@ The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp V
 
 ## Adding a key
 
-**Settings → Secrets** lists your secrets, with the hosts each one works for and when it was last used. A saved value is never shown again; you can only **Replace** or **Delete** it.
+**Settings → Secrets** lists your secrets, with the hosts each one works for and when it was last used. A saved value is never shown again; you can only **Replace** or **Delete** it, and Delete asks first.
 
 **Add a key** has presets that fill in the hosts and variables:
 
@@ -77,6 +77,8 @@ The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp V
 | Anthropic | `api.anthropic.com` (`x-api-key`) | `ANTHROPIC_API_KEY` |
 | Linear | `api.linear.app` | `LINEAR_API_KEY` |
 | Other | the hosts you enter | `<NAME>_API_KEY` |
+
+An **Other** key goes in the `Authorization` header unless you name another. A word you put in **Before the key**, such as `Bearer`, is sent before it with a space.
 
 A new key reaches the imp's next command.
 

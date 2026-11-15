@@ -25,7 +25,7 @@ Versions run in slots. An app's live version runs in the slot named by its id. A
 
 1. **The imp writes the folder**
 
-   `app_code(app)` writes the app's current code into `apps/<id>/` in the imp's workspace (a working starter for a new app), with the build guide, the SDK and Contract's docs. The imp edits the three files.
+   `app_code(app)` writes the app's current code into `apps/<id>/` in the imp's workspace (a working starter for a new app), with the build guide, the SDK and Contract's docs. The imp edits the three files. An app you install from the **App directory** or a GitHub link starts the same way: the imp clones the repository and copies its app folder into `apps/<id>/`.
 
 2. **It asks for a preview**
 

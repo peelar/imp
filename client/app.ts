@@ -70,6 +70,8 @@ const mutations: Record<MutationSource, true> = {
   // <apps:mutations>
   todosAdd: true,
   todosSetDone: true,
+  todosRename: true,
+  todosRemove: true,
   // </apps:mutations>
 };
 
