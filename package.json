@@ -1,6 +1,7 @@
 {
   "name": "imp",
   "private": true,
+  "license": "MIT",
   "workspaces": [
     "host",
     "client"

@@ -29,7 +29,7 @@ host)
 	stage=$(mktemp -d)
 	trap 'rm -rf "$stage"' EXIT
 	# The repository's files, as git lists them (tracked, and new ones not ignored), then the built client.
-	(cd "$root" && git ls-files --cached --others --exclude-standard -- host sdk client/apps scripts/install-mac.sh |
+	(cd "$root" && git ls-files --cached --others --exclude-standard -- LICENSE host sdk client/apps scripts/install-mac.sh |
 		tar -cf - -T -) | tar -xf - -C "$stage"
 	mkdir -p "$stage/client"
 	cp -R "$root/client/dist" "$stage/client/dist"

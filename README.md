@@ -63,6 +63,10 @@ The [docs](docs/README.md) cover hosting your own Imp and how it works inside:
   [security](docs/security.md)
 - **[Building apps](docs/building-apps.md)** by hand
 
+## License
+
+[MIT](LICENSE).
+
 ## Credits
 
 Fonts: Instrument Serif, Newsreader, Pinyon Script and IBM Plex Mono, under the SIL Open Font License
