@@ -361,19 +361,23 @@ test "Enter sends a message, Shift+Enter breaks its line, and one the host never
   expect tree missing "send-error"
 
 // The hints themselves show only outside a browser (the Mac app), which Chrome cannot emulate.
-test "⌘ chords open the tabs and a new chat, and a browser tab hints at none of them"
+test "⌘ chords open the tabs, a new chat and the message box, and a browser tab hints at none of them"
   size 1280x800
   prefer pointer fine
   clock until state account.status == "signedIn" within 5000
   tap "tab-chat"
   type "composer" key "Meta+,"
-  expect tree has "signout"
+  expect state nav.tab == "settings"
   type "app" key "Meta+2"
-  expect tree has "todo-draft"
+  expect state nav.tab == "todos"
   expect tree has "new-chat-todos"
   type "app" key "Meta+n"
   clock until state chat.messages.length == 0 within 5000
-  expect tree has "home"
+  expect state nav.tab == "chat"
+  type "app" key "Meta+,"
+  expect state nav.tab == "settings"
+  type "app" key "Meta+l"
+  expect state nav.tab == "chat"
   expect tree missing "chat-new-keys"
   type "app" key "Meta" down
   clock +500

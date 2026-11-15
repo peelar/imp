@@ -501,6 +501,20 @@ component App
   action keyDown(k: string, e: KeyboardEvent)
     metaAlone = k == "Meta" and not e.shiftKey and not e.ctrlKey and not e.altKey
     keysShown = keysShown and e.metaKey
+    // ⌘L, by the key under it whatever the layout types there: no button holds it, since the message box is the
+    // target and it is not a button.
+    if e.metaKey and not e.shiftKey and not e.ctrlKey and not e.altKey and e.code == "KeyL"
+      preventDefault()
+      focusComposer()
+  // Into the message box on the screen: the chat's beside an open app, else the chat tab's, which this opens.
+  action focusComposer
+    if docked
+      focus("side-composer")
+    else
+      pane = "chat"
+      drawer = false
+      nav = select(nav, "chat")
+      focus("composer")
   action keyUp(k: string, e: KeyboardEvent)
     if not e.metaKey
       hideKeys()
@@ -773,7 +787,7 @@ component App
                           border="1px solid line.strong" background-color="transparent" color="ink.strong" position="relative"
                           image "symbol:menu" width=16 height=16
                           if keys
-                            KeyBadge(chord="Control+Meta+S", inside=false)
+                            KeyBadge(chord="Control+Meta+S", at="end")
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
                       Initialled(word=(e.name == "chat" and pane != "chat" ? paneTitle(pane) : e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
@@ -794,7 +808,7 @@ component App
                           image "symbol:icon.panel" width=14 height=14 aria-hidden=true
                           text "Chat" class=Label color="inherit"
                           if keys
-                            KeyBadge(chord="Control+Meta+C", inside=false)
+                            KeyBadge(chord="Control+Meta+C", at="end")
                       // New chat from any page; beside the chat on a wide window the sidebar has it.
                       if not sidebar
                         button press=newChat aria-label="New chat" aria-keyshortcuts="Meta+N" testId=`new-chat-${e.name}`
@@ -805,7 +819,7 @@ component App
                             background-color="surface.soft"
                           image "symbol:compose" width=15 height=15
                           if keys
-                            KeyBadge(chord="Meta+N", inside=false)
+                            KeyBadge(chord="Meta+N", at="end")
                   if e.name == "chat" and pane == "tricks"
                     TrickList(tricks=tricks, use=useTrick)
                   else if e.name == "chat" and pane == "directory"
@@ -1064,7 +1078,7 @@ component App
                 text tabLabel(t.name, apps) font-family="family.mono" font-size="0.625rem" font-weight=500
                   letter-spacing="0.1em" text-transform="uppercase" aria-hidden=true
               if keys and tabChord(t.name, i) != ""
-                KeyBadge(chord=tabChord(t.name, i), inside=(not wide))
+                KeyBadge(chord=tabChord(t.name, i), at=(wide ? "end" : "tab"))
         // On a narrow window the sidebar opens as a drawer over everything.
         if drawer and not wide
           row position="absolute" inset=0 testId="drawer"
@@ -1572,7 +1586,7 @@ component RoutineBar
               image "symbol:play" width=12 height=12 aria-hidden=true
               text "Run now" class=Label color="inherit"
               if keys
-                KeyBadge(chord="Meta+R", inside=false)
+                KeyBadge(chord="Meta+R", at="end")
             button press=pause(routine.id, not routine.paused) disabled=busy testId="routine-pause" padding="7px 10px"
               border="1px solid line.strong" background-color="transparent" color="ink.strong"
               :hover
@@ -1870,7 +1884,7 @@ component AppPage
             border="1px solid ink.on-fill" background-color="ink.on-fill" color="fill.preview" position="relative"
             text "Save" class=Label color="inherit"
             if keys
-              KeyBadge(chord="Meta+S", inside=false)
+              KeyBadge(chord="Meta+S", at="end")
       else if undo != ""
         // In line with the page's title and its Chat button above.
         row justify-content="center" padding="8px 20px 0"
@@ -1887,16 +1901,15 @@ component AppPage
       scroll id=`${id}-screen` flex=1 min-height=0
         children
 
-// A shortcut's keys on the corner of its control (which is position="relative"), shown while ⌘ is held: over its
-// corner, or `inside` a wide control that meets the window's edge (a tab along a narrow window's bottom), beside the
-// symbol at its centre.
+// A shortcut's keys on its control (which is position="relative"), shown while ⌘ is held: over its top corner at the
+// "end" or the "start", or for a "tab" along a narrow window's bottom edge, inside it beside the symbol at its centre.
 component KeyBadge
   props
     chord: string
-    inside: bool
+    at: string
   view
-    text keysOf(chord) class=Key position="absolute" top=(inside ? "6px" : "-8px")
-      left=(inside ? "calc(50% + 16px)" : "auto") right=(inside ? "auto" : "-8px")
+    text keysOf(chord) class=Key position="absolute" top=(at == "tab" ? "6px" : "-8px")
+      left=(at == "tab" ? "calc(50% + 16px)" : at == "start" ? "-8px" : "auto") right=(at == "end" ? "-8px" : "auto")
       z-index=2 pointer-events="none" aria-hidden=true testId=`keys-${chord}`
 
 component Initialled
@@ -2225,7 +2238,9 @@ component Composer
             text (heard == "" ? "Listening…" : heard) font-style="italic" color="ink.muted" flex=1 min-width=0
               font-size=(compact ? "0.9375rem" : "1rem") overflow-wrap="break-word" testId=`${prefix}dictation-heard`
         row align-items="flex-end" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
-          background-color="surface.page"
+          background-color="surface.page" position="relative"
+          if keys
+            KeyBadge(chord="Meta+L", at="start")
           textarea id=`${prefix}composer` value=draft input=edit key=compose rows=1 field-sizing="content" max-height=180
             placeholder=placeholder aria-label="Message" testId=`${prefix}composer` flex=1 min-width=0
             padding="9px 0" border="none" background-color="transparent" outline="none" resize="none"
@@ -2243,7 +2258,7 @@ component Composer
               color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
               image "symbol:stop-fill" width=13 height=13
               if keys
-                KeyBadge(chord="Meta+.", inside=false)
+                KeyBadge(chord="Meta+.", at="end")
           else
             button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
               testId=`${prefix}send` width=38 height=38 min-width=38 padding=0 border="none"
