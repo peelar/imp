@@ -177,11 +177,13 @@ function wireRead(
   const type = prop.type.replaceAll(exported, (name) => `${pascal(id)}${name}`);
   const resource = `${id}Read${pascal(operation.name)}`;
 
+  // Streamed only while the app's tab is open: the shell keeps at most five streams (AGENTS.md), and one per installed
+  // app, open all the time, passes that with the second app, after which the browser holds back every other request.
   return {
     ok: true,
     wiring: {
       members: [
-        `  resource ${resource} = ${id}${pascal(operation.name)}() when signedIn as shape ${type} else empty()`,
+        `  resource ${resource} = ${id}${pascal(operation.name)}() when signedIn and nav.tab == "${id}" as shape ${type} else empty()`,
         `  derive ${resource}Lost = match failure(${resource}) { case some(f) => true, case none => false }`,
       ],
       refresh: [`    if ${resource}Lost`, `      refresh ${resource}`],

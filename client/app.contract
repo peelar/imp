@@ -636,7 +636,7 @@ component App
   action undoApp(id: string)
     send appUndone = appsUndo(id)
   // <apps:members>
-  resource todosReadList = todosList() when signedIn as shape TodosTodo[] else empty()
+  resource todosReadList = todosList() when signedIn and nav.tab == "todos" as shape TodosTodo[] else empty()
   derive todosReadListLost = match failure(todosReadList) { case some(f) => true, case none => false }
   mutation todosWroteAdd as shape Reply queue
   action todosDoAdd(arg1: string)

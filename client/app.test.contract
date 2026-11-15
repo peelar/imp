@@ -31,10 +31,10 @@ test "the assistant adds a todo that the open Todos app shows at once"
   tap "tab-chat"
   tap "send"
   expect text "composer" == ""
-  clock until state todosReadList.1.title == "Book train to Kraków" within 10000
   clock until state chat.busy == false within 10000
   expect tree missing "message-live"
   tap "tab-todos"
+  clock until state todosReadList.1.title == "Book train to Kraków" within 5000
   expect text "todo-2" == "Book train to Kraków"
 
 test "on a wide window the chat sits beside an open app, and what it is asked there lands in the app"
