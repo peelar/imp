@@ -15,7 +15,7 @@
 import type { Context } from "@earendil-works/chord/context";
 import type { Registry } from "@earendil-works/pi-durable";
 import type { RemoteExecutionEnv } from "@earendil-works/pi-env";
-import { type AppInfo, draftSlot } from "./app-folders.ts";
+import type { AppInfo } from "./app-folders.ts";
 import type { AppGateway } from "./apps.ts";
 import type { Topics } from "./live.ts";
 import { shellBuilds } from "./studio-builds.ts";
@@ -47,6 +47,8 @@ export type StudioOptions = {
   readonly workspace: () => string;
   readonly context: Context;
   readonly drafts: readonly AppInfo[];
+  /** A save or an undo changed an app's live code, said in words such as "Save Todos" (the backup commits it). */
+  readonly liveChanged: (what: string) => void;
   readonly log?: ((message: string) => void) | undefined;
 };
 
@@ -78,7 +80,7 @@ export function studio(options: StudioOptions) {
   };
 
   const folders = codeFolders(options.dataDir);
-  const history = versionHistory({ folders, data: gateway.data });
+  const history = versionHistory({ folders, data: gateway });
 
   const builds = shellBuilds({
     dataDir: options.dataDir,
@@ -99,7 +101,6 @@ export function studio(options: StudioOptions) {
   });
 
   const preview = appPreview({
-    dataDir: options.dataDir,
     gateway,
     workspace,
     folders,
@@ -117,6 +118,9 @@ export function studio(options: StudioOptions) {
 
   const serial = oneAtATime();
 
+  const nameOf = (id: string) =>
+    gateway.apps().find((app) => app.id === id)?.name ?? id;
+
   options.registry.install(
     studioTools({
       gateway,
@@ -131,7 +135,7 @@ export function studio(options: StudioOptions) {
     state: () =>
       gateway.apps().map((app) => ({
         ...app,
-        draft: gateway.version(draftSlot(app.id)) !== undefined,
+        draft: gateway.draft(app.id) !== undefined,
         undo: decisions.undoKind(app.id),
       })),
     /** The build the host serves, "repo" while it serves the repository's own. */
@@ -139,9 +143,12 @@ export function studio(options: StudioOptions) {
     /** Where that build is, undefined for the repository's. */
     clientDir: () => builds.dir(),
     save: async (id: string) => {
+      const name = nameOf(id);
+
       await serial(async () => {
         await decisions.save(id);
       });
+      options.liveChanged(`Save ${name}`);
     },
     discard: async (id: string) => {
       await serial(async () => {
@@ -149,16 +156,20 @@ export function studio(options: StudioOptions) {
       });
     },
     undo: async (id: string) => {
+      // Read before the undo, which can remove the app.
+      const name = nameOf(id);
+
       await serial(async () => {
         await decisions.undo(id);
       });
+      options.liveChanged(`Undo the last save of ${name}`);
     },
     /** Starts the drafts, and rebuilds the shell when the host holds apps the repository's build lacks. */
     async start() {
       await Promise.all(
         options.drafts.map(async (app) => {
           try {
-            await gateway.install(draftSlot(app.id), app);
+            await gateway.stage(app, { keepData: true });
           } catch (error) {
             log(`studio: draft ${app.id}: ${String(error)}`);
           }

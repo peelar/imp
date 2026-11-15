@@ -1,12 +1,10 @@
-// The messages between the host, agentd and each app's worker (machine/agentd.ts and machine/worker.ts), and between
-// the host and agentd's egress proxy (machine/egress.ts).
+// The messages between the host, agentd and each app's worker (machine/agentd.ts and machine/worker.ts). The egress
+// proxy's messages are the secrets' own (egress-protocol.ts).
 //
 //   host   -> agentd   ToAgentd     load and unload apps, call their operations, answer their database requests
 //   agentd -> host     FromAgentd   what loaded, call results, database requests
 //   agentd -> worker   ToWorker     calls and database answers
 //   worker -> agentd   FromWorker   the app's manifest, call results, database requests
-//   host   -> egress   ToEgress     which hosts' requests go to the host, and the CA its proxy signs with
-//   egress -> host     FromEgress   the rules took effect; open a stream socket for a tunnel
 //
 // The machine runs code the agent wrote, so the host checks everything it receives against the schemas below. The
 // machine files import this module's types only: they are stripped to plain JavaScript and run with no packages.
@@ -132,24 +130,4 @@ export type FromWorker =
   | CallResult
   | { t: "db"; id: number; request: DbRequest };
 
-const fromEgress = union([
-  obj({ t: lit("configured") }),
-  obj({ t: lit("open"), id: str() }),
-]);
-
-/** What the egress proxy tells the host on its control socket. `open` asks for a stream socket for tunnel `id`. */
-export type FromEgress = Static<typeof fromEgress>;
-
-/**
- * What the host tells the egress proxy: the host names whose requests go to the host (names only; a secret's value
- * never comes to the machine), and the certificate of the CA the host's proxy signs with.
- */
-export type ToEgress = {
-  t: "config";
-  hosts: readonly string[];
-  ca?: string | undefined;
-};
-
 export const fromAgentdCheck = compile(fromAgentd);
-
-export const fromEgressCheck = compile(fromEgress);

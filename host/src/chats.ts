@@ -31,9 +31,9 @@ import {
   liveState,
   TOPIC,
   titleOf,
-  withAppContext,
 } from "./chat.ts";
 import type { Topics } from "./live.ts";
+import { withAppContext } from "./message-origin.ts";
 
 type Id = Conversation["id"];
 

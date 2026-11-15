@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { arr, bool, compile, num, obj, str } from "@earendil-works/pi-schema";
-import { routineRun } from "./chat.ts";
+import { routineRun } from "./message-origin.ts";
 import type { Chats } from "./chats.ts";
 import type { Topics } from "./live.ts";
 import {

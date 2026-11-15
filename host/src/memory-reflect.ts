@@ -27,7 +27,7 @@ import {
   SELF,
   USER,
 } from "./memory-facts.ts";
-import { isRoutineRun } from "./chat.ts";
+import { isRoutineRun } from "./message-origin.ts";
 import { messageText } from "./message-text.ts";
 
 /** Reflection reads at most this much of one run, newest last. */

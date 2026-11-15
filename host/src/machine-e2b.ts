@@ -34,6 +34,25 @@ export type E2BProviderOptions = {
   readonly apiKey?: string;
 };
 
+/** Why E2B does not take an API key; "" when it does. */
+export async function e2bKeyProblem(key: string) {
+  if (!/^e2b_[A-Za-z0-9]+$/.test(key)) {
+    return "An E2B API key starts with e2b_. Copy it from e2b.dev/dashboard.";
+  }
+
+  try {
+    await Sandbox.list({ apiKey: key }).nextItems();
+
+    return "";
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+
+    return /unauthori[sz]ed|invalid api key/i.test(reason)
+      ? "E2B did not accept that key. Copy it again from e2b.dev/dashboard."
+      : `Could not check the key with E2B: ${reason}`;
+  }
+}
+
 export function e2bProvider(options: E2BProviderOptions): MachineProvider {
   const api = options.apiKey === undefined ? {} : { apiKey: options.apiKey };
   let files: Promise<Runtime> | undefined;

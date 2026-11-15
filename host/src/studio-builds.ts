@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
-import { draftSlot } from "./app-folders.ts";
 import type { AppGateway } from "./apps.ts";
 import { readKept } from "./kept.ts";
 import { buildShell, type ShellApp } from "./shell.ts";
@@ -69,15 +68,15 @@ export function shellBuilds(options: ShellBuildsOptions) {
 
   /** An app as the shell shows it: its draft while it has one. None while its server code fails to start. */
   async function screen(id: string): Promise<ShellApp[]> {
-    const slot = gateway.version(draftSlot(id)) ? draftSlot(id) : id;
-    const app = gateway.version(slot);
+    const which = gateway.draft(id) ? "draft" : "live";
+    const app = which === "draft" ? gateway.draft(id) : gateway.live(id);
 
     if (!app) {
       return [];
     }
 
     try {
-      const { operations } = await gateway.manifest(slot);
+      const { operations } = await gateway.manifest(id, which);
 
       return [{ id, files: app.files, operations }];
     } catch (error) {

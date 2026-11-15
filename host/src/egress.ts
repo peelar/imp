@@ -12,7 +12,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { createWebSocketStream, type RawData, WebSocket } from "ws";
 import { type EgressRules, type EgressUse, mitmProxy } from "./egress-proxy.ts";
 import type { Endpoint, Machine } from "./machine.ts";
-import { type FromEgress, fromEgressCheck, type ToEgress } from "./protocol.ts";
+import {
+  type FromEgress,
+  fromEgressCheck,
+  type ToEgress,
+} from "./egress-protocol.ts";
 import type { Vault } from "./vault.ts";
 
 export type EgressOptions = {

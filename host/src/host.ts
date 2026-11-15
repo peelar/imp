@@ -141,7 +141,10 @@ const place = (computer: Computer, cwd?: string) => ({
 function openStudio(
   { options, topics, computer, registry }: Parts,
   gateway: AppGateway,
-  drafts: Parameters<typeof studio>[0]["drafts"]
+  {
+    drafts,
+    liveChanged,
+  }: Pick<Parameters<typeof studio>[0], "drafts" | "liveChanged">
 ) {
   const clientSource = path.resolve(options.appsDir, "..");
 
@@ -161,6 +164,7 @@ function openStudio(
     workspace: computer.workspace,
     context,
     drafts,
+    liveChanged,
   });
 }
 
@@ -188,7 +192,7 @@ function openKeeping(
     dataDir,
     topics,
     gh: options.gh,
-    apps: () => gateway.apps().flatMap((app) => gateway.version(app.id) ?? []),
+    apps: () => gateway.apps().flatMap((app) => gateway.live(app.id) ?? []),
   });
 
   backup.start();
@@ -349,7 +353,13 @@ export async function startHost(options: HostOptions) {
   });
 
   const { secrets, backup } = openKeeping(parts, gateway, machine);
-  const apps = openStudio(parts, gateway, stored.drafts);
+
+  // Every save and undo changes the live code, which the backup keeps.
+  const apps = openStudio(parts, gateway, {
+    drafts: stored.drafts,
+    liveChanged: backup.record,
+  });
+
   const account = chatgptAccount(options.models, topics);
 
   const { harness, chats, routines, tricks } = await openAgent(parts, {

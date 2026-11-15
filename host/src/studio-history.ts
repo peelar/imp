@@ -15,7 +15,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { compile, int, obj } from "@earendil-works/pi-schema";
-import type { AppData } from "./app-data.ts";
 import type { AppFiles } from "./app-folders.ts";
 import { type CodeFolders, writeApp } from "./studio-code.ts";
 
@@ -25,8 +24,11 @@ const metaJson = compile(obj({ schema: int() }));
 
 export type VersionHistoryOptions = {
   readonly folders: CodeFolders;
-  /** Each slot's data: a saved-over version keeps a copy of the live data. */
-  readonly data: AppData;
+  /** A saved-over version keeps a copy of the live data, and how many migrations it had. */
+  readonly data: {
+    readonly snapshot: (id: string, file: string) => void;
+    readonly schemaVersion: (id: string) => number;
+  };
 };
 
 /** A saved-over version. */
@@ -100,7 +102,7 @@ export function versionHistory(options: VersionHistoryOptions) {
 
       if (live) {
         writeApp(path.join(dir, "code"), live);
-        data.copyTo(id, copy);
+        data.snapshot(id, copy);
       }
 
       writeFileSync(

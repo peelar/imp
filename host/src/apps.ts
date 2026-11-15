@@ -14,6 +14,7 @@ import { openAppData } from "./app-data.ts";
 import { type AppInfo, appTopic, draftSlot } from "./app-folders.ts";
 import { type AppMachine, appMachine } from "./app-machine.ts";
 import { appTools } from "./app-tools.ts";
+import { appVersions } from "./app-versions.ts";
 import type { Topics } from "./live.ts";
 import type { Machine } from "./machine.ts";
 import type { Args, Operation } from "./protocol.ts";
@@ -51,6 +52,8 @@ type Slots = ReadonlyMap<string, AppInfo>;
 
 export type AppGateway = ReturnType<typeof appGateway>;
 
+export type { Which } from "./app-versions.ts";
+
 const reply = compile(obj({ ok: bool() }, { open: true }));
 const explained = compile(obj({ error: str() }, { open: true }));
 
@@ -86,28 +89,30 @@ export function appGateway(options: GatewayOptions) {
     })
   );
 
+  /** Stops whatever runs in `slot`. Its data stays. */
+  const uninstall = (slot: string) => {
+    const app = machine.uninstall(slot);
+
+    data.close(slot);
+
+    if (app) {
+      topics.changed(appTopic(app.id));
+    }
+  };
+
+  const versions = appVersions({
+    machine,
+    data,
+    scratchDir: path.join(options.dataDir, "apps"),
+    install: async (slot, app) => (await machine.install(slot, app)).manifest,
+    uninstall,
+  });
+
   return {
     /** Every app the shell or the agent can reach, saved or only a draft so far: the draft's name when it has one. */
     apps: () => shown(slots),
-    /** The version in a slot, if any. */
-    version: (slot: string) => slots.get(slot),
-    /** The manifest of the version in a slot, once it loaded. */
-    manifest: async (slot: string) => (await machine.loaded(slot)).manifest,
-    /** Starts `app` in `slot`, replacing what ran there, and answers its manifest once it loaded and migrated. */
-    install: async (slot: string, app: AppInfo) =>
-      (await machine.install(slot, app)).manifest,
-    /** Stops whatever runs in `slot`. Its data stays unless `data.remove` is called. */
-    uninstall(slot: string) {
-      const app = machine.uninstall(slot);
-
-      data.close(slot);
-
-      if (app) {
-        topics.changed(appTopic(app.id));
-      }
-    },
-    /** Each slot's data. A slot must not be running when its data is replaced or removed. */
-    data,
+    /** Each app's live version and draft, which only the studio moves (app-versions.ts). */
+    ...versions,
     /** The app and the operation name of a shell source such as `todosSetDone`, if an app owns it. */
     route: (source: string) => route(slots, source),
     fromShell: async (call: ShellCall) => await fromShell(machine, call),

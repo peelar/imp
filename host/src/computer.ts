@@ -3,7 +3,6 @@
 // agent, its tools and its apps to the other machine at once (computer-machines.ts); the machine left behind keeps
 // its files, so switching back picks up there.
 import path from "node:path";
-import { Sandbox } from "e2b";
 import {
   type Choice,
   type ChoiceStore,
@@ -13,9 +12,11 @@ import {
   sizeOf,
 } from "./computer-choice.ts";
 import {
+  cloudKeyProblem,
   machinePlan,
   machineRunner,
   type MachineStatus,
+  probeOwn,
 } from "./computer-machines.ts";
 import {
   type ComputerDevice,
@@ -25,7 +26,6 @@ import {
 } from "./computer-tailnet.ts";
 import type { Topics } from "./live.ts";
 import type { MachineProvider } from "./machine.ts";
-import { probeSsh } from "./machine-ssh.ts";
 import {
   COMPUTER_USER,
   computerCommand,
@@ -111,25 +111,6 @@ async function useCloud({ fixed, choice, switchTo }: Switching, size: string) {
   return ok;
 }
 
-/** Why E2B does not take the key; "" when it does. */
-async function keyProblem(key: string) {
-  if (!/^e2b_[A-Za-z0-9]+$/.test(key)) {
-    return "An E2B API key starts with e2b_. Copy it from e2b.dev/dashboard.";
-  }
-
-  try {
-    await Sandbox.list({ apiKey: key }).nextItems();
-
-    return "";
-  } catch (error) {
-    const reason = message(error);
-
-    return /unauthori[sz]ed|invalid api key/i.test(reason)
-      ? "E2B did not accept that key. Copy it again from e2b.dev/dashboard."
-      : `Could not check the key with E2B: ${reason}`;
-  }
-}
-
 /** Checks the key with E2B, keeps it, and moves a machine-less agent onto Imp cloud. */
 async function setCloudKey(switching: Switching, key: string) {
   const { fixed, choice, switchTo, changed } = switching;
@@ -139,7 +120,7 @@ async function setCloudKey(switching: Switching, key: string) {
   }
 
   const trimmed = key.trim();
-  const problem = await keyProblem(trimmed);
+  const problem = await cloudKeyProblem(trimmed);
 
   if (problem) {
     return refused(problem);
@@ -186,7 +167,7 @@ async function useOwn({ fixed, own, switchTo }: Switching, dnsName: string) {
 
   await own.trust(device);
 
-  const probe = await probeSsh(own.sshOptions(dnsName));
+  const probe = await probeOwn(own, dnsName);
 
   if ("error" in probe) {
     return refused(

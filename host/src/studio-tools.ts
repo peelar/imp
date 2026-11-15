@@ -6,7 +6,6 @@ import {
   section,
 } from "@earendil-works/pi-durable";
 import { obj, str } from "@earendil-works/pi-schema";
-import { draftSlot } from "./app-folders.ts";
 import type { AppGateway } from "./apps.ts";
 import {
   type AgentWorkspace,
@@ -31,8 +30,8 @@ const text = (value: string) => ({
 async function appCode(options: StudioToolsOptions, id: string) {
   requireAppId(id);
 
-  const draft = options.gateway.version(draftSlot(id));
-  const live = options.gateway.version(id);
+  const draft = options.gateway.draft(id);
+  const live = options.gateway.live(id);
 
   const base = await options.workspace.write(
     id,

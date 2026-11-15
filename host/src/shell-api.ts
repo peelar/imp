@@ -303,16 +303,12 @@ function routineCalls({ routines }: ShellApiOptions): Calls {
 }
 
 /** The person's decisions on an app's draft and its saved versions; a decision that cannot be made says why. */
-function studioCalls({ studio, gateway, backup }: ShellApiOptions): Calls {
+function studioCalls({ studio }: ShellApiOptions): Calls {
   const decision =
-    (decide: (id: string, name: string) => Promise<void>): Call =>
+    (decide: (id: string) => Promise<void>): Call =>
     async (args) => {
-      const id = text(args, 0);
-      // Read before the decision: an undo can remove the app.
-      const name = gateway.apps().find((app) => app.id === id)?.name ?? id;
-
       try {
-        await decide(id, name);
+        await decide(text(args, 0));
 
         return ok;
       } catch (error) {
@@ -323,10 +319,8 @@ function studioCalls({ studio, gateway, backup }: ShellApiOptions): Calls {
   return [
     [
       "appsSave",
-      // A save or an undo changes the live code, which the backup keeps; a discard only drops a preview.
-      decision(async (id, name) => {
+      decision(async (id) => {
         await studio.save(id);
-        backup.record(`Save ${name}`);
       }),
     ],
     [
@@ -337,9 +331,8 @@ function studioCalls({ studio, gateway, backup }: ShellApiOptions): Calls {
     ],
     [
       "appsUndo",
-      decision(async (id, name) => {
+      decision(async (id) => {
         await studio.undo(id);
-        backup.record(`Undo the last save of ${name}`);
       }),
     ],
   ];

@@ -4,11 +4,19 @@ import { Connection } from "@earendil-works/pi-env";
 import { type Choice, DEFAULT_SIZE, sizeOf } from "./computer-choice.ts";
 import type { OwnComputers } from "./computer-tailnet.ts";
 import type { Machine, MachineProvider, MachineSize } from "./machine.ts";
-import { e2bProvider } from "./machine-e2b.ts";
+import { e2bKeyProblem, e2bProvider } from "./machine-e2b.ts";
 import { machineImage } from "./machine-runtime.ts";
-import { sshProvider } from "./machine-ssh.ts";
+import { probeSsh, sshProvider } from "./machine-ssh.ts";
 
 const MACHINE_KEY = "owner:local";
+
+/** Why Imp cloud does not take an API key; "" when it does. */
+export const cloudKeyProblem = e2bKeyProblem;
+
+/** Signs in to one of the owner's computers and checks it can be the agent's: its home directory, or why not. */
+export const probeOwn = async (own: OwnComputers, dnsName: string) =>
+  await probeSsh(own.sshOptions(dnsName));
+
 const IDLE_SUSPEND_MS = 10 * 60_000;
 const KEEP_ALIVE_MS = 60_000;
 
