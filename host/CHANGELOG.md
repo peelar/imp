@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.6.0
+
+### Minor Changes
+
+- b79f386: ⌘L puts the cursor in the message box from anywhere: the chat beside an open app, or the chat tab's, which it opens.
+
 ## 0.5.1
 
 ### Patch Changes
