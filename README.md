@@ -7,6 +7,8 @@ Your own imp: a self-hosted assistant that runs errands in your apps and builds 
 Chat is home. Ask for something, and the imp does it on a Linux computer of its own. Ask for a tool, and it builds
 an app that stays: a screen you keep using, which the imp can also operate for you.
 
+<a href="docs/media/imp-launch.mp4"><img src="docs/media/imp-launch.gif" alt="Imp's launch video: on the web the imp builds a Habits app and it is saved; on an iPhone the imp ticks a habit off when told; the Mac app shows it live; a tick on the Mac reaches the web and the phone at once." width="100%"></a>
+
 > [!WARNING]
 > Imp is an early prototype. Expect everything to change.
 
