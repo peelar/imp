@@ -106,7 +106,7 @@ function useRow(use: RecordedUse) {
     secret: use.secret,
     what: signIn
       ? `sign in on ${use.host}`
-      : `${use.method} ${use.host}${use.path}`,
+      : `${use.method} ${use.host}${use.path}${use.app ? ` · ${use.app} app` : ""}`,
     result,
     failed: use.status === 0 || use.status >= 400,
     when: ago(use.at),

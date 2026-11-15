@@ -61,11 +61,12 @@ function parse(frame: RawData): FromEgress | undefined {
 }
 
 /**
- * The password agentd's proxy takes requests with. It is kept in DATA_DIR/egress, so the commands a host started
- * before it restarted can still use the proxy.
+ * A random secret of the host's, kept in DATA_DIR/egress: `proxy-password`, which agentd's proxy takes requests with,
+ * kept so the commands a host started before it restarted can still use the proxy; and `host-token`, with which the
+ * host's own requests (an app's, see app-fetch.ts) name their app to the addon.
  */
-function proxyPassword(dir: string) {
-  const file = path.join(dir, "proxy-password");
+function keptSecret(dir: string, name: string) {
+  const file = path.join(dir, name);
   const kept = existsSync(file) ? readFileSync(file, "utf-8").trim() : "";
 
   if (/^[0-9a-f]{64}$/.test(kept)) {
@@ -79,9 +80,22 @@ function proxyPassword(dir: string) {
   return made;
 }
 
-/** A proxy URL such as http://127.0.0.1:7071 with the proxy password in it, which clients send on every CONNECT. */
-const withPassword = (proxy: string, password: string) =>
-  proxy.replace("://", `://imp:${password}@`);
+/**
+ * A command's environment for the machine's proxy, its proxy variables (such as http://127.0.0.1:7071) given the
+ * proxy password, which clients send on every CONNECT.
+ */
+const withPassword = (
+  env: Readonly<Record<string, string>>,
+  password: string
+) =>
+  Object.fromEntries(
+    Object.entries(env).map(([name, value]) => [
+      name,
+      /^https?_proxy$/i.test(name)
+        ? value.replace("://", `://imp:${password}@`)
+        : value,
+    ])
+  );
 
 export function openEgress(options: EgressOptions) {
   const dir = path.join(options.dataDir, "egress");
@@ -94,7 +108,8 @@ export function openEgress(options: EgressOptions) {
   });
 
   // mitmProxy made the folder.
-  const password = proxyPassword(dir);
+  const password = keptSecret(dir, "proxy-password");
+  const hostToken = keptSecret(dir, "host-token");
   const passwordHash = createHash("sha256").update(password).digest("hex");
 
   /** The control socket to the current machine's agentd. */
@@ -188,14 +203,15 @@ export function openEgress(options: EgressOptions) {
         control.ws.send(config());
       }
     },
+    /** mitmproxy, started if it is not, for a request the host sends itself: an app's (app-fetch.ts). */
+    viaProxy: async () => ({
+      port: (await proxy.running()).port,
+      ca: proxy.caCertificate(),
+      token: hostToken,
+    }),
     /** A command's environment for the machine's proxy, its proxy variables given the proxy password. */
     commandEnv: (env: Readonly<Record<string, string>>) =>
-      Object.fromEntries(
-        Object.entries(env).map(([name, value]) => [
-          name,
-          /^https?_proxy$/i.test(name) ? withPassword(value, password) : value,
-        ])
-      ),
+      withPassword(env, password),
     /** The agent moved to another machine: drop the control socket; the next command opens one there. */
     disconnect: () => {
       control?.ws.close();

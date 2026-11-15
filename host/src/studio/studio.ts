@@ -130,12 +130,14 @@ export function studio(options: StudioOptions) {
   );
 
   return {
-    /** The apps for the shell, with each one's draft and undo. */
+    /** The apps for the shell, with each one's draft and undo, what it reads and how its sync went. */
     state: () =>
       gateway.apps().map((app) => ({
         ...app,
         draft: gateway.draft(app.id) !== undefined,
         undo: decisions.undoKind(app.id),
+        reads: gateway.reads(app.id),
+        sync: gateway.syncLine(app.id),
       })),
     /** The build the host serves, "repo" while it serves the repository's own. */
     buildId: () => builds.current() ?? "repo",

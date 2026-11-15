@@ -77,6 +77,44 @@ export default {
 - **A write may refuse** by returning `{ ok: false, error: "why" }`. Anything else counts as done.
 - **Every operation is the imp's too**, unless it says `agent: false`. Use that only for what must stay yours.
 
+## Reading a service
+
+An app can read your services, such as GitHub, and keep a copy of what it needs in its database. It names every host it reads in `connections`, with the name of your key for it, and brings the data in with `sync`:
+
+```ts
+export default {
+  schema: ["CREATE TABLE prs (id TEXT PRIMARY KEY, title TEXT NOT NULL)"],
+  connections: [
+    { host: "api.github.com", secret: "github", query: "/graphql" },
+  ],
+  sync: {
+    every: "15m",
+    run: async (app) => {
+      const answer = await app.fetch(
+        "https://api.github.com/search/issues?q=is:pr+is:open+author:@me"
+      );
+      if (answer.status !== 200) {
+        throw new Error(`GitHub answered ${answer.status}`);
+      }
+      const { items } = JSON.parse(answer.body);
+      await app.db.batch([
+        { sql: "DELETE FROM prs" },
+        ...items.map((pr) => ({
+          sql: "INSERT INTO prs (id, title) VALUES (?, ?)",
+          params: [String(pr.id), pr.title],
+        })),
+      ]);
+    },
+  },
+  operations: {/* reads that answer from app.db */},
+} satisfies AppServer;
+```
+
+- **`app.fetch` only reads, from the app's connections.** HTTPS on port 443, GET or HEAD, or POST to a connection's `query` path, because GraphQL APIs take reads by POST. It follows no redirect, and refuses a host that resolves to an address on your host's network. It answers `{ status, headers, body }` with the body as text.
+- **Your key goes on the request at the host.** A connection's `secret` names one of your keys in Settings → Secrets. The host sends the request through the same proxy as the imp's commands, which puts the key on it and takes it out of the answer, and **Recent use** names the app. Without the key, `app.fetch` throws `needs secret github`.
+- **`sync.every`** is `15m`, `1h`, `6h` or `1d`. See [Apps](apps.md#live-apps-reading-your-services) for when it runs.
+- **Fetch everything, then write once.** One `app.db.batch` keeps the last good copy whole when a sync fails halfway. Throw on a failure, so the app's bar says why.
+
 ## app.contract
 
 The screen is one `component Screen`. The shell shows it in the app's tab and feeds it through its props, and **each prop names an operation**:

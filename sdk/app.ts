@@ -18,8 +18,29 @@ export type Json =
 
 export type SqlValue = null | number | string;
 
+/** What `app.fetch` sends: a method other than GET, headers and a text body are optional. */
+export type FetchInit = {
+  readonly method?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+};
+
+/** What `app.fetch` answers: the status, the headers by lowercase name, and the body as text. */
+export type FetchAnswer = {
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: string;
+};
+
 export type AppContext = {
   readonly id: string;
+  /**
+   * Reads from a service the app names in `connections`, such as `app.fetch("https://api.github.com/notifications")`.
+   * The host sends it, with the owner's key when the connection names one; the key never reaches the app. Only reads:
+   * GET and HEAD, and POST to a connection's `query` path. It throws when the request breaks a rule, or when the
+   * connection's key is missing ("needs secret github"). Redirects are not followed.
+   */
+  readonly fetch: (url: string, init?: FetchInit) => Promise<FetchAnswer>;
   readonly db: {
     readonly all: <T = Record<string, SqlValue>>(
       sql: string,
@@ -70,9 +91,34 @@ export type AppOperation = {
   run(args: Record<string, Json>, app: AppContext): Json | Promise<Json>;
 };
 
+/** A service the app reads with `app.fetch`. */
+export type Connection = {
+  /** The host name, such as "api.github.com". The app reaches it over HTTPS on port 443 only. */
+  readonly host: string;
+  /** The name of the owner's key that goes on its requests, such as "github"; none for a public service. */
+  readonly secret?: string;
+  /** A path that takes reads by POST, such as "/graphql": the one place the app may POST to. */
+  readonly query?: string;
+};
+
+/** How often the host syncs an app, at most. */
+export type SyncEvery = "15m" | "1h" | "6h" | "1d";
+
 export type AppServer = {
   /** Migrations, in order. The host applies the ones a database has not had yet, before the first call. */
   readonly schema?: readonly string[];
   /** Everything the app does, by camelCase name, such as `setDone`. */
   readonly operations?: Readonly<Record<string, AppOperation>>;
+  /** The services the app reads: the owner sees them before Save, and the host refuses `app.fetch` to any other. */
+  readonly connections?: readonly Connection[];
+  /**
+   * Brings outside data into `app.db`, so the operations answer from the last good copy. The host runs it on the live
+   * version, never a draft: when its tab opens and the data is older than `every`, on Sync now, and on schedule while
+   * the computer is awake (it never wakes it for a sync). Fetch everything first, then write it in one `app.db.batch`,
+   * so a failure halfway keeps the last copy whole.
+   */
+  readonly sync?: {
+    readonly every: SyncEvery;
+    readonly run: (app: AppContext) => void | Promise<void>;
+  };
 };

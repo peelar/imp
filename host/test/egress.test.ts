@@ -1,16 +1,21 @@
 // The egress proxy's addon (egress/inject.py), in the real mitmproxy the host downloads: it puts a secret on a request
 // and keeps the value out of what comes back, however the response is sent. The vault is a stand-in on a unix socket,
-// and the service a local server that echoes the header the addon set; plain HTTP, so no CA is needed.
+// and the service a local server that echoes the header the addon set; plain HTTP, so no CA is needed. An app's
+// request, which the host sends itself (src/secrets/app-fetch.ts), goes the same way over HTTPS, to a service with a
+// certificate of its own, which this mitmproxy is told not to check.
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, request } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { after, before, test } from "node:test";
+import { compile, map, obj, opt, str } from "@earendil-works/pi-schema";
 import { freePort } from "../src/kernel/ports.ts";
+import { sendAppRequest } from "../src/secrets/app-fetch.ts";
 import { tool } from "../src/secrets/programs.ts";
 import { repo } from "./harness.ts";
 
@@ -45,17 +50,65 @@ const service = createServer((req, res) => {
   }
 });
 
+const HOST_TOKEN = "host-token-for-the-test";
+
+// The HTTPS service an app reads: it answers the headers it got.
+execFileSync(
+  "openssl",
+  [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-keyout",
+    path.join(dir, "service.key"),
+    "-out",
+    path.join(dir, "service.pem"),
+  ],
+  { stdio: "ignore" }
+);
+
+const secure = createHttpsServer(
+  {
+    key: readFileSync(path.join(dir, "service.key")),
+    cert: readFileSync(path.join(dir, "service.pem")),
+  },
+  (req, res) => {
+    res.end(JSON.stringify(req.headers));
+  }
+);
+
 let proxy: ChildProcess | undefined;
 let proxyPort = 0;
 let servicePort = 0;
+let securePort = 0;
+
+/** What mitmproxy printed: the addon's IMP-USE lines among it. */
+let printed = "";
 
 before(async () => {
   const socket = path.join(dir, "vault.sock");
 
-  [servicePort, proxyPort] = await Promise.all([freePort(), freePort()]);
+  [servicePort, proxyPort, securePort] = await Promise.all([
+    freePort(),
+    freePort(),
+    freePort(),
+  ]);
   vault.listen(socket);
   service.listen(servicePort, "127.0.0.1");
-  await Promise.all([once(vault, "listening"), once(service, "listening")]);
+  secure.listen(securePort, "127.0.0.1");
+  await Promise.all([
+    once(vault, "listening"),
+    once(service, "listening"),
+    once(secure, "listening"),
+  ]);
   writeFileSync(
     path.join(dir, "rules.json"),
     JSON.stringify({
@@ -68,6 +121,7 @@ before(async () => {
     })
   );
   writeFileSync(path.join(dir, "token"), "token");
+  writeFileSync(path.join(dir, "host-token"), HOST_TOKEN);
   // The same options egress-proxy.ts starts mitmproxy with.
   proxy = spawn(
     await tool(path.join(tmpdir(), "imp-tools"), "mitmdump"),
@@ -78,6 +132,9 @@ before(async () => {
       "stream_large_bodies=1m",
       "--set",
       "termlog_verbosity=warn",
+      // The app's HTTPS service signs its own certificate.
+      "--set",
+      "ssl_insecure=true",
       "-s",
       path.join(repo, "host", "egress", "inject.py"),
     ],
@@ -88,9 +145,13 @@ before(async () => {
         IMP_EGRESS_DIR: dir,
         IMP_VAULT_SOCKET: socket,
       },
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "ignore"],
     }
   );
+
+  proxy.stdout?.on("data", (chunk: Buffer) => {
+    printed += chunk.toString("utf-8");
+  });
 
   for (let tries = 0; tries < 100; tries += 1) {
     // oxlint-disable-next-line no-await-in-loop -- a poll: each try waits for the one before it.
@@ -109,6 +170,7 @@ after(() => {
   proxy?.kill();
   vault.close();
   service.close();
+  secure.close();
 });
 
 /** A GET through the proxy, as a command on the agent's machine sends it: with the stand-in. */
@@ -171,4 +233,67 @@ test("a chunked answer, whose size is unknown, streams through with the value re
   assert.equal(status, 200);
   assert.ok(!text.includes(VALUE));
   assert.equal(text, body(`Bearer ${STAND_IN}`));
+});
+
+/** An app's request for the secure service, as the gateway hands it over: checked, with the key named. */
+const appRequest = async (app: string, token: string) =>
+  await sendAppRequest(
+    {
+      app,
+      url: `https://127.0.0.1:${securePort}/echo?x=1`,
+      method: "GET",
+      // An app cannot name itself, nor reach the proxy's own headers.
+      headers: { "x-imp-app": "forged", accept: "application/json" },
+      body: "",
+      secret: "gh",
+      address: "127.0.0.1",
+    },
+    async () => ({
+      port: proxyPort,
+      ca: readFileSync(
+        path.join(dir, ".mitmproxy", "mitmproxy-ca-cert.pem"),
+        "utf-8"
+      ),
+      token,
+    })
+  );
+
+const useLine = compile(obj({ app: opt(str()) }, { open: true }));
+const headersSeen = compile(map(str()));
+
+/** The apps the addon recorded uses for, newest last. */
+const usedBy = () =>
+  printed
+    .split("\n")
+    .filter((line) => line.startsWith("IMP-USE "))
+    .map((line) => {
+      const use: unknown = JSON.parse(line.slice("IMP-USE ".length));
+
+      return useLine.check(use) ? use.app : undefined;
+    });
+
+test("an app's request gets the key on its way, and the answer comes back without it, with the use named for the app", async () => {
+  const answer = await appRequest("reader", HOST_TOKEN);
+  const seen: unknown = JSON.parse(answer.body);
+
+  assert.equal(answer.status, 200);
+  assert.ok(!answer.body.includes(VALUE));
+  assert.ok(headersSeen.check(seen));
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(seen).filter(([name]) =>
+        ["authorization", "accept", "x-imp-app", "x-imp-host"].includes(name)
+      )
+    ),
+    // The service got the value; the answer says the stand-in in its place.
+    { authorization: `Bearer ${STAND_IN}`, accept: "application/json" }
+  );
+  assert.equal(usedBy().at(-1), "reader");
+});
+
+test("a request without the host's token names no app", async () => {
+  const answer = await appRequest("reader", "not-the-host");
+
+  assert.equal(answer.status, 200);
+  assert.equal(usedBy().at(-1), "");
 });

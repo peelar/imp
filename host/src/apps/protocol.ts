@@ -1,10 +1,13 @@
 // The messages between the host, agentd and each app's worker (machine/agentd.ts and machine/worker.ts). The egress
 // proxy's messages are the secrets' own (secrets/egress-protocol.ts).
 //
-//   host   -> agentd   ToAgentd     load and unload apps, call their operations, answer their database requests
-//   agentd -> host     FromAgentd   what loaded, call results, database requests
-//   agentd -> worker   ToWorker     calls and database answers
-//   worker -> agentd   FromWorker   the app's manifest, call results, database requests
+//   host   -> agentd   ToAgentd     load and unload apps, call their operations, answer their requests
+//   agentd -> host     FromAgentd   what loaded, call results, the apps' requests
+//   agentd -> worker   ToWorker     calls and answers to its requests
+//   worker -> agentd   FromWorker   the app's manifest, call results, requests
+//
+// An app's requests go to the host because what they reach is the host's: its database (`app.db`), and its owner's
+// keys (`app.fetch`). They travel as `db` messages, and `op` says which.
 //
 // The machine runs code the agent wrote, so the host checks everything it receives against the schemas below. The
 // machine files import this module's types only: they are stripped to plain JavaScript and run with no packages.
@@ -26,7 +29,7 @@ import {
   union,
   unknown,
 } from "@earendil-works/pi-schema";
-import type { Json, Param } from "../../../sdk/app.ts";
+import type { Connection, Json, Param, SyncEvery } from "../../../sdk/app.ts";
 
 const json = recursive<Json>("json", (self) =>
   union([nul(), bool(), num(), str(), arr(self), map(self)])
@@ -50,6 +53,9 @@ const reportedManifest = obj({
       agent: bool(),
     })
   ),
+  connections: opt(unknown()),
+  /** The app's `sync.every`; absent when it has no sync. */
+  every: opt(unknown()),
 });
 
 const dbRequest = union([
@@ -61,6 +67,13 @@ const dbRequest = union([
   obj({
     op: lit("batch"),
     statements: arr(obj({ sql: str(), params: opt(arr(sqlValue)) })),
+  }),
+  obj({
+    op: lit("fetch"),
+    url: str(),
+    method: str(),
+    headers: map(str()),
+    body: str(),
   }),
 ]);
 
@@ -87,6 +100,12 @@ export type ReportedOperation = ReportedManifest["operations"][number];
 
 export type DbRequest = Static<typeof dbRequest>;
 
+/** An app's `app.fetch`, as the worker sends it to the host. */
+export type FetchRequest = Extract<DbRequest, { op: "fetch" }>;
+
+/** An app's `app.db` call. */
+export type SqlRequest = Exclude<DbRequest, FetchRequest>;
+
 export type CallResult = Static<typeof callResult>;
 
 export type FromAgentd = Static<typeof fromAgentd>;
@@ -105,7 +124,13 @@ export type Manifest = {
   /** The app's migrations, in order. */
   readonly schema: readonly string[];
   readonly operations: readonly Operation[];
+  readonly connections: readonly Connection[];
+  /** How often the app syncs; absent when it has no sync. */
+  readonly every?: SyncEvery | undefined;
 };
+
+/** What a call runs when its name is this: the app's sync, which no operation can be named (they are camelCase). */
+export const SYNC = "@sync";
 
 /** An operation's arguments by param name. */
 export type Args = { [name: string]: Json };

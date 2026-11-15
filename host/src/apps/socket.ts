@@ -1,6 +1,7 @@
 // The app socket: the one WebSocket the host opens to agentd on the agent's machine, and the versions that run
 // through it. Each version runs in a slot. The host says what every slot should run; the machine says what loaded,
-// answers calls, and asks for the slot's data, which stays on the host (data.ts).
+// answers calls, and asks for the slot's data, which stays on the host (data.ts), and for its fetches with the owner's
+// keys, which the host sends (`fetch` in the options).
 //
 // The machine's processes may not survive a suspend, so every connection loads every slot again, and whatever was
 // waiting on a lost connection fails with a message to try again.
@@ -16,8 +17,10 @@ import type { Machine } from "../machine/machine.ts";
 import {
   type Args,
   type DbResult,
+  type FetchRequest,
   type FromAgentd,
   fromAgentdCheck,
+  type SqlRequest,
   type ToAgentd,
 } from "./protocol.ts";
 
@@ -30,6 +33,8 @@ export type AppMachineOptions = {
   readonly data: AppData;
   readonly topics: Topics;
   readonly log: (message: string) => void;
+  /** Sends the `app.fetch` of the version in `slot`, and answers what came back; throws why it may not. */
+  readonly fetch: (slot: string, request: FetchRequest) => Promise<Json>;
 };
 
 export type AppMachine = ReturnType<typeof appMachine>;
@@ -44,11 +49,11 @@ const send = (ws: WebSocket, message: ToAgentd) => {
 };
 
 export function appMachine(options: AppMachineOptions) {
-  const { data, topics, log } = options;
+  const { log } = options;
   const slots = new Map<string, AppInfo>(options.slots);
   const loads = slotLoads();
   const calls = openCalls();
-  const answers = slotAnswers({ slots, loads, data, topics, log });
+  const answers = slotAnswers({ ...options, slots, loads });
 
   const sendLoad = (ws: WebSocket, slot: string, app: AppInfo) => {
     send(ws, { t: "load", app: slot, hash: app.hash, code: app.code });
@@ -70,8 +75,22 @@ export function appMachine(options: AppMachineOptions) {
         answers.loadFailed(message);
       } else if (message.t === "result") {
         calls.finish(message);
+      } else if (message.request.op === "fetch") {
+        // The answer comes when the service's does; the socket may be gone by then.
+        answers
+          .fetch(message.id, message.app, message.request)
+          .then((result) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              send(ws, result);
+            }
+
+            return result;
+          })
+          .catch((cause: unknown) => {
+            log(`app ${message.app}: ${asError(cause).message}`);
+          });
       } else {
-        send(ws, answers.db(message));
+        send(ws, answers.db(message.id, message.app, message.request));
       }
     },
     lost() {
@@ -100,12 +119,20 @@ export function appMachine(options: AppMachineOptions) {
     slots: (): ReadonlyMap<string, AppInfo> => slots,
     /** The version in a slot, once it loaded; throws why it did not. */
     loaded: async (slot: string) => (await ready(slot)).version,
+    /** Whether the socket to the machine is open now, so a call needs no machine started. */
+    awake: () => socket.open() !== undefined,
+    /**
+     * The version in a slot as it last loaded, without reaching the machine: it stays known while the machine is away,
+     * until the slot runs something else.
+     */
+    known: (slot: string) => answers.known(slot),
     /** Starts `app` in `slot`, replacing what ran there, and answers it once it loaded and its data migrated. */
     async install(slot: string, app: AppInfo) {
       const ws = socket.open();
 
       slots.set(slot, app);
       loads.forget(slot);
+      answers.forget(slot);
 
       if (ws) {
         sendLoad(ws, slot, app);
@@ -120,6 +147,7 @@ export function appMachine(options: AppMachineOptions) {
 
       slots.delete(slot);
       loads.stop(slot);
+      answers.forget(slot);
 
       if (ws) {
         send(ws, { t: "unload", app: slot });
@@ -147,16 +175,19 @@ export function appMachine(options: AppMachineOptions) {
   };
 }
 
-type SlotState = {
+type SlotState = Pick<
+  AppMachineOptions,
+  "data" | "topics" | "log" | "fetch"
+> & {
   readonly slots: ReadonlyMap<string, AppInfo>;
   readonly loads: ReturnType<typeof slotLoads>;
-  readonly data: AppData;
-  readonly topics: Topics;
-  readonly log: (message: string) => void;
 };
 
 /** What the host does with each thing the machine says about a slot. */
-function slotAnswers({ slots, loads, data, topics, log }: SlotState) {
+function slotAnswers({ slots, loads, data, topics, log, fetch }: SlotState) {
+  /** Each slot's version as it last loaded, kept across connections. */
+  const known = new Map<string, Loaded>();
+
   /** The slot's version, when the message is about the one the slot runs now. */
   const current = (message: Message<"loaded" | "loadFailed">) => {
     const app = slots.get(message.app);
@@ -178,6 +209,7 @@ function slotAnswers({ slots, loads, data, topics, log }: SlotState) {
 
         data.migrate(message.app, app.id, version.manifest.schema);
         loads.settle(message.app, version);
+        known.set(message.app, version);
       } catch (error) {
         loads.settle(message.app, asError(error));
 
@@ -202,8 +234,33 @@ function slotAnswers({ slots, loads, data, topics, log }: SlotState) {
         new Error(`The ${app.id} app's server.ts failed to start: ${reason}`)
       );
     },
+    known: (slot: string) => known.get(slot),
+    forget: (slot: string) => {
+      known.delete(slot);
+    },
+    /** A worker's fetch, sent from the host with the owner's keys once they allowed the app to use them. */
+    async fetch(
+      id: number,
+      slot: string,
+      request: FetchRequest
+    ): Promise<DbResult> {
+      try {
+        if (!slots.has(slot)) {
+          throw new Error(`no app ${slot}`);
+        }
+
+        return {
+          t: "dbResult",
+          id,
+          ok: true,
+          value: await fetch(slot, request),
+        };
+      } catch (error) {
+        return { t: "dbResult", id, ok: false, error: asError(error).message };
+      }
+    },
     /** A worker's database request, answered from the slot's data on the host. */
-    db({ id, app: slot, request }: Message<"db">): DbResult {
+    db(id: number, slot: string, request: SqlRequest): DbResult {
       try {
         const app = slots.get(slot);
 

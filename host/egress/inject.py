@@ -4,13 +4,16 @@ the hosts the owner's secrets are for.
 For each request it reads the secrets the host's rules name for that host from OpenBao, with a token that can only
 read values, and sets each one's header, replacing whatever the agent sent. A secret's stand-in anywhere else in the
 headers becomes its value too. The value is taken out of the response before the agent sees it, streamed (large)
-responses included. Every use is printed
+responses included. A request the host sends for an app (host/src/secrets/app-fetch.ts) names the app in X-Imp-App,
+which counts only beside the host's token in X-Imp-Host; both are removed before the request goes on. Every use is
+printed
 as one `IMP-USE {json}` line, which the host records. Nothing here keeps a value beyond the request it is used on.
 
 Only the standard library: the addon runs in mitmproxy's own standalone build.
 """
 
 import base64
+import hmac
 import http.client as httpclient
 import json
 import os
@@ -62,6 +65,20 @@ def value(name):
     return json.loads(body)["data"]["data"]["value"]
 
 
+def app_of(flow):
+    """The app a request is for, when the host sent it and said so; "" otherwise. The headers never go on."""
+    label = flow.request.headers.pop("x-imp-app", "")
+    given = flow.request.headers.pop("x-imp-host", "")
+    if not label or not given:
+        return ""
+    try:
+        with open(os.path.join(DIR, "host-token")) as f:
+            token = f.read().strip()
+    except OSError:
+        return ""
+    return label if token and hmac.compare_digest(given, token) else ""
+
+
 def report(flow, status, error=""):
     used = flow.metadata.get("imp", [])
     for name, _ in used or [(flow.metadata.get("imp-failed"), None)]:
@@ -73,12 +90,14 @@ def report(flow, status, error=""):
                 "path": flow.request.path.split("?")[0][:200],
                 "status": status,
                 "error": error,
+                "app": flow.metadata.get("imp-app", ""),
             }
             sys.stdout.write("IMP-USE " + json.dumps(fields) + "\n")
     sys.stdout.flush()
 
 
 def request(flow: http.HTTPFlow):
+    flow.metadata["imp-app"] = app_of(flow)
     table = rules()
     applies = table.get("hosts", {}).get(flow.request.pretty_host.lower())
     if not applies:

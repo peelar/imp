@@ -17,7 +17,7 @@ import {
 import path from "node:path";
 import type { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
-import { compile, int, obj, str } from "@earendil-works/pi-schema";
+import { compile, int, obj, opt, str } from "@earendil-works/pi-schema";
 import { killOnExit, lastLines } from "../kernel/children.ts";
 import { accepts, freePort } from "../kernel/ports.ts";
 import { tool } from "./programs.ts";
@@ -50,6 +50,7 @@ const use = compile(
     path: str(),
     status: int(),
     error: str(),
+    app: opt(str()),
   })
 );
 
@@ -61,6 +62,8 @@ export type EgressUse = {
   readonly path: string;
   readonly status: number;
   readonly error: string;
+  /** The app the host sent it for; absent or "" for the imp's own. */
+  readonly app?: string | undefined;
 };
 
 export type MitmProxyOptions = {

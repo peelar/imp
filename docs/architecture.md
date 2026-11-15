@@ -37,7 +37,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 
 | Folder | What it owns | May use |
 | --- | --- | --- |
-| `apps/` | The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, and the two tools the agent runs apps with | `machine` |
+| `apps/` | The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, what it reads from outside and its syncs, and the two tools the agent runs apps with | `machine` |
 | `studio/` | Making apps: previews, Save, Discard and Undo, the code the host keeps, and the web builds with the apps in them | `apps` |
 | `chats/` | The conversations, and the lines the host adds to a message, such as a routine's |  |
 | `routines/` | What the imp does on a schedule, each in a conversation of its own | `chats` |

@@ -21,6 +21,20 @@ The app's database is a SQLite file on the host, `DATA_DIR/apps/<id>.sqlite`. Ev
 
 Versions run in slots. An app's live version runs in the slot named by its id. A draft being previewed runs beside it in `<id>~draft`, on a **copy** of the live data. The shell's views use the draft while there is one. The agent's actions always reach the live version unless they ask for the draft.
 
+## Live apps: reading your services
+
+An app can read your services and keep a copy current in its database ([Build an app](building-apps.md#reading-a-service)). What it may reach is in its code, as `connections`, and the preview's bar says it before you save: "Reads api.github.com with your github key, every 15 min." The host holds every `app.fetch` to those hosts, to reads, and to the keys the connections name (`host/src/apps/connections.ts`), and sends it from the host (`host/src/secrets/app-fetch.ts`), so the app's code never holds a key.
+
+The host runs an app's `sync` on its live version only, never on a draft, and never wakes the computer for it:
+
+- when you open the app's tab and its copy is due,
+- when you press **Sync now** on the app's bar, and
+- on schedule, while the host is connected to the computer.
+
+On E2B, where the computer pauses after 10 minutes unused, a schedule alone does not keep it running: a sync then waits until you open the app or the imp uses the computer. A computer of yours never pauses.
+
+The bar says how the last sync went ("Synced 3 min ago", or "Sync failing for 20 min: GitHub answered 401"). The host keeps that in `DATA_DIR/apps/sync.json`, outside the app's database, so an app cannot make it up. A failed sync is tried again later, twice as late each time, up to once a day.
+
 ## From the imp's workspace to your screen
 
 1. **The imp writes the folder**

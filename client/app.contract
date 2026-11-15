@@ -83,7 +83,9 @@ shape ChatState
 // An installed app. `cover` is its engraving in the client's assets ("" for none), `symbol` its fallback icon.
 // `draft` is true while the app shows a preview of a new version; `undo` says what undoing its last save does: ""
 // (nothing to undo), "keep" (the data stays), "data" (the data goes back to before that save) or "remove" (the save
-// made the app, so undoing removes it).
+// made the app, so undoing removes it). `reads` says what the version shown reads from outside, such as "Reads
+// api.github.com with your github key, every 15 min." ("" for nothing), and `sync` how its live version's sync went,
+// such as "Synced 3 min ago" or "Syncing…" ("" for an app without a sync).
 shape AppTile
   id: string
   name: string
@@ -92,6 +94,8 @@ shape AppTile
   cover: string
   draft: bool
   undo: string
+  reads: string
+  sync: string
 
 // The web build the host serves now. A page from an older build relaunches to load it.
 shape Build
@@ -318,6 +322,10 @@ fn hasDraft(name: string, apps: AppTile[]): bool =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.draft, case none => false }
 fn undoKind(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.undo, case none => "" }
+fn readsOf(name: string, apps: AppTile[]): string =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.reads, case none => "" }
+fn syncOf(name: string, apps: AppTile[]): string =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.sync, case none => "" }
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
 // A memory entry's title inside a sentence: the person's own entry is "You", which reads "you" there.
 fn aboutTitle(title: string): string = title == "You" ? "you" : title
@@ -433,6 +441,7 @@ component App
   mutation appSaved as shape Reply
   mutation appDiscarded as shape Reply
   mutation appUndone as shape Reply
+  mutation appSynced as shape Reply
   mutation computerSwitched as shape Reply
   mutation computerRefreshed as shape Reply
   mutation computerRetried as shape Reply
@@ -764,6 +773,8 @@ component App
     send appDiscarded = appsDiscard(id)
   action undoApp(id: string)
     send appUndone = appsUndo(id)
+  action syncApp(id: string)
+    send appSynced = appsSync(id)
   // <apps:members>
   resource todosReadList = todosList() when signedIn and nav.tab == "todos" as shape TodosTodo[] else empty()
   derive todosReadListLost = match failure(todosReadList) { case some(f) => true, case none => false }
@@ -1057,7 +1068,7 @@ component App
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=pick("settings"))
                   // <apps:screens>
                   if e.name == "todos"
-                    AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, keys=keys)
+                    AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The conversations and the tricks, beside the chat on a wide window.
@@ -1954,15 +1965,19 @@ component BackupSettings
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
 // An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
-// preview of a new version, the bar says so and offers Save and Discard; after a save it offers to undo it.
+// preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
+// Otherwise it says how the app's sync went, with Sync now, and after a save offers to undo it.
 component AppPage
   props
     id: string
     draft: bool
     undo: string
+    reads: string
+    sync: string
     save: action
     discard: action
     undoSave: action
+    syncNow: action
     keys: bool
   slot
   view
@@ -1971,8 +1986,10 @@ component AppPage
         row testId="preview-bar" align-items="center" gap=12 padding="10px 20px" background-color="fill.preview"
           color="ink.on-fill" flex-wrap="wrap"
           text "Preview" class=Label color="ink.on-fill"
-          text "A new version, on a copy of your data. Nothing you do here is kept." flex=1 min-width="12rem"
-            font-size="0.9375rem"
+          column flex=1 min-width="12rem" gap=2
+            text "A new version, on a copy of your data. Nothing you do here is kept." font-size="0.9375rem"
+            if reads != ""
+              text reads font-size="0.875rem" opacity=0.85 testId="preview-reads"
           button press=discard(id) testId="preview-discard" padding="7px 12px" border="1px solid ink.on-fill"
             background-color="transparent" color="ink.on-fill"
             text "Discard" class=Label color="inherit"
@@ -1981,13 +1998,27 @@ component AppPage
             text "Save" class=Label color="inherit"
             if keys
               KeyBadge(chord="Meta+S", at="end")
-      else if undo != ""
+      else if undo != "" or sync != ""
         // In line with the page's title and its Chat button above.
         row justify-content="center" padding="8px 20px 0"
-          row width="100%" max-width="46rem" justify-content="flex-end"
-            button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
-              border="1px solid line.strong" background-color="transparent" color="ink.strong"
-              text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
+          row width="100%" max-width="46rem" align-items="center" gap=12
+            if sync != ""
+              row flex=1 min-width=0 align-items="center" gap=10 testId="sync-bar"
+                text sync font-size="0.8125rem" color=(sync.startsWith("Sync failing") ? "-exact-system-red" : "ink.muted")
+                  min-width=0 overflow-wrap="anywhere" testId="sync-status"
+                button press=syncNow(id) disabled=(sync == "Syncing…") testId="sync-now" padding="4px 0" border="none"
+                  background-color="transparent" color="ink.muted" flex-shrink=0
+                  :hover
+                    color="ink.strong"
+                  :disabled
+                    color="ink.faint"
+                  text "Sync now" class=Label color="inherit"
+            else
+              row flex=1
+            if undo != ""
+              button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
+                border="1px solid line.strong" background-color="transparent" color="ink.strong" flex-shrink=0
+                text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
         dialog id=`undo-${id}` role="alertdialog" aria-label="Undo the last save?"
           text (undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays.")
           button commandfor=`undo-${id}` command="close" testId="undo-cancel"

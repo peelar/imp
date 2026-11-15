@@ -3,7 +3,7 @@
 // version, computer, memory, secrets, backup), which no app may take as its id (apps/folders.ts); every other name goes to the
 // app that owns it, such as `todosSetDone` to the todos app's `setDone`.
 import type { Json } from "../../sdk/app.ts";
-import { type AppGateway, appTopic } from "./apps/apps.ts";
+import { type AppGateway, appTopic, SYNC_TOPIC } from "./apps/apps.ts";
 import { TOPIC as CHAT, type Chats } from "./chats/chats.ts";
 import { TOPIC as COMPUTER, type Computer } from "./computer/computer.ts";
 import type { Answer, LiveSource } from "./kernel/live.ts";
@@ -169,7 +169,10 @@ function shellSources(options: ShellApiOptions) {
       },
     ],
     ["chat", { topics: [CHAT], load: async () => await chats.state() }],
-    ["apps", { topics: [APPS_TOPIC], load: async () => studio.state() }],
+    [
+      "apps",
+      { topics: [APPS_TOPIC, SYNC_TOPIC], load: async () => studio.state() },
+    ],
     [
       "build",
       { topics: [BUILD_TOPIC], load: async () => ({ id: studio.buildId() }) },
@@ -315,7 +318,7 @@ function routineCalls({ routines }: ShellApiOptions): Calls {
 }
 
 /** The person's decisions on an app's draft and its saved versions; a decision that cannot be made says why. */
-function studioCalls({ studio }: ShellApiOptions): Calls {
+function studioCalls({ studio, gateway }: ShellApiOptions): Calls {
   const decision =
     (decide: (id: string) => Promise<void>): Call =>
     async (args) => {
@@ -346,6 +349,14 @@ function studioCalls({ studio }: ShellApiOptions): Calls {
       decision(async (id) => {
         await studio.undo(id);
       }),
+    ],
+    [
+      "appsSync",
+      async (args) => {
+        const failed = await gateway.syncNow(text(args, 0));
+
+        return failed === undefined ? ok : refused(failed);
+      },
     ],
   ];
 }

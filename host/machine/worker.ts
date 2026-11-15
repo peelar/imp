@@ -1,10 +1,16 @@
 // One app's server code, in a worker of its own. The module's default export is the app (see sdk/app.ts); its
-// database lives on the host, so every `app.db` call goes to the host and back.
+// database and its owner's keys are on the host, so every `app.db` and `app.fetch` call goes to the host and back.
 //
 // The host strips this file's types and installs it on the machine as worker.mjs (src/computer/runtime.ts), where it
 // runs with no packages: import only types and Node's own modules.
 import { parentPort, workerData } from "node:worker_threads";
-import type { AppContext, Json, SqlValue } from "../../sdk/app.ts";
+import type {
+  AppContext,
+  FetchAnswer,
+  FetchInit,
+  Json,
+  SqlValue,
+} from "../../sdk/app.ts";
 import type {
   Args,
   DbRequest,
@@ -30,7 +36,21 @@ type Run = (
 type Claimed = {
   readonly schema?: ReportedManifest["schema"];
   readonly operations?: Readonly<Record<string, ClaimedOperation | null>>;
+  readonly connections?: ReportedManifest["connections"];
+  readonly sync?: {
+    readonly every?: ReportedManifest["every"];
+    readonly run?: SyncRun | null;
+  } | null;
 };
+
+/** A sync's `run`. The agent wrote it, so it may answer anything; the host keeps none of it. */
+type SyncRun = (app: AppContext) => void | Promise<void>;
+
+const isSyncRun = (run: SyncRun | null | undefined): run is SyncRun =>
+  typeof run === "function";
+
+/** The call that runs the app's sync (src/apps/protocol.ts, SYNC): no operation has this name. */
+const SYNC = "@sync";
 
 type ClaimedOperation = {
   readonly kind?: ReportedManifest["operations"][number]["kind"];
@@ -72,10 +92,19 @@ const db = async (request: DbRequest) => {
 };
 
 // SAFETY: the host answers each request with what its SQLite returned for it (src/apps/data.ts): rows for `all`, a
-// row or null for `get`, the change counts for `run` and `batch`. The types are the ones sdk/app.ts promises the app.
+// row or null for `get`, the change counts for `run` and `batch`; and a fetch with its answer (src/secrets/app-fetch.ts).
+// The types are the ones sdk/app.ts promises the app.
 /* oxlint-disable typescript/no-unsafe-type-assertion -- a database answer crosses the wire as JSON */
 const app: AppContext = Object.freeze({
   id: appId,
+  fetch: async (url: string, init: FetchInit = {}) =>
+    (await db({
+      op: "fetch",
+      url,
+      method: init.method ?? "GET",
+      headers: { ...init.headers },
+      body: init.body ?? "",
+    })) as FetchAnswer,
   db: Object.freeze({
     all: async <T>(sql: string, ...params: SqlValue[]) =>
       (await db({ op: "all", sql, params })) as T[],
@@ -138,9 +167,28 @@ async function load() {
     });
   }
 
+  const { sync } = definition;
+
+  if (sync) {
+    const { run } = sync;
+
+    if (!isSyncRun(run)) {
+      throw new TypeError("sync has no run function");
+    }
+
+    // The sync takes the app and nothing else, and answers nothing.
+    runs.set(SYNC, async (_args, context) => {
+      await run(context);
+
+      return null;
+    });
+  }
+
   const manifest: ReportedManifest = {
     schema: definition.schema ?? [],
     operations,
+    connections: definition.connections,
+    every: sync ? (sync.every ?? null) : undefined,
   };
 
   return { manifest, runs };

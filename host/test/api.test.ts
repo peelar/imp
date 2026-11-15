@@ -108,6 +108,9 @@ test("the shell lists the installed apps and the running version", async () => {
       cover: "assets/art/todos.jpg",
       draft: false,
       undo: "",
+      // Todos reads nothing from outside and has no sync.
+      reads: "",
+      sync: "",
     },
   ]);
   assert.deepEqual(await first("version"), { version: "dev" });

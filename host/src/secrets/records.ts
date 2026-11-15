@@ -11,6 +11,7 @@ import {
   compile,
   int,
   obj,
+  opt,
   str,
   type Validator,
 } from "@earendil-works/pi-schema";
@@ -47,6 +48,7 @@ const usesJson = compile(
       path: str(),
       status: int(),
       error: str(),
+      app: opt(str()),
       id: str(),
       at: str(),
     })

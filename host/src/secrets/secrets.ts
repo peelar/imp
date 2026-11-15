@@ -8,8 +8,10 @@
 //           Chrome, on a page of the login's site only, when the agent calls sign_in (logins.ts).
 //
 // The agent sees names, hosts and sites, never a value, and asks the owner for a secret it lacks with request_secret,
-// never in the chat (tools.ts).
+// never in the chat (tools.ts). An app's code reads a service with a key through the host (app-fetch.ts), never on
+// the machine.
 import type { Registry } from "@earendil-works/pi-durable";
+import { type AppRequest, sendAppRequest } from "./app-fetch.ts";
 import { type Egress, openEgress } from "./egress.ts";
 import type { EgressRule, EgressRules, EgressUse } from "./egress-proxy.ts";
 import type { Topics } from "../kernel/live.ts";
@@ -275,6 +277,14 @@ export function openSecrets(options: SecretsOptions) {
      */
     shellEnv: async () =>
       await commandEnv({ list, egress, machine: options.machine }),
+    /** The hosts the owner's key `name` goes on; undefined when they have no key of that name. */
+    keyHosts: (name: string) =>
+      keysOf(list.all())
+        .find((secret) => secret.name === name)
+        ?.rules.map((rule) => rule.host),
+    /** Sends an app's request, which the app gateway checked, with the key it names (app-fetch.ts). */
+    sendForApp: async (request: AppRequest) =>
+      await sendAppRequest(request, egress.viaProxy),
     /** The agent moved to another machine. */
     switched: () => {
       egress.disconnect();

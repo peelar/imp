@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { copyJson } from "@earendil-works/chord/json";
 import { compile, int, obj } from "@earendil-works/pi-schema";
 import type { Json, SqlValue } from "../../../sdk/app.ts";
-import type { DbRequest } from "./protocol.ts";
+import type { SqlRequest } from "./protocol.ts";
 
 const userVersion = compile(obj({ user_version: int() }));
 const changeCount = compile(obj({ n: int() }));
@@ -91,7 +91,7 @@ export function openAppData(dir: string) {
       }
     },
     /** Answers a worker's request, and says whether it changed the data. */
-    request(slot: string, request: DbRequest) {
+    request(slot: string, request: SqlRequest) {
       const db = database(slot);
       const before = totalChanges(db);
       const value = answer(db, request);
@@ -142,7 +142,7 @@ function atomically<T>(db: DatabaseSync, work: () => T): T {
   }
 }
 
-function answer(db: DatabaseSync, request: DbRequest): Json {
+function answer(db: DatabaseSync, request: SqlRequest): Json {
   if (request.op === "batch") {
     return atomically(db, () =>
       request.statements.map((statement) =>

@@ -6,18 +6,30 @@
 // Versions run in slots. An app's live version runs in the slot named by its id; a draft being previewed runs beside
 // it in `<id>~draft`, on a copy of the live data, and the shell's views use the draft while there is one. The agent's
 // actions always reach the live version unless they ask for the draft.
+//
+// A live app may read outside services it names (connections.ts), and keep a copy of them current with its sync
+// (sync.ts). The host holds every `app.fetch` to the app's connections and sends it with `send`, which the owner's
+// secrets provide.
 import path from "node:path";
 import type { Registry } from "@earendil-works/pi-durable";
 import { bool, compile, obj, str } from "@earendil-works/pi-schema";
-import type { Json } from "../../../sdk/app.ts";
+import type { FetchAnswer, Json } from "../../../sdk/app.ts";
+import { checkFetch } from "./connections.ts";
 import { openAppData } from "./data.ts";
 import { type AppInfo, appTopic, draftSlot } from "./folders.ts";
 import { type AppMachine, appMachine } from "./socket.ts";
+import { appSync, SYNC_TOPIC } from "./sync.ts";
 import { appTools } from "./tools.ts";
 import { appVersions } from "./versions.ts";
 import type { Topics } from "../kernel/live.ts";
 import type { Machine } from "../machine/machine.ts";
-import type { Args, Operation } from "./protocol.ts";
+import {
+  type Args,
+  type FetchRequest,
+  type Manifest,
+  type Operation,
+  SYNC,
+} from "./protocol.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export {
@@ -31,6 +43,8 @@ export {
 
 export type { AppFiles, AppInfo } from "./folders.ts";
 
+export { SYNC_TOPIC } from "./sync.ts";
+
 export type { Manifest, Operation } from "./protocol.ts";
 
 export type GatewayOptions = {
@@ -40,7 +54,18 @@ export type GatewayOptions = {
   readonly topics: Topics;
   readonly registry: Registry;
   readonly machine: () => Promise<Machine>;
+  /** The hosts the owner's key `secret` goes on; undefined when they have no key of that name. */
+  readonly keyHosts: (secret: string) => readonly string[] | undefined;
+  /** Sends an app's request, which the host checked, with the key when it names one. */
+  readonly send: (request: Outbound) => Promise<FetchAnswer>;
   readonly log?: ((message: string) => void) | undefined;
+};
+
+/** An app's `app.fetch` the host checked: to `address`, the address its host resolved to, with `secret` on it. */
+export type Outbound = Omit<FetchRequest, "op"> & {
+  readonly app: string;
+  readonly secret: string | undefined;
+  readonly address: string;
 };
 
 /** An operation the shell names, such as `todosSetDone(id, done)`: its arguments come in the order of its params. */
@@ -85,9 +110,24 @@ export function appGateway(options: GatewayOptions) {
       ((message) => {
         console.log(message);
       }),
+    fetch: async (slot, request) =>
+      await checkedFetch(machine, options, { slot, request }),
   });
 
   const slots = machine.slots();
+
+  const sync = appSync({
+    dataDir: path.join(options.dataDir, "apps"),
+    slots: () => slots,
+    known: machine.known,
+    awake: machine.awake,
+    run: async (id) => {
+      await machine.call(id, SYNC, {});
+    },
+    changed: () => {
+      topics.changed(SYNC_TOPIC);
+    },
+  });
 
   options.registry.install(
     appTools({
@@ -129,7 +169,25 @@ export function appGateway(options: GatewayOptions) {
     ...versions,
     /** The app and the operation name of a shell source such as `todosSetDone`, if an app owns it. */
     route: (source: string) => route(slots, source),
-    fromShell: async (call: ShellCall) => await fromShell(machine, call),
+    fromShell: async (call: ShellCall) => {
+      // An open tab reads its app: the live version syncs if it is due.
+      if (call.kind === "read" && !slots.has(draftSlot(call.app))) {
+        sync.opened(call.app);
+      }
+
+      return await fromShell(machine, call);
+    },
+    /** Sync now: runs the live version's sync, and answers why it failed, if it did. */
+    syncNow: async (id: string) => await sync.now(id),
+    /** What the app's bar says about its live version's sync: "Synced 3 min ago"; "" for an app without one. */
+    syncLine: sync.line,
+    /** What the version the shell shows reads, in words: "Reads api.github.com with your github key, every 15 min." */
+    reads: (id: string) => {
+      const slot = slots.has(draftSlot(id)) ? draftSlot(id) : id;
+      const manifest = machine.known(slot)?.manifest;
+
+      return manifest ? readsLine(manifest) : "";
+    },
     /** Loads every app, so a failure shows in the log at start rather than at the first call. */
     async start() {
       await Promise.all(
@@ -141,10 +199,61 @@ export function appGateway(options: GatewayOptions) {
       machine.disconnect();
     },
     close() {
+      sync.stop();
       machine.disconnect();
       data.closeAll();
     },
   };
+}
+
+/** Holds the `app.fetch` of the version in `slot` to its connections, then sends it. */
+async function checkedFetch(
+  machine: AppMachine,
+  options: GatewayOptions,
+  { slot, request }: { slot: string; request: FetchRequest }
+) {
+  const app = machine.slots().get(slot)?.id ?? slot;
+
+  const { url, secret, address } = await checkFetch(
+    {
+      app,
+      connections: machine.known(slot)?.manifest.connections ?? [],
+      keyHosts: options.keyHosts,
+    },
+    request
+  );
+
+  const { method, headers, body } = request;
+
+  return await options.send({
+    app,
+    url: url.href,
+    method: method.toUpperCase(),
+    headers,
+    body,
+    secret,
+    address,
+  });
+}
+
+const EVERY_WORDS = {
+  "15m": "every 15 min",
+  "1h": "every hour",
+  "6h": "every 6 hours",
+  "1d": "once a day",
+} as const;
+
+/** What a version reads, in words; "" when it reads nothing. */
+function readsLine({ connections, every }: Manifest) {
+  if (connections.length === 0) {
+    return "";
+  }
+
+  const hosts = connections.map(({ host, secret }) =>
+    secret ? `${host} with your ${secret} key` : host
+  );
+
+  return `Reads ${hosts.join(", ")}${every ? `, ${EVERY_WORDS[every]}` : ""}.`;
 }
 
 /** The saved apps: the ones in the slot named by their id. */

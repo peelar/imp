@@ -170,15 +170,13 @@ function openStudio(
   });
 }
 
-/** What the host keeps for the owner beside the apps' data: their secrets, and every version of the apps' code. */
-function openKeeping(
+/** The owner's secrets, which the agent's commands and the apps' code use without holding them. */
+function openOwnerSecrets(
   { options, topics, registry }: Parts,
-  gateway: AppGateway,
   machine: () => Promise<Machine>
 ) {
   const { dataDir } = options;
 
-  // The owner's secrets, which the agent's commands use without holding them.
   const secrets = openSecrets({
     dataDir,
     toolsDir: options.toolsDir ?? path.join(dataDir, "tools"),
@@ -188,6 +186,13 @@ function openKeeping(
   });
 
   secrets.start();
+
+  return secrets;
+}
+
+/** Every version of the apps' code, which the host keeps for the owner beside the apps' data. */
+function openBackup({ options, topics }: Parts, gateway: AppGateway) {
+  const { dataDir } = options;
 
   // Every live app's code, versioned on the host and pushed to GitHub once connected.
   const backup = appBackup({
@@ -199,7 +204,7 @@ function openKeeping(
 
   backup.start();
 
-  return { secrets, backup };
+  return backup;
 }
 
 type Followers = {
@@ -303,6 +308,15 @@ async function openAgent(
   return { harness, chats, routines, tricks, notices };
 }
 
+/** The agent's machine, for something that is about to use it. */
+const machineInUse = (computer: Computer) => async () => {
+  const running = await computer.machine();
+
+  computer.touch();
+
+  return running;
+};
+
 export async function startHost(options: HostOptions) {
   const { dataDir, version = "dev" } = options;
 
@@ -340,14 +354,8 @@ export async function startHost(options: HostOptions) {
     console.error(message);
   });
 
-  /** The agent's machine, for something that is about to use it. */
-  const machine = async () => {
-    const running = await computer.machine();
-
-    computer.touch();
-
-    return running;
-  };
+  const machine = machineInUse(computer);
+  const secrets = openOwnerSecrets(parts, machine);
 
   const gateway = appGateway({
     apps: stored.live,
@@ -355,9 +363,11 @@ export async function startHost(options: HostOptions) {
     topics,
     registry,
     machine,
+    keyHosts: secrets.keyHosts,
+    send: secrets.sendForApp,
   });
 
-  const { secrets, backup } = openKeeping(parts, gateway, machine);
+  const backup = openBackup(parts, gateway);
 
   // Every save and undo changes the live code, which the backup keeps.
   const apps = openStudio(parts, gateway, {

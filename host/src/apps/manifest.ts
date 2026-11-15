@@ -19,6 +19,7 @@ import {
   type Validator,
 } from "@earendil-works/pi-schema";
 import type { Param } from "../../../sdk/app.ts";
+import { checkConnections, checkEvery } from "./connections.ts";
 import type {
   Manifest,
   Operation,
@@ -97,7 +98,14 @@ export function checkManifest(id: string, reported: ReportedManifest): Loaded {
     }
   }
 
-  if (!schema || problems.length > 0) {
+  const report = (problem: string) => {
+    problems.push(problem);
+  };
+
+  const connections = checkConnections(reported.connections, report);
+  const sync = checkEvery(reported.every, report);
+
+  if (!schema || !connections || !sync || problems.length > 0) {
     throw new Error(
       `The ${id} app's server.ts breaks the app rules: ${problems.join("; ")}.`
     );
@@ -107,6 +115,8 @@ export function checkManifest(id: string, reported: ReportedManifest): Loaded {
     manifest: {
       schema,
       operations: [...operations.values()].map((entry) => entry.operation),
+      connections,
+      ...sync,
     },
     operations,
   };
