@@ -185,10 +185,19 @@ const credential = () => ({
   expires: Date.now() + 3_600_000,
 });
 
+// With TEST_SIGNIN_UNREACHABLE, the first sign-in fails as the real one does when the host cannot reach ChatGPT.
+let unreachable = Boolean(process.env.TEST_SIGNIN_UNREACHABLE);
+
 const auth: Provider["auth"] = {
   oauth: {
     name: "ChatGPT (test)",
     async login(interaction) {
+      if (unreachable) {
+        unreachable = false;
+        // .invalid names never resolve (RFC 6761).
+        await fetch("https://auth.invalid/oauth/device");
+      }
+
       await interaction.prompt({
         type: "select",
         message: "Method",

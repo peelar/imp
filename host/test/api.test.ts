@@ -57,6 +57,8 @@ const remembered = (accept: (entries: Row[]) => boolean) => (answer: Json) => {
 };
 
 before(async () => {
+  // The first sign-in cannot reach ChatGPT (scripts/test-host.ts).
+  process.env.TEST_SIGNIN_UNREACHABLE = "1";
   await startTestHost();
   await vaultReady();
 });
@@ -133,6 +135,16 @@ test("a message is refused until ChatGPT is signed in", async () => {
   assert.deepEqual(
     await call("chatSend", ["Hello", ""]),
     refused("Sign in with ChatGPT first.")
+  );
+});
+
+test("a sign-in that cannot reach ChatGPT says why", async () => {
+  const failed = until("account", withStatus("failed"));
+  assert.deepEqual(await call("accountSignIn", []), done);
+
+  assert.match(
+    JSON.stringify((await failed)?.error),
+    /^"The host could not reach ChatGPT: getaddrinfo \w+ auth\.invalid"$/
   );
 });
 

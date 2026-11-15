@@ -94,6 +94,7 @@ EOF
 	fi
 	;;
 Darwin)
+	domain="gui/$(id -u)"
 	agent="$HOME/Library/LaunchAgents/$LABEL.plist"
 	mkdir -p "$(dirname "$agent")"
 	cat > "$agent" <<EOF
@@ -110,8 +111,18 @@ Darwin)
 </dict>
 </plist>
 EOF
-	launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-	launchctl bootstrap "gui/$(id -u)" "$agent"
+	# bootout returns before the running host has exited, and bootstrapping it again before then fails with
+	# "Input/output error", so this waits for the old one to go.
+	launchctl bootout "$domain/$LABEL" 2>/dev/null || true
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		launchctl print "$domain/$LABEL" >/dev/null 2>&1 || break
+		sleep 1
+	done
+	# A host turned off with `launchctl disable` fails to bootstrap with the same error.
+	launchctl enable "$domain/$LABEL"
+	# launchd's own error ends with advice to rerun it as root, which cannot help: the host runs as this user.
+	started=$(launchctl bootstrap "$domain" "$agent" 2>&1) ||
+		fail "launchd would not start the host: $(printf '%s\n' "$started" | head -1). Run this again, without sudo; if it fails the same way, see $IMP_HOME/host.log"
 	logs="tail -f $IMP_HOME/host.log"
 	;;
 *) fail "installs on Linux or macOS" ;;

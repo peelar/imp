@@ -114,12 +114,10 @@ export function chatgptAccount(models: Models, topics: Topics) {
         if (controller.signal.aborted) {
           set({ status: "signedOut", code: "", url: "" });
         } else {
-          set({
-            status: "failed",
-            code: "",
-            url: "",
-            error: cause instanceof Error ? cause.message : String(cause),
-          });
+          const error = failure(cause);
+
+          console.error(`signin: ${error}`);
+          set({ status: "failed", code: "", url: "", error });
         }
       });
     },
@@ -175,6 +173,27 @@ function deviceCodeFlow(
       }
     },
   };
+}
+
+/**
+ * Why a sign-in failed, for the person. When the host cannot reach ChatGPT, Node's fetch says only "fetch failed" and
+ * keeps the reason in its cause: a name that does not resolve, a refused connection, a timeout, a certificate.
+ */
+function failure(cause: unknown): string {
+  if (!(cause instanceof Error)) {
+    return String(cause);
+  }
+
+  const why = cause.cause;
+
+  if (cause.message !== "fetch failed" || !(why instanceof Error)) {
+    return cause.message;
+  }
+
+  // A connection refused at every address is an AggregateError with no message of its own, only a code.
+  const code = "code" in why ? String(why.code) : "";
+
+  return `The host could not reach ChatGPT: ${why.message || code || why.name}`;
 }
 
 /** Whether a ChatGPT credential is stored. A store that cannot be read counts as none: the person signs in again. */
