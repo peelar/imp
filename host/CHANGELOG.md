@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.14.2
+
+### Patch Changes
+
+- 28f3c74: An app waiting for GitHub now points you to Settings → Connections instead of showing the sign-in inside the app, and the note above your first app has a soft accent tint.
+- e5d0712: Imp's screens share one design system: one type scale, spacing on a 4px grid, and one set of buttons, so sizes and spacing are consistent from screen to screen.
+
 ## 0.14.1
 
 ### Patch Changes
