@@ -50,13 +50,11 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   clock until state chat.messages.3.text == "Add todo: Call the vet" within 1000
   expect state chat.messages.4.title == "Todos · Add"
   expect state chat.messages.4.detail == "Call the vet"
-  tap "chat-hide"
-  expect tree missing "chat-panel"
-  tap "dock-toggle"
-  expect tree has "chat-panel"
   tap "chat-expand"
   expect tree missing "chat-panel"
+  expect tree has "chat-column"
   expect tree has "composer"
+  expect tree has "tab-settings"
 
 test "settings show the computer the agent works on, and offer to turn notifications on"
   clock until state account.status == "signedIn" within 5000
@@ -372,7 +370,7 @@ test "⌘ chords open the tabs, a new chat and the message box, and a browser ta
   expect state nav.tab == "settings"
   type "app" key "Meta+3"
   expect state nav.tab == "todos"
-  expect tree has "new-chat-todos"
+  expect tree has "chat-new"
   type "app" key "Meta+n"
   clock until state chat.messages.length == 0 within 5000
   expect state nav.tab == "chat"
@@ -398,6 +396,7 @@ test "the GitHub app opens to an empty inbox that says it has not synced yet"
 
 // Last: it signs the shared host out of ChatGPT. scripts/test-host.ts serves an OpenAI-compatible API on port 8799.
 test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the imp answers on it"
+  size 1280x800
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "signout"
@@ -417,10 +416,14 @@ test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the
   expect state account.kind == "apiKey"
   expect state keyValue == ""
   tap "tab-settings"
-  tap "new-chat-settings"
+  tap "chat-new"
   type "composer" "Hello"
   tap "send"
   clock until state chat.messages.1.text == "Hello from the API." within 10000
   tap "tab-settings"
   expect text "account-model" == "fake-model"
   expect text "account-base" == "http://127.0.0.1:8799/v1"
+  tap "home-logo"
+  expect state nav.tab == "chat"
+  clock until state chat.messages.length == 0 within 5000
+  expect tree has "home"

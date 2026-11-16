@@ -81,7 +81,7 @@ function describeAction(args: ToolArgs, apps: readonly AppLabel[]) {
     title,
     failedTitle: `${title} failed`,
     detail: subject === undefined ? "" : oneLine(subject),
-    icon: app?.symbol ?? "symbol:layers",
+    icon: app?.symbol ?? "symbol:icon.layers",
   };
 }
 
@@ -98,31 +98,42 @@ const KNOWN = new Map<string, readonly [string, string, string, string]>([
     "powershell",
     ["Ran a command", "A command failed", "symbol:icon.terminal", "command"],
   ],
-  ["read", ["Read a file", "Couldn't read a file", "symbol:document", "path"]],
+  [
+    "read",
+    ["Read a file", "Couldn't read a file", "symbol:icon.document", "path"],
+  ],
   [
     "write",
-    ["Wrote a file", "Couldn't write a file", "symbol:compose", "path"],
+    ["Wrote a file", "Couldn't write a file", "symbol:icon.compose", "path"],
   ],
-  ["edit", ["Edited a file", "Couldn't edit a file", "symbol:pencil", "path"]],
+  [
+    "edit",
+    ["Edited a file", "Couldn't edit a file", "symbol:icon.pencil", "path"],
+  ],
   [
     "app_code",
     [
       "Opened an app's code",
       "Couldn't open an app's code",
-      "symbol:document",
+      "symbol:icon.document",
       "app",
     ],
   ],
   [
     "preview_app",
-    ["Built a preview", "Couldn't build a preview", "symbol:sparkles", "app"],
+    [
+      "Built a preview",
+      "Couldn't build a preview",
+      "symbol:icon.sparkles",
+      "app",
+    ],
   ],
   [
     "find_app_actions",
     [
       "Looked up app actions",
       "Couldn't look up app actions",
-      "symbol:search",
+      "symbol:icon.search",
       "query",
     ],
   ],
@@ -131,18 +142,28 @@ const KNOWN = new Map<string, readonly [string, string, string, string]>([
     [
       "Asked for a secret",
       "Couldn't ask for a secret",
-      "symbol:lock",
+      "symbol:icon.lock",
       "service",
     ],
   ],
-  ["sign_in", ["Signed in", "Couldn't sign in", "symbol:lock", "secret"]],
+  ["sign_in", ["Signed in", "Couldn't sign in", "symbol:icon.lock", "secret"]],
   [
     "save_routine",
-    ["Saved a routine", "Couldn't save a routine", "symbol:repeat", "name"],
+    [
+      "Saved a routine",
+      "Couldn't save a routine",
+      "symbol:icon.repeat",
+      "name",
+    ],
   ],
   [
     "delete_routine",
-    ["Deleted a routine", "Couldn't delete a routine", "symbol:repeat", "name"],
+    [
+      "Deleted a routine",
+      "Couldn't delete a routine",
+      "symbol:icon.repeat",
+      "name",
+    ],
   ],
 ]);
 
@@ -162,7 +183,7 @@ const described = (command: string) => {
 
 /** A command that drives agent-browser, in words: the tricks the imp learns and runs, and the pages it uses. */
 function browserStep(command: string) {
-  const icon = "symbol:sparkles";
+  const icon = "symbol:icon.sparkles";
   const [, saved] = /\bflow\s+save\s+(\S+)/.exec(command) ?? [];
 
   if (saved !== undefined) {
@@ -193,13 +214,13 @@ function browserStep(command: string) {
         title: "Used the browser",
         failedTitle: "The browser failed",
         detail: oneLine(command.replace(/^[^]*?\bagent-browser\s+/, "")),
-        icon: "symbol:link",
+        icon: "symbol:icon.link",
       }
     : {
         title: "Opened a page",
         failedTitle: "Couldn't open a page",
         detail: oneLine(opened.replaceAll(/^["']|["']$/g, "")),
-        icon: "symbol:link",
+        icon: "symbol:icon.link",
       };
 }
 
@@ -224,7 +245,7 @@ export function describeTool({ name, args, apps }: ToolUse) {
       title,
       failedTitle: `${title} failed`,
       detail: "",
-      icon: "symbol:sparkles",
+      icon: "symbol:icon.sparkles",
     };
   }
 

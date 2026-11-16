@@ -15,7 +15,7 @@ The imp builds apps for you when you ask. You can also write one yourself, or ch
 {
   "id": "todos",
   "name": "Todos",
-  "symbol": "symbol:checkmark",
+  "symbol": "symbol:icon.check",
   "description": "A list of things to do. The agent can read and change it."
 }
 ```

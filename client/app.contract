@@ -315,17 +315,12 @@ fn keysOf(chord: string): string =
   chord.replaceAll("Control+", "⌃").replaceAll("Alt+", "⌥").replaceAll("Shift+", "⇧").replaceAll("Meta+", "⌘")
 fn capitalized(s: string): string = s == "" ? "" : `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
 fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUpperCase()
-fn localPart(email: string): string = email.includes("@") ? email.slice(0, email.indexOf("@")) : email
-fn givenName(email: string): string =
-  capitalized(localPart(email).includes(".") ? localPart(email).slice(0, localPart(email).indexOf(".")) : localPart(email))
 fn hourOf(ms: number, offset: number): number = floor(((ms + offset * 60000) % 86400000) / 3600000)
 fn greeting(hour: number): string = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
 fn tabLabel(name: string, apps: AppTile[]): string =
   name == "chat" ? "Chat" : name == "settings" ? "Settings" : name == "computer" ? "Computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.name, case none => capitalized(name) }
 fn tabSymbol(name: string, apps: AppTile[]): string =
-  name == "chat" ? "symbol:messages" : name == "settings" ? "symbol:settings" : name == "computer" ? "symbol:icon.computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:layers" }
-fn tabCover(name: string, apps: AppTile[]): string =
-  match first(apps.filter(a => a.id == name)) { case some(a) => a.cover, case none => "" }
+  name == "chat" ? "symbol:icon.messages" : name == "settings" ? "symbol:icon.settings" : name == "computer" ? "symbol:icon.computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:icon.layers" }
 fn hasDraft(name: string, apps: AppTile[]): bool =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.draft, case none => false }
 fn undoKind(name: string, apps: AppTile[]): string =
@@ -353,19 +348,19 @@ fn installAsk(repo: string): string = `Install the app from github.com/${repoPat
 // that do not exist yet, so the imp cannot install them.
 fn directory(): DirectoryApp[] = [
   DirectoryApp(id="todos", name="Todos", description="A list of things to do. Your imp can read and change it.",
-    repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:checkmark"),
+    repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:icon.todos"),
   DirectoryApp(id="habits", name="Habits", description="A streak for each habit, ticked off once a day.",
-    repo="https://github.com/imp-apps/habits", symbol="symbol:star"),
+    repo="https://github.com/imp-apps/habits", symbol="symbol:icon.star"),
   DirectoryApp(id="reading", name="Reading list", description="Books and articles to read, with a note on each one you finish.",
-    repo="https://github.com/imp-apps/reading", symbol="symbol:book"),
+    repo="https://github.com/imp-apps/reading", symbol="symbol:icon.book"),
   DirectoryApp(id="runs", name="Runs", description="Distance and pace for every run, and how the month adds up.",
-    repo="https://github.com/marta/imp-runs", symbol="symbol:chart"),
+    repo="https://github.com/marta/imp-runs", symbol="symbol:icon.chart"),
   DirectoryApp(id="places", name="Places", description="Places to go, each pinned with who told you about it.",
-    repo="https://github.com/imp-apps/places", symbol="symbol:pin"),
+    repo="https://github.com/imp-apps/places", symbol="symbol:icon.pin"),
   DirectoryApp(id="people", name="People", description="Who you met, where, and what to ask them next time.",
-    repo="https://github.com/kuba/imp-people", symbol="symbol:people"),
+    repo="https://github.com/kuba/imp-people", symbol="symbol:icon.people"),
   DirectoryApp(id="journal", name="Journal", description="A line a day. Your imp can write it for you from your chats.",
-    repo="https://github.com/imp-apps/journal", symbol="symbol:pencil")]
+    repo="https://github.com/imp-apps/journal", symbol="symbol:icon.pencil")]
 // The notice at a place in the list, or none (an empty one, from before every notice) past its end.
 fn noticeAt(notices: Notice[], i: number): Notice =
   match notices.at(i) { case some(n) => n, case none => Notice(id="", kind="", title="", body="", conversation="", at=0) }
@@ -398,8 +393,6 @@ component App
   state unsent = ""
   state scheme = "system" persist
   state now = 0
-  // On a wide window the chat moves to a panel on the right while an app is open; this hides or shows that panel.
-  state chatDocked = true persist
   // What the chat tab shows: "chat" (the open conversation), "tricks" (what the imp learned in the browser) or
   // "directory" (apps to install).
   state pane = "chat"
@@ -474,16 +467,15 @@ component App
   mutation listening as shape SpeechRecognitionInfo then listened
   mutation unheard as shape SpeechRecognitionInfo
   derive still = media.prefersReducedMotion
-  // Wide enough for the top bar of apps and the chat beside an app; narrower windows keep the tab bar.
-  derive wide = media.width >= 960
+  // Wide enough for the three columns: the sidebar, the page, and the chat beside an open app (its column stays,
+  // empty, on the chat and Settings, so no page moves when another opens). Narrower windows keep the tab bar.
+  derive wide = media.width >= 1100
   derive onApp = nav.tab != "chat" and nav.tab != "settings"
-  derive docked = wide and onApp and chatDocked
+  derive docked = wide and onApp
   // The ⌘ chords are the app's in the Mac app (and an installed desktop app), where no browser takes them first: only
   // there does the screen hint at them.
   derive keyboard = media.pointer == "fine" and media.displayMode != "browser"
   derive keys = keyboard and keysShown and page.hasFocus
-  // Beside the chat on a wide window: the conversations and the tricks.
-  derive sidebar = wide and nav.tab == "chat"
   // The apps the top bar lists: the installed ones this build has a screen (a tab) for.
   derive shownApps = apps.filter(a => nav.tabs.map(t => t.name).includes(a.id))
   derive openAppName = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
@@ -499,7 +491,7 @@ component App
     or (computerChoice == "container" and not computer.containerAvailable)))
   derive apiKeyError = match keyUsed { case some(r) => r.error, case none => "" }
   derive shown = time.epochAtZero + now
-  derive salutation = account.email == "" ? `${greeting(hourOf(shown, time.utcOffset))}.` : `${greeting(hourOf(shown, time.utcOffset))}, ${givenName(account.email)}.`
+  derive salutation = `${greeting(hourOf(shown, time.utcOffset))}.`
   derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
   derive sendLost = failed(sent) and not pending(sent)
   derive sendError = sendLost ? "Your imp couldn't be reached, so that wasn't sent. Send it again in a moment." : match sent { case some(r) => r.error, case none => "" }
@@ -811,8 +803,14 @@ component App
       scrollIntoView("side-transcript", lastId, block="end")
     else
       scrollIntoView("transcript", lastId, block="end")
-  action toggleDock
-    chatDocked = not chatDocked
+  // The wordmark: back to the home page, a new chat with its greeting, unless the open one is still empty.
+  action goHome
+    pane = "chat"
+    drawer = false
+    nav = select(nav, "chat")
+    if chat.messages.length > 0 or chat.routine != ""
+      draft = ""
+      send chatChanged = chatNew()
   action editHost(v: string)
     hostDraft = v
   action connect
@@ -909,24 +907,26 @@ component App
       background-color="surface.page"
       color="ink.strong" font-family="family.text"
       if signedIn and not needsComputer
-        // The routes. On a wide window they sit under the top bar, and beside the chat panel while an app is open.
-        column position="absolute" left=(sidebar ? "16rem" : "0px") bottom=0 top=(wide ? "3.25rem" : "0px") right=(docked ? "26rem" : "0px")
+        // The routes. On a wide window they sit under the top bar, between the sidebar and the chat's column.
+        column position="absolute" left=(wide ? "15rem" : "0px") bottom=0 top=(wide ? "3.25rem" : "0px") right=(wide ? "24rem" : "0px")
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
                 column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : `${e.name}-screen`)
                   position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
-                  padding-bottom=(wide ? "4.75rem" : "calc(3.5rem + env(safe-area-inset-bottom))")
-                  // Under the top bar the page's header is its title, with no rule of its own.
-                  header display="flex" justify-content="center" padding="0 20px"
-                    border-bottom=(wide ? "none" : "1px solid line.subtle") background-color="surface.page"
-                    row width="100%" max-width="46rem" align-items="center" gap=12 padding=(wide ? "22px 0 0" : "12px 0 11px")
+                  padding-bottom=(wide ? "0px" : "calc(3.5rem + env(safe-area-inset-bottom))")
+                  // On a wide window every page's header is the same bar, as tall as the chat column's, its title at
+                  // the left: switching pages moves nothing.
+                  header display="flex" justify-content="center" padding=(wide ? "0 24px" : "0 20px")
+                    border-bottom="1px solid line.subtle" background-color="surface.page"
+                    row width="100%" max-width=(wide ? "none" : "46rem") align-items="center" gap=12
+                      height=(wide ? "3.25rem" : "auto") box-sizing="border-box" padding=(wide ? "0px" : "12px 0 11px")
                       if e.name == "chat" and not wide
                         button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
                           aria-keyshortcuts="Control+Meta+S" testId="drawer-toggle" appearance="none" width=32 height=32
                           padding=0 display="flex" align-items="center" justify-content="center"
                           border="1px solid line.strong" background-color="transparent" color="ink.strong" position="relative"
-                          image "symbol:menu" width=16 height=16
+                          image "symbol:icon.menu" width=16 height=16
                           if keys
                             KeyBadge(chord="Control+Meta+S", at="end")
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
@@ -939,26 +939,15 @@ component App
                           text "Imp at work" class=Label color="ink.strong"
                       else if not wide
                         text formatDate(shown, time.utcOffset, "medium") class=Label
-                      if wide and e.name != "chat" and e.name != "settings"
-                        // Named for what it does, as the View menu's item for it is.
-                        button press=toggleDock aria-label=(chatDocked ? "Hide chat" : "Show chat")
-                          aria-keyshortcuts="Control+Meta+C" testId="dock-toggle" appearance="none" display="flex"
-                          align-items="center" gap=7 padding="7px 10px" border="1px solid line.strong" position="relative"
-                          background-color=(chatDocked ? "ink.strong" : "transparent")
-                          color=(chatDocked ? "surface.page" : "ink.strong")
-                          image "symbol:icon.panel" width=14 height=14 aria-hidden=true
-                          text "Chat" class=Label color="inherit"
-                          if keys
-                            KeyBadge(chord="Control+Meta+C", at="end")
-                      // New chat from any page; beside the chat on a wide window the sidebar has it.
-                      if not sidebar
+                      // New chat from any page; on a wide window the sidebar has it.
+                      if not wide
                         button press=newChat aria-label="New chat" aria-keyshortcuts="Meta+N" testId=`new-chat-${e.name}`
                           appearance="none" width=32 height=32 padding=0 display="flex" align-items="center"
                           justify-content="center" border="1px solid line.strong" background-color="transparent"
                           color="ink.strong" position="relative"
                           :hover
                             background-color="surface.soft"
-                          image "symbol:compose" width=15 height=15
+                          image "symbol:icon.compose" width=15 height=15
                           if keys
                             KeyBadge(chord="Meta+N", at="end")
                   if e.name == "chat" and pane == "tricks"
@@ -978,7 +967,7 @@ component App
                         testId="routine-delete-confirm"
                         text "Delete"
                     if chat.messages.length == 0 and not chat.busy and chat.routine == ""
-                      // Home with nothing said yet: a greeting, the apps, what to try, and the workshop.
+                      // Home with nothing said yet: a greeting, the apps, and what to try.
                       scroll id="home-scroll" flex=1 min-height=0
                         column max-width="48.5rem" margin="0 auto" padding="28px 20px 28px" gap=28 box-sizing="border-box"
                           width="100%" testId="home"
@@ -998,17 +987,12 @@ component App
                                 transition="background-color 120ms ease"
                                 :hover
                                   background-color="surface.soft"
-                                if a.cover != ""
-                                  image a.cover alt="" width=44 height=44 min-width=44 object-fit="cover"
-                                    border="1px solid line.subtle" box-sizing="border-box"
-                                else
-                                  row width=44 height=44 min-width=44 align-items="center" justify-content="center"
-                                    border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                                    image a.symbol width=18 height=18
+                                row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                                  border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                                  image a.symbol width=20 height=20
                                 column gap=2 flex=1 min-width=0
                                   text a.name font-family="family.display" font-size="1.375rem" line-height=1.1
                                   text a.description font-size="0.9375rem" color="ink.muted" line-clamp=1
-                                text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
                             // The imp's computer, as an app: its screen, to watch the imp work or take over.
                             if computer.status != "none"
                               button press=pick("computer") display="flex" align-items="center" gap=14 padding="14px 0"
@@ -1019,12 +1003,11 @@ component App
                                   background-color="surface.soft"
                                 row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                                   border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                                  image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=18 height=18
+                                  image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=20 height=20
                                 column gap=2 flex=1 min-width=0
                                   text "Computer" font-family="family.display" font-size="1.375rem" line-height=1.1
                                   text `${computer.name}. Watch your imp work, or take over.` font-size="0.9375rem"
                                     color="ink.muted" line-clamp=1
-                                text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
                             button press=startApp display="flex" align-items="center" gap=14 padding="14px 0"
                               background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                               text-align="start" color="ink.strong" testId="app-new"
@@ -1033,11 +1016,10 @@ component App
                                 background-color="surface.soft"
                               row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                                 border="1px dashed line.strong" box-sizing="border-box" aria-hidden=true color="ink.muted"
-                                image "symbol:add" width=18 height=18
+                                image "symbol:icon.add" width=20 height=20
                               column gap=2 flex=1 min-width=0
                                 text "Build a new app" font-family="family.display" font-size="1.375rem" line-height=1.1
                                 text "Describe it in a sentence. It stays here." font-size="0.9375rem" color="ink.muted"
-                              text "+" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
                           column gap=10
                             text "Try" class=Label
                             row flex-wrap="wrap" gap=8
@@ -1050,13 +1032,6 @@ component App
                                     border-color="ink.strong"
                                     background-color="surface.soft"
                                   text s
-                          // The workshop closes the page, under what the person came for.
-                          column gap=8
-                            image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
-                              width="100%" height="auto" aspect-ratio="2 / 1" max-height="17rem" object-fit="cover" border="1px solid line.subtle"
-                              box-sizing="border-box"
-                            text "Fig. 1 — The workshop, where your apps are made." font-style="italic" font-size="0.875rem"
-                              color="ink.muted"
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
@@ -1120,7 +1095,7 @@ component App
                             border-top="1px solid line.subtle" border-bottom="1px solid line.subtle" text-align="start"
                             :hover
                               background-color="danger.soft"
-                            image "symbol:sign-out" width=16 height=16
+                            image "symbol:icon.sign-out" width=16 height=16
                             text "Sign out" class=Label color="-exact-system-red"
                     dialog id="confirm-signout" role="alertdialog" aria-label=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?")
                       text "Your imp stops until you sign in again. Your chats and apps stay."
@@ -1139,17 +1114,36 @@ component App
                     AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
-        // The conversations and the tricks, beside the chat on a wide window.
-        if sidebar
-          aside position="absolute" top="3.25rem" left=0 bottom=0 width="16rem" box-sizing="border-box"
+        // On a wide window the sidebar is always there: the apps and Settings, then the conversations, routines and
+        // tricks. On a narrow one the apps are a bar along the bottom and the rest a drawer.
+        if wide
+          aside position="absolute" top="3.25rem" left=0 bottom=0 width="15rem" box-sizing="border-box"
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
-            aria-label="Conversations, routines and tricks"
+            aria-label="Apps, conversations and settings"
+            // Every tab stays in a tablist, the Computer tab hidden until there is a computer: a tab left out unlinks
+            // its panel, which then shows over every page.
+            column role="tablist" aria-label="Apps" gap=2 padding="12px 10px" border-bottom="1px solid line.subtle"
+              testId="tabs"
+              for t, i in nav.tabs key=t.name
+                AppTab(name=t.name, label=tabLabel(t.name, apps), symbol=tabSymbol(t.name, apps), chord=tabChord(t.name, i),
+                  selected=(nav.tab == t.name), shown=not (t.name == "computer" and computer.status == "none"), wide=true,
+                  keys=keys, press=pick)
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, pane=pane, tricks=tricks.length,
               routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, openRoutine=showRoutine,
               openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard)
+        else
+          row role="tablist" appearance="none" testId="tabs" position="absolute" left=0 right=0 bottom=0
+            box-sizing="border-box" height="calc(3.5rem + env(safe-area-inset-bottom))"
+            padding="0 0 env(safe-area-inset-bottom)" align-items="stretch" background-color="surface.page"
+            border-top="1px solid line.subtle"
+            for t, i in nav.tabs key=t.name
+              AppTab(name=t.name, label=tabLabel(t.name, apps), symbol=tabSymbol(t.name, apps), chord=tabChord(t.name, i),
+                selected=(nav.tab == t.name), shown=not (t.name == "computer" and computer.status == "none"), wide=false,
+                keys=keys, press=pick)
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
+        // On the chat and Settings its column stays, empty, so the page keeps its width from one tab to the next.
         if docked
-          aside position="absolute" top="3.25rem" right=0 bottom=0 width="26rem" box-sizing="border-box"
+          aside position="absolute" top="3.25rem" right=0 bottom=0 width="24rem" box-sizing="border-box"
             display="flex" flex-direction="column" border-left="1px solid line.subtle" background-color="surface.page"
             aria-label="Chat" testId="chat-panel"
             row align-items="center" gap=10 padding="0 10px 0 18px" height="3.25rem" box-sizing="border-box"
@@ -1165,12 +1159,6 @@ component App
                 :hover
                   background-color="surface.soft"
                 image "symbol:icon.expand" width=15 height=15
-              button press=toggleDock aria-label="Hide chat" testId="chat-hide" appearance="none"
-                width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
-                border="none" background-color="transparent" color="ink.muted"
-                :hover
-                  background-color="surface.soft"
-                image "symbol:close" width=15 height=15
             if chat.messages.length == 0 and not chat.busy
               column flex=1 min-height=0 justify-content="flex-end" padding="24px 18px" gap=8 testId="side-empty"
                 Initialled(word=`Ask about ${openAppName}.`, size="1.75rem", heading=3)
@@ -1181,52 +1169,9 @@ component App
             Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys)
-        // The apps, drawn: on a wide window a dock floating over the bottom of the page (Chat, each app's cover, and
-        // Settings at the end; the open one shows its name), on a phone a bar of symbols along the bottom.
-        row role="tablist" appearance="none" testId="tabs" position="absolute" box-sizing="border-box"
-          left=(wide ? (docked ? "calc((100% - 26rem) / 2)" : sidebar ? "calc(16rem + (100% - 16rem) / 2)" : "50%") : "0px") right=(wide ? "auto" : "0px")
-          translate=(wide ? "-50% 0" : "0 0") bottom=(wide ? "16px" : "0px")
-          height=(wide ? "auto" : "calc(3.5rem + env(safe-area-inset-bottom))")
-          padding=(wide ? "5px" : "0 0 env(safe-area-inset-bottom)") gap=(wide ? 4 : 0)
-          align-items=(wide ? "center" : "stretch") background-color="surface.page"
-          border=(wide ? "1px solid line.strong" : "none") border-top=(wide ? "1px solid line.strong" : "1px solid line.subtle")
-          box-shadow=(wide ? "0 10px 28px -12px rgba(0, 0, 0, 0.35)" : "none")
-          // Every tab stays in the tablist, the Computer tab hidden until there is a computer: a tab left out unlinks
-          // its panel, which then shows over every page.
-          for t, i in nav.tabs key=t.name
-            button role="tab" aria-controls=`panel-${t.name}` aria-selected=(nav.tab == t.name) press=pick(t.name)
-              aria-keyshortcuts=tabChord(t.name, i) aria-label=tabLabel(t.name, apps) title=tabLabel(t.name, apps)
-              testId=`tab-${t.name}` appearance="none"
-              display=(t.name == "computer" and computer.status == "none" ? "none" : "flex")
-              align-items="center" justify-content="center" position="relative"
-              flex-direction=(wide ? "row" : "column") flex=(wide ? "0 0 auto" : "1 1 0") gap=(wide ? 9 : 4)
-              height=(wide ? "2.75rem" : "auto") min-width=(wide ? "2.75rem" : "0px") box-sizing="border-box"
-              padding=(wide ? (nav.tab == t.name ? "0 14px 0 4px" : "0") : "0")
-              margin-left=(wide and t.name == "settings" ? "6px" : "0px")
-              margin-right=(wide and t.name == "chat" ? "6px" : "0px")
-              background-color=(wide and nav.tab == t.name ? "surface.soft" : "transparent")
-              border=(wide ? (nav.tab == t.name ? "1px solid ink.strong" : "1px solid transparent") : "none")
-              border-top=(wide ? (nav.tab == t.name ? "1px solid ink.strong" : "1px solid transparent") : (nav.tab == t.name ? "2px solid ink.strong" : "2px solid transparent"))
-              color=(nav.tab == t.name ? "ink.strong" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
-              :hover
-                color="ink.strong"
-              if wide and tabCover(t.name, apps) != ""
-                image tabCover(t.name, apps) alt="" width=34 height=34 min-width=34 object-fit="cover"
-                  border="1px solid line.subtle" box-sizing="border-box"
-              else if wide
-                row width=34 height=34 min-width=34 align-items="center" justify-content="center" box-sizing="border-box"
-                  border=(nav.tab == t.name ? "1px solid transparent" : "1px solid line.strong") aria-hidden=true
-                  image tabSymbol(t.name, apps) width=16 height=16
-              else
-                image tabSymbol(t.name, apps) width=19 height=19 aria-hidden=true
-              if wide and nav.tab == t.name
-                text tabLabel(t.name, apps) font-family="family.display" font-size="1.25rem" white-space="nowrap"
-                  aria-hidden=true
-              else if not wide
-                text tabLabel(t.name, apps) font-family="family.mono" font-size="0.625rem" font-weight=500
-                  letter-spacing="0.1em" text-transform="uppercase" aria-hidden=true
-              if keys and tabChord(t.name, i) != ""
-                KeyBadge(chord=tabChord(t.name, i), at=(wide ? "end" : "tab"))
+        else if wide
+          aside position="absolute" top="3.25rem" right=0 bottom=0 width="24rem" box-sizing="border-box"
+            border-left="1px solid line.subtle" background-color="surface.page" aria-hidden=true testId="chat-column"
         // On a narrow window the sidebar opens as a drawer over everything.
         if drawer and not wide
           row position="absolute" inset=0 testId="drawer"
@@ -1244,9 +1189,13 @@ component App
         if wide
           row position="absolute" top=0 left=0 right=0 height="3.25rem" box-sizing="border-box" align-items="center"
             padding="0 20px" border-bottom="1px solid line.subtle" background-color="surface.page"
-            row gap=9 align-items="center"
+            button press=goHome aria-label="Imp, home" testId="home-logo" appearance="none" display="flex"
+              align-items="center" gap=9 padding="4px 6px" margin-left="-6px" border="none"
+              background-color="transparent" color="ink.strong"
+              :hover
+                background-color="surface.soft"
               image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-              text aria-label="Imp" font-family="family.display" font-size="1.625rem" line-height=1.05
+              text aria-hidden=true font-family="family.display" font-size="1.625rem" line-height=1.05
                 text "I" font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.04em"
                 text "mp"
             row flex=1
@@ -1309,14 +1258,14 @@ component App
                           text-transform="uppercase"
                           :hover
                             background-color="surface.soft"
-                          image "symbol:copy" width=13 height=13 aria-hidden=true
+                          image "symbol:icon.copy" width=13 height=13 aria-hidden=true
                           text "Copy"
                       link href=account.url testId="signin-open" display="flex" align-items="center"
                         justify-content="center" gap=8 padding="13px 16px" background-color="AccentColor"
                         color="ink.on-fill" font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em"
                         text-transform="uppercase" text-decoration-line="none"
                         text "Open ChatGPT"
-                        image "symbol:open-app" width=14 height=14 aria-hidden=true
+                        image "symbol:icon.open" width=14 height=14 aria-hidden=true
                   row gap=10 align-items="center"
                     progress aria-label=(account.status == "waiting" ? "Waiting for approval" : "Connecting")
                     text (account.status == "waiting" ? "Waiting for approval…" : "Connecting…") font-style="italic"
@@ -1422,7 +1371,7 @@ component SecretSettings
       if secrets.status == "failed"
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"
-          image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+          image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
           text secrets.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="secrets-error"
       for q, k in secrets.requests key=q.id
         row gap=12 align-items="center" padding="12px 14px" margin-top=12 border="1px solid line.strong" testId=`secret-request-${k}`
@@ -1438,14 +1387,14 @@ component SecretSettings
             border="none" background-color="transparent" color="ink.faint"
             :hover
               color="ink.strong"
-            image "symbol:close" width=11 height=11
+            image "symbol:icon.close" width=11 height=11
       column border-top="1px solid line.subtle" margin-top=14
         if secrets.secrets.length == 0
           text (secrets.status == "starting" ? "Opening the vault…" : "No secrets yet.") font-style="italic" color="ink.muted"
             padding="12px 0" border-bottom="1px solid line.subtle" testId="secrets-empty"
         for x, i in secrets.secrets key=x.name
           row gap=12 align-items="center" padding="12px 0" border-bottom="1px solid line.subtle" testId=`secret-${i}`
-            image (x.kind == "login" ? "symbol:person" : "symbol:lock") width=16 height=16 aria-hidden=true
+            image (x.kind == "login" ? "symbol:icon.person" : "symbol:icon.lock") width=16 height=16 aria-hidden=true
             column flex=1 min-width=0 gap=2
               text shownName(x) font-size="1.0625rem" overflow-wrap="anywhere" testId=`secret-name-${i}`
               text x.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
@@ -1611,7 +1560,7 @@ component Sidebar
           background-color="transparent" color="ink.strong" text-align="start"
           :hover
             background-color="surface.soft"
-          image "symbol:compose" width=15 height=15 aria-hidden=true
+          image "symbol:icon.compose" width=15 height=15 aria-hidden=true
           text "New chat" font-size="0.9375rem" flex=1
           if keyboard
             text "⌘N" class=Key border-color="line.subtle" testId=`${prefix}chat-new-keys` aria-hidden=true
@@ -1620,7 +1569,7 @@ component Sidebar
           background-color=(pane == "tricks" ? "surface.soft" : "transparent") color="ink.strong"
           :hover
             background-color="surface.soft"
-          image "symbol:sparkles" width=15 height=15 aria-hidden=true
+          image "symbol:icon.sparkles" width=15 height=15 aria-hidden=true
           text "Tricks" font-size="0.9375rem" flex=1
           text `${tricks}` class=Label testId=`${prefix}tricks-count`
         button press=openDirectory aria-pressed=(pane == "directory") testId=`${prefix}directory-entry` appearance="none"
@@ -1628,7 +1577,7 @@ component Sidebar
           background-color=(pane == "directory" ? "surface.soft" : "transparent") color="ink.strong"
           :hover
             background-color="surface.soft"
-          image "symbol:layers" width=15 height=15 aria-hidden=true
+          image "symbol:icon.layers" width=15 height=15 aria-hidden=true
           text "App directory" font-size="0.9375rem" flex=1
       scroll flex=1 min-height=0
         column gap=2 padding="14px 10px 20px"
@@ -1687,7 +1636,7 @@ component RoutineEntry
       background-color=(selected ? "surface.soft" : "transparent")
       :hover
         background-color="surface.soft"
-      image "symbol:repeat" width=15 height=15 aria-hidden=true
+      image "symbol:icon.repeat" width=15 height=15 aria-hidden=true
       column flex=1 min-width=0 gap=1
         text routine.name font-size="0.9375rem" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
           testId=`${prefix}routine-name-${index}`
@@ -1725,7 +1674,7 @@ component RoutineBar
             button press=run(routine.id) disabled=(busy or routine.running or routine.asked) aria-keyshortcuts="Meta+R"
               testId="routine-run" display="flex" align-items="center" gap=7 padding="7px 10px"
               border="1px solid ink.strong" background-color="ink.strong" color="surface.page" position="relative"
-              image "symbol:play" width=12 height=12 aria-hidden=true
+              image "symbol:icon.play" width=12 height=12 aria-hidden=true
               text "Run now" class=Label color="inherit"
               if keys
                 KeyBadge(chord="Meta+R", at="end")
@@ -1766,7 +1715,7 @@ component TrickList
                 background-color="surface.soft"
               row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                 border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                image "symbol:sparkles" width=18 height=18
+                image "symbol:icon.sparkles" width=18 height=18
               column gap=2 flex=1 min-width=0
                 text k.title font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`trick-title-${i}`
                 text (k.params.length == 0 ? k.site : `${k.site} · asks for the ${k.params.join(" and the ")}`) font-size="0.9375rem"
@@ -1899,7 +1848,7 @@ component MemorySettings
                 border="none" background-color="transparent" color="ink.faint"
                 :hover
                   color="-exact-system-red"
-                image "symbol:close" width=11 height=11
+                image "symbol:icon.close" width=11 height=11
           for l in m.links key=l
             text l font-family="family.mono" font-size="0.75rem" color="ink.muted" padding-left=20
       dialog id="confirm-memory-forget" role="alertdialog" aria-label=`Forget everything about ${aboutTitle(forgettingTitle)}?`
@@ -1990,7 +1939,7 @@ component BackupSettings
             font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
             text-decoration-line="none"
             text "Open GitHub"
-            image "symbol:open-app" width=14 height=14 aria-hidden=true
+            image "symbol:icon.open" width=14 height=14 aria-hidden=true
           Step(number="02", title="Enter this code")
           row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
             text backup.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
@@ -2000,7 +1949,7 @@ component BackupSettings
               font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
               :hover
                 background-color="surface.soft"
-              image "symbol:copy" width=13 height=13 aria-hidden=true
+              image "symbol:icon.copy" width=13 height=13 aria-hidden=true
               text "Copy"
           row gap=10 align-items="center" padding-top=2
             progress aria-label="Waiting for approval"
@@ -2025,7 +1974,7 @@ component BackupSettings
       if backup.error != ""
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"
-          image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+          image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
           text backup.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="backup-error"
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
@@ -2064,9 +2013,9 @@ component AppPage
             if keys
               KeyBadge(chord="Meta+S", at="end")
       else if undo != "" or sync != ""
-        // In line with the page's title and its Chat button above.
-        row justify-content="center" padding="8px 20px 0"
-          row width="100%" max-width="46rem" align-items="center" gap=12
+        // Under the page's header, in line with its title.
+        row padding="8px 24px" border-bottom="1px solid line.subtle"
+          row width="100%" align-items="center" gap=12
             if sync != ""
               row flex=1 min-width=0 align-items="center" gap=10 testId="sync-bar"
                 text sync font-size="0.8125rem" color=(sync.startsWith("Sync failing") ? "-exact-system-red" : "ink.muted")
@@ -2092,6 +2041,43 @@ component AppPage
             text "Undo"
       scroll id=`${id}-screen` flex=1 min-height=0
         children
+
+// One app in the tab list: on a wide window a row of the sidebar (its symbol and name), on a narrow one a cell of
+// the bottom bar (its symbol over its name).
+component AppTab
+  props
+    name: string
+    label: string
+    symbol: string
+    chord: string
+    selected: bool
+    shown: bool
+    wide: bool
+    keys: bool
+    press: action
+  view
+    button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
+      aria-keyshortcuts=chord aria-label=label title=label testId=`tab-${name}` appearance="none"
+      display=(shown ? "flex" : "none") align-items="center" position="relative" box-sizing="border-box"
+      flex-direction=(wide ? "row" : "column") justify-content=(wide ? "flex-start" : "center")
+      flex=(wide ? "0 0 auto" : "1 1 0") gap=(wide ? 10 : 4) min-width=0
+      padding=(wide ? "8px 10px" : "0px") border="none" text-align="start"
+      margin-top=(wide and name == "settings" ? "8px" : "0px")
+      border-top=(wide ? "none" : (selected ? "2px solid ink.strong" : "2px solid transparent"))
+      background-color=(wide and selected ? "surface.soft" : "transparent")
+      color=(selected or wide ? "ink.strong" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
+      :hover
+        color="ink.strong"
+        background-color="surface.soft"
+      image symbol width=(wide ? 16 : 19) height=(wide ? 16 : 19) aria-hidden=true
+      if wide
+        text label font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden"
+          text-overflow="ellipsis" aria-hidden=true
+      else
+        text label font-family="family.mono" font-size="0.625rem" font-weight=500 letter-spacing="0.1em"
+          text-transform="uppercase" aria-hidden=true
+      if keys and chord != ""
+        KeyBadge(chord=chord, at=(wide ? "end" : "tab"))
 
 // A shortcut's keys on its control (which is position="relative"), shown while ⌘ is held: over its top corner at the
 // "end" or the "start", or for a "tab" along a narrow window's bottom edge, inside it beside the symbol at its centre.
@@ -2127,7 +2113,7 @@ component ComputerScreen
     setUp: action
   view
     column flex=1 min-height=0 testId="computer-page"
-      row align-items="center" gap=10 padding="10px 20px" border-bottom="1px solid line.subtle"
+      row align-items="center" gap=10 padding="8px 24px" border-bottom="1px solid line.subtle"
         row width=6 height=6 aria-hidden=true
           background-color=(computer.status == "ready" ? "-exact-system-green" : computer.status == "failed" ? "-exact-system-red" : "ink.faint")
         text (computer.name == "" ? "No computer yet" : computer.name) font-size="0.9375rem" flex=1 min-width=0
@@ -2215,7 +2201,7 @@ component ComputerSettings
       if computer.status == "failed" and computer.error != ""
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"
-          image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+          image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
           text computer.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="computer-error"
       if computer.kind == "dev"
         text "This host fixes the computer for development, so there is nothing to choose." font-size="0.9375rem"
@@ -2260,7 +2246,7 @@ component ComputerSettings
               border="none" background-color="transparent" color="ink.muted"
               :hover
                 background-color="surface.soft"
-              image "symbol:refresh" width=15 height=15
+              image "symbol:icon.refresh" width=15 height=15
           text "Any Linux computer on your tailnet: a home lab box, a VM, a spare laptop. Tailscale signs your imp in; no keys or passwords."
             font-size="0.9375rem" color="ink.muted" line-height=1.45
           if computer.tailnetError != ""
@@ -2347,7 +2333,7 @@ component SetupPrompt
           font-size="0.6875rem" letter-spacing="0.1em" text-transform="uppercase"
           :hover
             background-color="surface.soft"
-          image "symbol:copy" width=12 height=12 aria-hidden=true
+          image "symbol:icon.copy" width=12 height=12 aria-hidden=true
           text "Copy"
       if open
         text prompt font-family="family.mono" font-size="0.75rem" line-height=1.55 white-space="pre-wrap"
@@ -2456,7 +2442,11 @@ component ComputerWizard
       WizardTitle(title="Give it a computer", note="Where your imp works.")
       WizardFold(label="Imp cloud", press=toggle("cloud"), testId="choose-cloud", primary=(choice == ""),
         open=(choice == "cloud"), disabled=false)
-        text "Paste a key from e2b.dev/dashboard." font-size="0.9375rem" color="ink.muted"
+        row gap=4 align-items="baseline" font-size="0.9375rem" color="ink.muted"
+          text "Paste a key from"
+          link href="https://e2b.dev/dashboard" testId="computer-cloud-key-link" color="ink.strong"
+            text "e2b.dev/dashboard"
+          text "."
         row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
           input type="password" value=keyDraft input=editKey submit=setCloudKey(keyDraft.trim()) placeholder="e2b_…"
             aria-label="E2B API key" testId="computer-cloud-key" flex=1 min-width=0 padding="8px 0" border="none"
@@ -2584,7 +2574,7 @@ component Transcript
             else if m.role == "error"
               row gap=10 align-items="flex-start" padding="10px 14px" margin="8px 0"
                 background-color="danger.soft" border-left="2px solid -exact-system-red" testId=`${prefix}message-${m.id}`
-                image "symbol:alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+                image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
                 text m.text font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="break-word"
             else
               text m.text markup="markdown" padding="10px 0 14px" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.6
@@ -2643,12 +2633,12 @@ component Composer
               min-width=38 padding=0 border="none" display="flex" align-items="center" justify-content="center"
               background-color=(dictating ? "danger.soft" : "transparent")
               color=(dictating ? "-exact-system-red" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
-              image "symbol:microphone" width=16 height=16
+              image "symbol:icon.microphone" width=16 height=16
           if busy and said == ""
             button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
               width=38 height=38 min-width=38 padding=0 border="none" background-color="ink.strong"
               color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
-              image "symbol:stop-fill" width=13 height=13
+              image "symbol:icon.stop" width=13 height=13
               if keys
                 KeyBadge(chord="Meta+.", at="end")
           else
@@ -2659,7 +2649,7 @@ component Composer
               :disabled
                 background-color="surface.soft"
                 color="ink.faint"
-              image "symbol:send" width=16 height=16
+              image "symbol:icon.send" width=16 height=16
         if not compact
           text "Asks before anything it can't undo" class=Label color="ink.faint" text-align="center"
             font-size="0.625rem"

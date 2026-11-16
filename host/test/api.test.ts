@@ -109,7 +109,7 @@ test("the shell lists the installed apps and the running version", async () => {
       name: "GitHub",
       description:
         "What needs you on GitHub: review requests, your pull requests, what's assigned to you and your notifications, with Done and Snooze. Your imp can read it and act on GitHub for you.",
-      symbol: "symbol:notifications",
+      symbol: "symbol:icon.github",
       cover: "",
       draft: false,
       undo: "",
@@ -122,8 +122,8 @@ test("the shell lists the installed apps and the running version", async () => {
       id: "todos",
       name: "Todos",
       description: "A list of things to do. Your imp can read and change it.",
-      symbol: "symbol:checkmark",
-      cover: "assets/art/todos.jpg",
+      symbol: "symbol:icon.todos",
+      cover: "",
       draft: false,
       undo: "",
       // Todos reads nothing from outside and has no sync.
@@ -307,7 +307,7 @@ test("the assistant adds a todo with the app's tool, and the transcript says wha
         text: '{"ok":true,"error":""}',
         title: "Todos · Add",
         detail: "Book train to Kraków",
-        icon: "symbol:checkmark",
+        icon: "symbol:icon.todos",
         failed: false,
       },
       said("assistant", "Done."),

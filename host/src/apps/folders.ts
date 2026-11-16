@@ -95,7 +95,9 @@ export function appInfo(files: AppFiles, id: string): AppInfo {
     id,
     name: meta.name === undefined || meta.name === "" ? id : meta.name,
     description: meta.description ?? "",
-    symbol: meta.symbol?.startsWith("symbol:") ? meta.symbol : "symbol:layers",
+    symbol: meta.symbol?.startsWith("symbol:")
+      ? meta.symbol
+      : "symbol:icon.layers",
     cover:
       meta.cover && /^assets\/[\w/.-]+$/.test(meta.cover) ? meta.cover : "",
     impServer: meta.server === "imp",
