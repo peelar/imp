@@ -8,6 +8,9 @@
 //    use is a change to the map, so it is made here, where review sees it. No context is open to every other one:
 //    code that several contexts need is a context named for what it does, and each use of it is listed.
 // 3. A package that reaches something the host keeps to one place is imported only from there (PACKAGES).
+// 4. Only server.ts reads settings from the environment; every other part is handed what it needs.
+// 5. host/machine/ runs on the agent's machine with its types stripped: it imports Node's own modules, `ws`, its own
+//    files, and only types from the SDK and from a context's entry (machineProblems).
 //
 // Every folder in host/src must be a context listed here, and have its entry, so a new context is a decision too.
 import { readdirSync, readFileSync } from "node:fs";
@@ -191,6 +194,22 @@ function importProblem(file: string, target: string) {
   return "";
 }
 
+// A setting read from the environment: process.env.NAME or process.env[...]. Handing a program the whole environment
+// (`...process.env`) and its PATH is not reading a setting.
+const SETTING = /\bprocess\.env(?:\.(\w+)|\[)/g;
+
+/** The settings a file reads from the environment, which only server.ts may. */
+const settingProblems = (file: string, source: string) =>
+  file === "server.ts"
+    ? []
+    : [...source.matchAll(SETTING)].flatMap(([, name]) =>
+        name === "PATH"
+          ? []
+          : [
+              `${file} reads ${name ? `process.env.${name}` : "process.env[…]"}: only server.ts reads settings from the environment. Add it to HostOptions there, and hand it to the part that needs it.`,
+            ]
+      );
+
 /** What is wrong with one file's imports. */
 function fileProblems(file: string, source: string) {
   return specifiers(source).flatMap((specifier) => {
@@ -239,11 +258,66 @@ export function violations(files: ReadonlyMap<string, string>): string[] {
         ]
   );
 
-  const imports = [...files].flatMap(([file, source]) =>
-    fileProblems(file, source)
-  );
+  const imports = [...files].flatMap(([file, source]) => [
+    ...fileProblems(file, source),
+    ...settingProblems(file, source),
+  ]);
 
   return [...unknown, ...entries, ...imports];
+}
+
+// An import or export statement, and whether it brings only types.
+const MACHINE_STATEMENT =
+  /^(?:import|export)(\s+type)?\b[^;]*?\bfrom\s*"([^"]+)"/gms;
+
+/** What is wrong with one import of a file in host/machine/, by its path relative to the repository. */
+function machineImportProblem(
+  file: string,
+  specifier: string,
+  typeOnly: boolean
+) {
+  if (!specifier.startsWith(".")) {
+    return specifier === "ws" || specifier.startsWith("node:")
+      ? ""
+      : `host/${file} imports ${specifier}: code on the agent's machine may use ws and Node's own modules, nothing else.`;
+  }
+
+  const target = path.posix.normalize(
+    path.posix.join("host", path.posix.dirname(file), specifier)
+  );
+
+  if (target.startsWith("host/machine/")) {
+    return "";
+  }
+
+  const context = /^host\/src\/([a-z-]+)\//.exec(target)?.[1];
+
+  const shared =
+    target === "sdk/app.ts" ||
+    (context !== undefined &&
+      CONTEXTS.has(context) &&
+      target === `host/src/${entryOf(context)}`);
+
+  if (!shared) {
+    return `host/${file} imports ${target}: from the agent's machine, import types from the SDK or a context's entry, <context>/<context>.ts, and export them from there.`;
+  }
+
+  return typeOnly
+    ? ""
+    : `host/${file} imports ${target} for more than its types: the machine gets only host/machine/'s own files, so import it with \`import type\`.`;
+}
+
+/** Every way the files in host/machine/ break its rule, given each file's source by its path relative to host/. */
+export function machineProblems(files: ReadonlyMap<string, string>): string[] {
+  return [...files].flatMap(([file, source]) => [
+    ...[...source.matchAll(MACHINE_STATEMENT)].flatMap(
+      ([, type, specifier = ""]) =>
+        machineImportProblem(file, specifier, type !== undefined) || []
+    ),
+    ...[...source.matchAll(BARE), ...source.matchAll(DYNAMIC)].flatMap(
+      ([, specifier = ""]) => machineImportProblem(file, specifier, false) || []
+    ),
+  ]);
 }
 
 // A row of docs/architecture.md's map: | `<context>/` | what it owns | `<context>`, `<context>` |
@@ -297,7 +371,7 @@ export function mapProblems(markdown: string): string[] {
   return [...missing, ...differing];
 }
 
-/** host/src's TypeScript files by their path relative to it, without the lint policy's probe folders. */
+/** A folder's TypeScript files by their path relative to it, without the lint policy's probe folders. */
 function readSources(root: string) {
   const files = new Map<string, string>();
 
@@ -323,8 +397,15 @@ if (import.meta.main) {
     path.join(import.meta.dirname, "..", "host", "src")
   );
 
+  const machine = readSources(
+    path.join(import.meta.dirname, "..", "host", "machine")
+  );
+
   const found = [
     ...violations(files),
+    ...machineProblems(
+      new Map([...machine].map(([file, source]) => [`machine/${file}`, source]))
+    ),
     ...mapProblems(
       readFileSync(
         path.join(import.meta.dirname, "..", "docs", "architecture.md"),
@@ -341,7 +422,7 @@ if (import.meta.main) {
     process.exitCode = 1;
   } else {
     console.log(
-      `host/src's ${files.size} files keep to the context map, and docs/architecture.md draws it as it is.`
+      `host/src's ${files.size} files keep to the context map, host/machine's ${machine.size} keep to its rule, and docs/architecture.md draws the map as it is.`
     );
   }
 }

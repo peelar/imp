@@ -1,8 +1,7 @@
 // The host: Pi Durable on SQLite, the agent's machine through the adapter contract, the app gateway, and one HTTP
 // origin that serves both the web client and its API. This file only puts the parts together: what the shell reads
 // and changes is shell-api.ts, and how it is served is http.ts. server.ts starts it.
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { MutableModels } from "@earendil-works/pi-ai/models";
@@ -80,8 +79,12 @@ export type HostOptions = {
   readonly repo?: string | undefined;
   /** The Mac installer script, served at /install-mac.sh with this host's address and the repository filled in. */
   readonly macInstaller?: string | undefined;
-  /** An E2B API key for Imp cloud machines; the owner can also enter one in Settings. Default: E2B_API_KEY. */
+  /** An E2B API key for Imp cloud machines; the owner can also enter one in Settings. */
   readonly cloudKey?: string | undefined;
+  /** A Vercel Flags SDK key. Absent: flags come from DATA_DIR/flags.json and their defaults (flags/flags.ts). */
+  readonly flagsKey?: string | undefined;
+  /** The tailscale CLI the host reads the tailnet with. Default: tailscale on PATH. */
+  readonly tailscale?: string | undefined;
   /** Where the programs the host downloads are kept (secrets/programs.ts). Default: DATA_DIR/tools. */
   readonly toolsDir?: string | undefined;
   /** The GitHub CLI the backup signs in and creates its repository with (backup/backup.ts). Default: gh on PATH. */
@@ -102,17 +105,6 @@ const report = (what: string) => (cause: unknown) => {
     `${what}: ${cause instanceof Error ? cause.message : String(cause)}`
   );
 };
-
-/** A stable secret for deriving machine tokens, created on first start. */
-function hostSecret(dataDir: string) {
-  const file = path.join(dataDir, "host-secret");
-
-  if (!existsSync(file)) {
-    writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600 });
-  }
-
-  return readFileSync(file, "utf-8").trim();
-}
 
 /** How the imp uses the web: agent-browser on its computer, and the tricks it keeps (tricks/tricks.ts). */
 const BROWSER =
@@ -172,10 +164,7 @@ function openStudio(
     dataDir: options.dataDir,
     repoAppsDir: options.appsDir,
     clientDir: clientSource,
-    exact:
-      options.exact ??
-      process.env.EXACT ??
-      path.resolve(clientSource, "../../../tools/exact"),
+    exact: options.exact ?? path.resolve(clientSource, "../../../tools/exact"),
     exactSetup: options.exactSetup,
     gateway,
     topics,
@@ -349,10 +338,10 @@ async function openAgent(
 /**
  * The feature flags, decided as the host starts; the owner's choice in Settings changes TOPIC for the next start.
  */
-async function hostFlags(dataDir: string, topics: Topics) {
+async function hostFlags({ dataDir, flagsKey }: HostOptions, topics: Topics) {
   return await openFlags({
     dataDir,
-    sdkKey: process.env.FLAGS,
+    sdkKey: flagsKey,
     log: (message) => {
       console.log(message);
     },
@@ -403,16 +392,15 @@ export async function startHost(options: HostOptions) {
 
   mkdirSync(dataDir, { recursive: true });
 
-  const secret = hostSecret(dataDir);
   const topics = new Topics();
 
   // The agent's computer, as the owner picked it in Settings. Nothing here names the provider.
   const computer = openComputer({
     dataDir,
-    secret,
     topics,
-    fixed: options.machines?.(secret),
-    cloudKey: options.cloudKey ?? process.env.E2B_API_KEY,
+    fixed: options.machines,
+    cloudKey: options.cloudKey,
+    tailscale: options.tailscale,
   });
 
   const memory = (options.memory ?? graphMemory)({
@@ -436,7 +424,7 @@ export async function startHost(options: HostOptions) {
   const machine = machineInUse(computer);
   const secrets = openOwnerSecrets(parts, machine);
 
-  const flags = await hostFlags(dataDir, topics);
+  const flags = await hostFlags(options, topics);
   const gateway = openAppGateway(parts, { stored, machine, secrets, flags });
 
   const backup = openBackup(parts, gateway);

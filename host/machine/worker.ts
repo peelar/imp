@@ -17,7 +17,7 @@ import type {
   FromWorker,
   ReportedManifest,
   ToWorker,
-} from "../src/apps/protocol.ts";
+} from "../src/apps/apps.ts";
 
 type Start = { readonly appId: string; readonly code: string };
 

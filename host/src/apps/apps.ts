@@ -46,7 +46,18 @@ export type { AppFiles, AppInfo } from "./folders.ts";
 
 export { SYNC_TOPIC } from "./sync.ts";
 
-export type { Manifest, Operation } from "./protocol.ts";
+// The messages between the host, agentd and each app's worker, for host/machine/ (types only).
+export type {
+  Args,
+  DbRequest,
+  FromAgentd,
+  FromWorker,
+  Manifest,
+  Operation,
+  ReportedManifest,
+  ToAgentd,
+  ToWorker,
+} from "./protocol.ts";
 
 export type GatewayOptions = {
   /** The live apps to start with. */

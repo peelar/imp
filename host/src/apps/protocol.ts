@@ -10,7 +10,8 @@
 // keys (`app.fetch`). They travel as `db` messages, and `op` says which.
 //
 // The machine runs code the agent wrote, so the host checks everything it receives against the schemas below. The
-// machine files import this module's types only: they are stripped to plain JavaScript and run with no packages.
+// machine files import this module's types only, through apps.ts: they are stripped to plain JavaScript and run with
+// no packages.
 import {
   arr,
   bool,

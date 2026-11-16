@@ -71,9 +71,7 @@ const tailscaleStatus = compile(
 );
 
 /** The tailnet as the host sees it. Rejects with a plain reason when the host is not on one. */
-export async function readTailnet(
-  tailscale = process.env.TAILSCALE ?? "tailscale"
-): Promise<Tailnet> {
+export async function readTailnet(tailscale: string): Promise<Tailnet> {
   const status = await readStatus(tailscale);
 
   if (status.BackendState !== "Running") {

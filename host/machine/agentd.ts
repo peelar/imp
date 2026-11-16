@@ -31,7 +31,7 @@ import type {
   ReportedManifest,
   ToAgentd,
   ToWorker,
-} from "../src/apps/protocol.ts";
+} from "../src/apps/apps.ts";
 import { serveChrome } from "./chrome.ts";
 import { egressProxy } from "./egress.ts";
 

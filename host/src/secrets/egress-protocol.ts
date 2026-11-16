@@ -5,7 +5,7 @@
 //   egress -> host     FromEgress   the rules took effect; open a stream socket for a tunnel
 //
 // The machine runs code the agent wrote, so the host checks what it receives against the schema below. The machine's
-// egress.ts imports this module's types only.
+// egress.ts imports this module's types only, through secrets.ts.
 import {
   compile,
   lit,

@@ -12,6 +12,11 @@
 //   IMP_HOME      set by scripts/install-host.sh: the installed host, which updates itself (update/update.ts)
 //   IMP_AUTO_UPDATE  "0" keeps an installed host at its release
 //   IMP_REPO      the GitHub repository releases come from (default peelar/imp)
+//   EXACT         the Exact checkout the host builds the web client with (default: tools/exact beside the checkout)
+//   TAILSCALE     the tailscale CLI the host reads the tailnet with (default: tailscale on PATH)
+//
+// This is the one file in host/src that reads settings from the environment (scripts/boundaries.ts): every other part
+// is handed what it needs.
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -67,6 +72,10 @@ const host = await startHost({
     version === "dev" ? undefined : path.join(root, "scripts", "setup.sh"),
   port: Number(process.env.PORT ?? 8787),
   owner: process.env.OWNER_LOGIN,
+  cloudKey: process.env.E2B_API_KEY,
+  flagsKey: process.env.FLAGS,
+  exact: process.env.EXACT,
+  tailscale: process.env.TAILSCALE,
   version,
   repo,
   macInstaller: path.join(root, "scripts", "install-mac.sh"),

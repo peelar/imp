@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
 import path from "node:path";
 import { createWebSocketStream, type RawData, WebSocket } from "ws";
-import type { FromEgress, ToEgress } from "../src/secrets/egress-protocol.ts";
+import type { FromEgress, ToEgress } from "../src/secrets/secrets.ts";
 
 export type EgressProxyOptions = {
   /** Where the proxy listens, on the machine's loopback. */

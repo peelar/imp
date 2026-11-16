@@ -2,6 +2,8 @@
 // on), Imp cloud (an E2B sandbox of a chosen size) or a computer of theirs on the tailnet. The choice is kept in the host's data directory (choice.ts). Switching moves the
 // agent, its tools and its apps to the other machine at once (machines.ts); the machine left behind keeps
 // its files, so switching back picks up there.
+import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   type Choice,
@@ -65,10 +67,9 @@ export type ComputerState = {
 
 export type ComputerOptions = {
   readonly dataDir: string;
-  readonly secret: string;
   readonly topics: Topics;
-  /** A development host's machine: fixed, not chosen in Settings. */
-  readonly fixed?: MachineProvider | undefined;
+  /** A development host's machine, given the host's secret: fixed, not chosen in Settings. */
+  readonly fixed?: ((secret: string) => MachineProvider) | undefined;
   /** An E2B API key from the environment; one entered in Settings takes its place. */
   readonly cloudKey?: string | undefined;
   readonly tailscale?: string | undefined;
@@ -230,9 +231,21 @@ async function useOwn({ fixed, own, switchTo }: Switching, dnsName: string) {
   return ok;
 }
 
+/** A stable secret for deriving machine tokens, created on first start. */
+function hostSecret(dataDir: string) {
+  const file = path.join(dataDir, "host-secret");
+
+  if (!existsSync(file)) {
+    writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600 });
+  }
+
+  return readFileSync(file, "utf-8").trim();
+}
+
 export function openComputer(options: ComputerOptions) {
-  const { fixed } = options;
-  const tailscale = options.tailscale ?? process.env.TAILSCALE ?? "tailscale";
+  const secret = hostSecret(options.dataDir);
+  const fixed = options.fixed?.(secret);
+  const tailscale = options.tailscale ?? "tailscale";
   const choice = openChoice(options.dataDir, options.cloudKey);
   const own = ownComputers(path.join(options.dataDir, "ssh"), tailscale);
   const listeners = new Set<(workspace: string) => Promise<void> | void>();
@@ -243,7 +256,7 @@ export function openComputer(options: ComputerOptions) {
 
   const plan = (next: Choice | undefined) =>
     machinePlan(next, {
-      secret: options.secret,
+      secret,
       fixed,
       cloudKey: choice.cloudKey,
       own,

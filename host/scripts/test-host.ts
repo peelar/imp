@@ -380,5 +380,6 @@ await startHost({
   // OpenBao and mitmproxy, downloaded once for every test run.
   toolsDir: path.join(tmpdir(), "imp-tools"),
   gh: path.join(import.meta.dirname, "fake-gh.ts"),
+  exact: process.env.EXACT,
   port: Number(process.env.PORT ?? 8787),
 });

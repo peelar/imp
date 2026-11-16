@@ -5,7 +5,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { CONTEXTS, mapProblems, violations } from "./boundaries.ts";
+import {
+  CONTEXTS,
+  machineProblems,
+  mapProblems,
+  violations,
+} from "./boundaries.ts";
 
 const branches = (count: number) =>
   Array.from(
@@ -167,6 +172,11 @@ const crossings = [
     says: "imports e2b, which only computer/e2b.ts may",
   },
   {
+    crosses: "a setting read from the environment outside server.ts",
+    files: [["host.ts", "const key = process.env.FLAGS;"]],
+    says: "host.ts reads process.env.FLAGS: only server.ts",
+  },
+  {
     crosses: "a feature flag decided outside flags/flags.ts",
     files: [["apps/apps.ts", 'import { flag } from "flags/next";']],
     says: "imports flags/next, which only flags/flags.ts may",
@@ -181,6 +191,38 @@ for (const { crosses, files, says } of crossings) {
 }
 
 console.log(`The context map refuses all ${crossings.length} crossings.`);
+
+// Code on the agent's machine runs with its types stripped and no packages but ws, so it must keep to that too.
+const machineCrossings = [
+  {
+    crosses: "a package other than ws",
+    source: 'import { Sandbox } from "e2b";',
+    says: "imports e2b: code on the agent's machine may use ws",
+  },
+  {
+    crosses: "a context's inner file",
+    source: 'import type { ToAgentd } from "../src/apps/protocol.ts";',
+    says: "imports host/src/apps/protocol.ts: from the agent's machine",
+  },
+  {
+    crosses: "a value from a context's entry",
+    source: 'import { TOPIC } from "../src/secrets/secrets.ts";',
+    says: "for more than its types",
+  },
+] as const;
+
+for (const { crosses, source, says } of machineCrossings) {
+  assert.ok(
+    machineProblems(new Map([["machine/agentd.ts", source]])).some((problem) =>
+      problem.includes(says)
+    ),
+    `The machine's rule did not refuse ${crosses}`
+  );
+}
+
+console.log(
+  `The machine's rule refuses all ${machineCrossings.length} crossings.`
+);
 
 // docs/architecture.md must draw the map as boundaries.ts has it: a row that drifts from it is refused.
 const row = (name: string, owns: string, uses: readonly string[]) =>
