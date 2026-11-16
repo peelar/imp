@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.11.0
+
+### Minor Changes
+
+- 2d5f4db: On a wide window your apps are back in a bar along the bottom of the page, and the sidebar holds New chat, Routines, Tricks, the app directory, your recent chats and Settings. Routines get a page of their own, with a button to ask for a new one, and the sidebar no longer shows empty lists or a zero count. An app that a feature flag keeps off, such as GitHub, no longer shows a tab, and its address opens the chat instead.
+- 2d5f4db: Settings has an Experimental section that lists the features still being tried out, each with a switch. A change takes effect the next time Imp starts. The app directory is now one of them, and it is off unless you turn it on there.
+
 ## 0.10.0
 
 ### Minor Changes
