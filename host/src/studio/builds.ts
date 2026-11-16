@@ -15,6 +15,7 @@ import { compile, obj, str } from "@earendil-works/pi-schema";
 import type { AppGateway } from "../apps/apps.ts";
 import { readKept } from "../kernel/kept.ts";
 import { buildShell, type ShellApp } from "./shell.ts";
+import type { Toolchain } from "./toolchain.ts";
 
 const KEPT_BUILDS = 3;
 
@@ -26,6 +27,7 @@ export type ShellBuildsOptions = {
   readonly clientDir: string;
   /** The Exact checkout the shell builds with. */
   readonly exact: string;
+  readonly toolchain: Toolchain;
   readonly gateway: AppGateway;
   /** Tells the open pages that the host serves another build. */
   readonly served: () => void;
@@ -100,6 +102,8 @@ export function shellBuilds(options: ShellBuildsOptions) {
 
   /** Builds the shell with these apps; answers the build's id, or throws what the compiler said. */
   async function build(apps: readonly ShellApp[]): Promise<string> {
+    options.toolchain.require();
+
     const id = `b${Date.now().toString(36)}`;
     const started = Date.now();
 

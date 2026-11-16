@@ -62,6 +62,9 @@ const host = await startHost({
   dataDir,
   appsDir: path.join(root, "client", "apps"),
   clientDir: path.join(root, "client", "dist"),
+  // A release installs the Exact it rebuilds the client with; a checkout has it from scripts/setup.sh.
+  exactSetup:
+    version === "dev" ? undefined : path.join(root, "scripts", "setup.sh"),
   port: Number(process.env.PORT ?? 8787),
   owner: process.env.OWNER_LOGIN,
   version,

@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import type { AppFiles, Operation } from "../apps/apps.ts";
+import { toolEnv } from "./toolchain.ts";
 
 export type ShellApp = {
   readonly id: string;
@@ -384,7 +385,7 @@ async function webBuild(options: BuildOptions) {
         ["exact.mjs", "web-build", "--out", options.outDir],
         {
           cwd: options.workDir,
-          env: { ...process.env, EXACT: options.exact, API_BASE_URL: "" },
+          env: { ...toolEnv(), EXACT: options.exact, API_BASE_URL: "" },
           stdio: ["ignore", "pipe", "pipe"],
         }
       );

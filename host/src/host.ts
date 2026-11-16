@@ -65,6 +65,8 @@ export type HostOptions = {
   readonly appsDir: string;
   /** The Exact checkout the host builds the shell with. Default: the client's (../../../tools/exact from it). */
   readonly exact?: string | undefined;
+  /** scripts/setup.sh, for a host that installs Exact itself: a release. Absent: a checkout, whose developer does. */
+  readonly exactSetup?: string | undefined;
   /** The built web client, served at /. Absent: the host serves only the API. */
   readonly clientDir?: string | undefined;
   readonly port: number;
@@ -174,6 +176,7 @@ function openStudio(
       options.exact ??
       process.env.EXACT ??
       path.resolve(clientSource, "../../../tools/exact"),
+    exactSetup: options.exactSetup,
     gateway,
     topics,
     registry,

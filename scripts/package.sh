@@ -28,10 +28,11 @@ host)
 	(cd "$root/client" && bun exact.mjs web-build --out dist)
 	stage=$(mktemp -d)
 	trap 'rm -rf "$stage"' EXIT
-	# The repository's files, as git lists them (tracked, and new ones not ignored), then the built client.
-	(cd "$root" && git ls-files --cached --others --exclude-standard -- LICENSE host sdk client/apps scripts/install-mac.sh |
+	# The repository's files, as git lists them (tracked, and new ones not ignored), then the built client. The client's
+	# source and scripts/setup.sh (with link-exact.sh) come along: the host rebuilds the client with each app it
+	# previews, with the Exact that script installs (host/src/studio/toolchain.ts).
+	(cd "$root" && git ls-files --cached --others --exclude-standard -- LICENSE host sdk client scripts/install-mac.sh scripts/setup.sh scripts/link-exact.sh |
 		tar -cf - -T -) | tar -xf - -C "$stage"
-	mkdir -p "$stage/client"
 	cp -R "$root/client/dist" "$stage/client/dist"
 	# The host's production dependencies, from the workspace lockfile pruned to the host (turbo prune). The pruned lock
 	# loses npm's dev flags, so `npm prune` drops what only the root's tooling needs. They go in host/node_modules,

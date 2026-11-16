@@ -12,6 +12,7 @@
 //   code.ts        the code the host keeps: code/<id>/live/ and code/<id>/draft/ under DATA_DIR
 //   history.ts     the versions a save replaced: code/<id>/history/<ms>/
 //   builds.ts      the web builds of the shell, builds/<build id>/, and the one the host serves
+//   toolchain.ts   the Exact they build with, which an installed host installs itself
 import type { Context } from "@earendil-works/chord/context";
 import type { Registry } from "@earendil-works/pi-durable";
 import type { RemoteExecutionEnv } from "@earendil-works/pi-env";
@@ -22,6 +23,7 @@ import { codeFolders, impServers } from "./code.ts";
 import { appDecisions } from "./decisions.ts";
 import { versionHistory } from "./history.ts";
 import { appPreview } from "./preview.ts";
+import { exactToolchain } from "./toolchain.ts";
 import { studioTools } from "./tools.ts";
 import { agentWorkspace } from "./workspace.ts";
 
@@ -38,6 +40,8 @@ export type StudioOptions = {
   readonly clientDir: string;
   /** The Exact checkout the shell builds with. */
   readonly exact: string;
+  /** scripts/setup.sh, on a host that installs Exact itself (toolchain.ts). Absent: a checkout's developer does. */
+  readonly exactSetup?: string | undefined;
   readonly gateway: AppGateway;
   readonly topics: Topics;
   readonly registry: Registry;
@@ -82,10 +86,19 @@ export function studio(options: StudioOptions) {
   const imp = impServers(options.repoAppsDir);
   const history = versionHistory({ folders, data: gateway });
 
+  const toolchain = exactToolchain({
+    dataDir: options.dataDir,
+    clientDir: options.clientDir,
+    exact: options.exact,
+    setup: options.exactSetup,
+    log,
+  });
+
   const builds = shellBuilds({
     dataDir: options.dataDir,
     clientDir: options.clientDir,
     exact: options.exact,
+    toolchain,
     gateway,
     served() {
       topics.changed(BUILD_TOPIC);
@@ -157,6 +170,9 @@ export function studio(options: StudioOptions) {
     },
     /** Starts the drafts, and rebuilds the shell when the host holds apps the repository's build lacks. */
     async start() {
+      // Exact installs while the drafts start, so the first preview need not wait for it.
+      const tools = toolchain.ready();
+
       await Promise.all(
         options.drafts.map(async (app) => {
           try {
@@ -166,6 +182,8 @@ export function studio(options: StudioOptions) {
           }
         })
       );
+
+      await tools;
 
       if (folders.any()) {
         await serial(builds.rebuild);

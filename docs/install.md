@@ -52,11 +52,15 @@ This puts Imp in `~/Applications`, already connected to that host. `curl -fsSL h
     - `v0.2.0/`: every unpacked release
   - `current`: a link to `releases/v0.2.0`, the one that runs
   - `data/`: the host's data (`DATA_DIR`)
+  - `tools/exact/`: [Exact](https://github.com/expo/exact), which the host rebuilds the web app with whenever the imp previews an app
   - `env`: the few settings outside the app
   - `run.sh`: what the service runs
   - `host.log`: logs, on macOS
   - `install-mac.log`: what the Mac app's install printed, on macOS
 - `~/Applications/Imp.app`: the Mac app, on macOS, and in `~/Library/Application Support/Imp/` its updater
+- `~/.bun/` and `~/.rustup/` with `~/.cargo/`: Bun and the Rust toolchains Exact builds with, when they were not there already
+
+The host installs Exact and those toolchains itself the first time it starts, and again when an update pins a newer Exact. That takes a few minutes and about 6 GB of disk, and needs `git`, `curl` and a C compiler (on macOS, the Xcode Command Line Tools: `xcode-select --install`). Until it finishes, the imp can write an app but not preview it. `scripts/setup.sh exact` in the release is what runs, and the host's log says how it went.
 
 Run the installer again at any time. It updates the host and restarts it.
 
