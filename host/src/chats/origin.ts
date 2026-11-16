@@ -18,7 +18,7 @@ export const withAppContext = (
 // routine's instruction, and memory's reflection skips the run, since the person said nothing in it.
 const ROUTINE = /^\[Routine: [^\]\n]*\]\n\n/;
 
-// A run that found nothing answers these words alone, so the person is not told about it (notices/notices.ts).
+// A run that found nothing answers these words alone, so the person is not told about it (notifications/notifications.ts).
 const NOTHING_NEW = "Nothing new.";
 
 /** The message that starts a run of a routine. */

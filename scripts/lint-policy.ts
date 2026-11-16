@@ -129,14 +129,14 @@ const crossings = [
     says: "uses studio/, which apps/ may not",
   },
   {
-    crosses: "a context the notices watch, using the notices",
+    crosses: "a context the notifications watch, using the notifications",
     files: [
       [
         "routines/routines.ts",
-        'import type { Notices } from "../notices/notices.ts";',
+        'import type { Notifications } from "../notifications/notifications.ts";',
       ],
     ],
-    says: "uses notices/, which routines/ may not",
+    says: "uses notifications/, which routines/ may not",
   },
   {
     crosses: "a context reading a flag instead of being handed what it changes",

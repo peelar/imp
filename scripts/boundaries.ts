@@ -36,6 +36,13 @@ export const CONTEXTS = new Map<string, Context>([
     },
   ],
   [
+    "agent",
+    {
+      owns: "Who the imp is, the registry the parts install their tools and prompt sections on, and the Pi Durable harness that runs it",
+      uses: [],
+    },
+  ],
+  [
     "chats",
     {
       owns: "The conversations, and the lines the host adds to a message, such as a routine's",
@@ -50,7 +57,7 @@ export const CONTEXTS = new Map<string, Context>([
     },
   ],
   [
-    "notices",
+    "notifications",
     {
       owns: "What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished",
       uses: ["chats", "routines", "secrets", "live"],
@@ -101,7 +108,7 @@ export const CONTEXTS = new Map<string, Context>([
   [
     "tricks",
     {
-      owns: "The browser tasks the imp keeps on its computer",
+      owns: "The browser tasks the imp keeps on its computer, and how it uses the web",
       uses: ["live"],
     },
   ],

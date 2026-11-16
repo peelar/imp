@@ -6,6 +6,8 @@ import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { arr, bool, compile, obj, opt, str } from "@earendil-works/pi-schema";
 import type { Topics } from "../live/live.ts";
 
+export { tricksExtension } from "./tools.ts";
+
 export const TOPIC = "tricks";
 
 /** A trick as the shell lists it: `title` says what it does, `site` where, `params` what it asks for each time. */

@@ -263,7 +263,7 @@ shape Routine
   running: bool
   asked: bool
 
-// Something the person is told while they are away (host/src/notices/notices.ts), the newest first. `kind` is
+// Something the person is told while they are away (host/src/notifications/notifications.ts), the newest first. `kind` is
 // "routine" (a run ended with something to say), "key" (the imp asks for a key or login) or "reply" (the imp finished
 // replying); `conversation` is the one it opens ("" for a key, which Settings takes). `at` grows with every notice.
 shape Notice

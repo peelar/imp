@@ -1,20 +1,13 @@
-// The host: Pi Durable on SQLite, the agent's machine through the adapter contract, the app gateway, and one HTTP
-// origin that serves both the web client and its API. This file only puts the parts together: what the shell reads
-// and changes is shell-api.ts, and how it is served is http.ts. server.ts starts it.
+// The host: the agent (agent/), its computer, the app gateway, and one HTTP origin that serves both the web client
+// and its API. This file only opens the parts and connects them: what the shell reads and changes is shell-api.ts,
+// and how it is served is http.ts. server.ts starts it.
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { MutableModels } from "@earendil-works/pi-ai/models";
-import {
-  createRegistry,
-  defineExtension,
-  Harness,
-  type Registry,
-  section,
-} from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
+import type { Registry } from "@earendil-works/pi-durable";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
+import { agentRegistry, openHarness } from "./agent/agent.ts";
 import { type AppGateway, appGateway } from "./apps/apps.ts";
 import { appBackup } from "./backup/backup.ts";
 import { TOPIC as CHAT, openChats } from "./chats/chats.ts";
@@ -25,7 +18,7 @@ import {
 } from "./computer/computer.ts";
 import { serveHttp } from "./http.ts";
 import { openRoutines, routinesExtension } from "./routines/routines.ts";
-import { openTricks } from "./tricks/tricks.ts";
+import { openTricks, tricksExtension } from "./tricks/tricks.ts";
 import { type Flags, TOPIC as FLAGS, openFlags } from "./flags/flags.ts";
 import { Topics } from "./live/live.ts";
 import type { Machine, MachineProvider } from "./machine/machine.ts";
@@ -36,7 +29,7 @@ import {
   graphMemory,
 } from "./memory/memory.ts";
 import { openSecrets, type Secrets } from "./secrets/secrets.ts";
-import { openNotices } from "./notices/notices.ts";
+import { openNotifications } from "./notifications/notifications.ts";
 import { shellApi } from "./shell-api.ts";
 import {
   TOPIC as ACCOUNT,
@@ -106,29 +99,11 @@ const report = (what: string) => (cause: unknown) => {
   );
 };
 
-/** How the imp uses the web: agent-browser on its computer, and the tricks it keeps (tricks/tricks.ts). */
-const BROWSER =
-  'To use the web, drive the browser on your computer with the agent-browser CLI in bash: it opens Chrome on your computer\'s screen, where the user can watch you and sign in to sites for you. Before your first browser task, read `agent-browser skills get core`. Every browser session is recorded, so a task you did once can become a trick (agent-browser calls it a saved flow) that later runs in a second without the page. When `open` or `agent-browser flow list` shows a trick that fits the task, run it with `agent-browser flow run`, and use the page only if that fails. After a browser task the user may ask for again, keep it as a trick: if it only read, save it yourself with `agent-browser flow save <name> --description "<what it does, such as Search Hacker News>" --param <name>=<each value you typed>` and say so in one short sentence; if it changed something (sent, bought, booked, posted, deleted), ask the user before saving it. The user sees your tricks in the app; call them tricks.';
+/** What the agent is told and can do before any app: who it is, its computer's tools, the web, and what it remembers. */
+function imp(computer: Computer, memory: MemoryProvider) {
+  const registry = agentRegistry(computer.workspace);
 
-/** What the agent is told and can do before any app: who it is, its computer's tools, and what it remembers. */
-function agentRegistry(computer: Computer, memory: MemoryProvider) {
-  const registry = createRegistry();
-
-  registry.install(CodingTools);
-  registry.install(
-    defineExtension({
-      name: "imp",
-      sections: [
-        section(
-          "preamble",
-          () =>
-            `You are Imp, the user's own imp: a small, clever, loyal helper that runs their errands in the Imp app. You use their apps for them and build new apps when they ask. You have your own Linux computer: the read, write, edit, and bash tools run on it, in ${computer.workspace()}. Act without asking, except before destructive or irreversible actions. Keep answers short.`,
-          { tag: false }
-        ),
-        section("browser", () => BROWSER, { tag: false }),
-      ],
-    })
-  );
+  registry.install(tricksExtension);
   // After the preamble, so the prompt says who the imp is before what it remembers.
   registry.install(memory.extension);
 
@@ -233,20 +208,18 @@ async function openAgent(
   // The conversations start on the model of the account the host has stored.
   await account.ready;
 
-  const harness = await Harness.open(
-    await openNodeSqliteStorage(path.join(options.dataDir, "harness.sqlite")),
-    {
-      models: options.models,
-      registry,
-      // Built for each tool call, so a switch reaches the agent's next one, and so does a secret added in Settings.
-      env: async ({ cwd }: { readonly cwd?: string | undefined }) =>
-        new RemoteExecutionEnv({
-          ...place(computer, cwd),
-          shellEnv: await secrets.shellEnv(),
-        }),
-    },
-    context
-  );
+  const harness = await openHarness({
+    dataDir: options.dataDir,
+    models: options.models,
+    registry,
+    // Built for each tool call, so a switch reaches the agent's next one, and so does a secret added in Settings.
+    env: async ({ cwd }: { readonly cwd?: string | undefined }) =>
+      new RemoteExecutionEnv({
+        ...place(computer, cwd),
+        shellEnv: await secrets.shellEnv(),
+      }),
+    context,
+  });
 
   const model = () => account.model() ?? options.model;
   const agent = () => ({ model: model(), cwd: computer.workspace() });
@@ -330,9 +303,9 @@ async function openAgent(
   });
 
   // What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished.
-  const notices = openNotices({ topics, chats, routines, secrets });
+  const notifications = openNotifications({ topics, chats, routines, secrets });
 
-  return { harness, chats, routines, tricks, notices };
+  return { harness, chats, routines, tricks, notifications };
 }
 
 /**
@@ -414,7 +387,7 @@ export async function startHost(options: HostOptions) {
     options,
     topics,
     computer,
-    registry: agentRegistry(computer, memory),
+    registry: imp(computer, memory),
   };
 
   const stored = storedApps(dataDir, options.appsDir, (message) => {
@@ -437,11 +410,8 @@ export async function startHost(options: HostOptions) {
 
   const account = modelAccount(options.models, topics, chatgptModels(options));
 
-  const { harness, chats, routines, tricks, notices } = await openAgent(parts, {
-    gateway,
-    secrets,
-    account,
-  });
+  const agent = await openAgent(parts, { gateway, secrets, account });
+  const { harness, chats, routines, tricks, notifications } = agent;
 
   // Load every app now. A machine that is down is retried by the first call that needs it.
   const loadApps = async () => {
@@ -460,7 +430,7 @@ export async function startHost(options: HostOptions) {
       account,
       chats,
       routines,
-      notices,
+      notifications,
       tricks,
       computer,
       memory,

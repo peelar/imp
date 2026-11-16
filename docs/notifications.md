@@ -16,7 +16,7 @@ The app's badge counts what waits for you: routines with a run you have not open
 
 ## How a notice reaches you
 
-The host decides what is worth telling (`host/src/notices/notices.ts`). It follows the routines, the secrets and the chats by their topics, and keeps the latest 20 notices in memory, which every open Imp reads on its account stream. A restart forgets them: the conversations and Settings keep what each was about.
+The host decides what is worth telling (`host/src/notifications/notifications.ts`). It follows the routines, the secrets and the chats by their topics, and keeps the latest 20 notices in memory, which every open Imp reads on its account stream. A restart forgets them: the conversations and Settings keep what each was about.
 
 Each open Imp shows a notice that arrives after it opened, while its window is not in front. One you are looking at shows none, since you see the change happen. Opening Imp never tells you again what happened before.
 

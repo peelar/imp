@@ -1,4 +1,4 @@
-// What needs the person, told as it happens, so they need not open Imp to find out. Each open Imp (a browser tab,
+// Notifications: what needs the person, told as it happens, so they need not open Imp to find out. Each open Imp (a browser tab,
 // the Mac app, the iPhone app) shows a new notice as a notification while its window is not in front; the shell reads
 // them on the account stream.
 //
@@ -33,7 +33,7 @@ export type Notice = {
   readonly at: number;
 };
 
-export type NoticesOptions = {
+export type NotificationsOptions = {
   readonly topics: Topics;
   readonly chats: Chats;
   readonly routines: Routines;
@@ -100,7 +100,7 @@ function coalesced(check: () => Promise<void>) {
 type Post = (notice: Omit<Notice, "id" | "at">) => void;
 
 /** A run of a routine ended: it says what it found, or that it failed, unless it found nothing new. */
-function followRoutines({ routines, chats }: NoticesOptions, post: Post) {
+function followRoutines({ routines, chats }: NotificationsOptions, post: Post) {
   const finished = new Map(routines.list().map((r) => [r.id, r.finished]));
 
   return coalesced(async () => {
@@ -138,7 +138,7 @@ function followRoutines({ routines, chats }: NoticesOptions, post: Post) {
 }
 
 /** The imp asked for a key or a login, which only the person can add in Settings. */
-function followRequests({ secrets }: NoticesOptions, post: Post) {
+function followRequests({ secrets }: NotificationsOptions, post: Post) {
   const asked = new Set(secrets.state().requests.map((r) => r.id));
 
   return () => {
@@ -168,7 +168,7 @@ function followRequests({ secrets }: NoticesOptions, post: Post) {
 }
 
 /** The imp finished a turn in a chat: what it said, or why it stopped. A routine's runs are followRoutines'. */
-function followReplies({ chats }: NoticesOptions, post: Post) {
+function followReplies({ chats }: NotificationsOptions, post: Post) {
   let working = new Set<string>();
 
   return coalesced(async () => {
@@ -196,7 +196,7 @@ function followReplies({ chats }: NoticesOptions, post: Post) {
   });
 }
 
-export function openNotices(options: NoticesOptions) {
+export function openNotifications(options: NotificationsOptions) {
   const { topics } = options;
   let list: readonly Notice[] = [];
 
@@ -222,4 +222,4 @@ export function openNotices(options: NoticesOptions) {
   };
 }
 
-export type Notices = ReturnType<typeof openNotices>;
+export type Notifications = ReturnType<typeof openNotifications>;

@@ -13,7 +13,10 @@ import { TOPIC as SECRETS, type Secrets } from "./secrets/secrets.ts";
 import { TOPIC as ACCOUNT, type ModelAccount } from "./account/account.ts";
 import { TOPIC as FLAGS, type Flags, isFlagKey } from "./flags/flags.ts";
 import { TOPIC as ROUTINES, type Routines } from "./routines/routines.ts";
-import { TOPIC as NOTICES, type Notices } from "./notices/notices.ts";
+import {
+  TOPIC as NOTICES,
+  type Notifications,
+} from "./notifications/notifications.ts";
 import { TOPIC as TRICKS, type Tricks } from "./tricks/tricks.ts";
 import { APPS_TOPIC, BUILD_TOPIC, type studio } from "./studio/studio.ts";
 
@@ -24,7 +27,7 @@ export type ShellApiOptions = {
   /** What the imp does on a schedule. */
   readonly routines: Routines;
   /** What the person is told while they are away, which every open shell shows as a notification. */
-  readonly notices: Notices;
+  readonly notifications: Notifications;
   /** What the imp learned to do in the browser. */
   readonly tricks: Tricks;
   readonly computer: Computer;
@@ -133,7 +136,7 @@ function shellSources(options: ShellApiOptions) {
     computer,
     flags,
     memory,
-    notices,
+    notifications,
     routines,
     secrets,
     studio,
@@ -153,7 +156,7 @@ function shellSources(options: ShellApiOptions) {
     backup: backup.state(),
     tricks: tricks.list(),
     routines: routines.state(),
-    notices: notices.state(),
+    notices: notifications.state(),
     flags: flags.list(),
   });
 
