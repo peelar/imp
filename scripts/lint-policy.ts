@@ -147,9 +147,9 @@ const crossings = [
     crosses:
       "a context using code others share, which the map does not list for it",
     files: [
-      ["memory/memory.ts", 'import type { Topics } from "../live/live.ts";'],
+      ["update/update.ts", 'import type { Topics } from "../live/live.ts";'],
     ],
-    says: "uses live/, which memory/ may not",
+    says: "uses live/, which update/ may not",
   },
   {
     crosses: "a context using the files that put the host together",

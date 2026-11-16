@@ -2,7 +2,7 @@
 //
 //   builds/<build id>/      a web build; the three newest are kept
 //   builds/current.json     { id: the build the host serves }
-//   shell/                  where a build is assembled (shell.ts)
+//   shell/                  where a build is assembled (wiring.ts)
 import {
   existsSync,
   mkdirSync,
@@ -14,7 +14,7 @@ import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
 import type { AppGateway } from "../apps/apps.ts";
 import { readKept } from "../datadir/datadir.ts";
-import { buildShell, type ShellApp } from "./shell.ts";
+import { buildShell, type ShellApp } from "./wiring.ts";
 import type { Toolchain } from "./toolchain.ts";
 
 const KEPT_BUILDS = 3;

@@ -2,7 +2,7 @@
 # Links the Exact modules the shell uses (each `use … from "@exact/<name>"` in client/app.contract) into
 # client/node_modules from the Exact checkout the client builds with, where the Contract compiler finds them.
 # `exact add` would write a fixed path into the Exact checkout instead, and Exact sits elsewhere in CI and releases.
-# The host links them the same way into the copy of the shell it builds (host/src/studio/shell.ts).
+# The host links them the same way into the copy of the shell it builds (host/src/studio/wiring.ts).
 #
 #   scripts/link-exact.sh [<exact>]   default: EXACT, or where scripts/setup.sh puts Exact
 set -eu

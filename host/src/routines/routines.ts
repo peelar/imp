@@ -23,6 +23,8 @@ import {
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { routinesExtension } from "./tools.ts";
 
+export { routineCalls } from "./shell.ts";
+
 export const TOPIC = "routines";
 
 /** How often the host looks for a routine that is due. */

@@ -1,7 +1,10 @@
-// Live answers. Every resource the shell shows is a server-sent event stream: the host sends the answer when the
-// stream opens, and again whenever one of its topics changes and the new answer differs. Writes name the topics they
-// change (`changed("app:todos")`), so the agent's changes and the user's reach every open view the same way.
+// Live answers, and the calls that change them. Every resource the shell shows is a server-sent event stream: the host
+// sends the answer when the stream opens, and again whenever one of its topics changes and the new answer differs.
+// Writes name the topics they change (`changed("app:todos")`), so the agent's changes and the user's reach every open
+// view the same way. A change the shell asks for is a Call, which answers a Reply; each context names its own calls in
+// its shell.ts.
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Json } from "../../../sdk/app.ts";
 
 export class Topics {
   readonly #listeners = new Map<string, Set<() => void>>();
@@ -47,6 +50,33 @@ export type LiveSource = {
   /** The topics whose changes can change this answer. */
   readonly topics: readonly string[];
   readonly load: () => Promise<Answer>;
+};
+
+/** What a change answers: `ok`, or not and why. */
+export type Reply = { readonly ok: boolean; readonly error: string };
+
+/** A change the shell asks for, with its arguments in order. */
+export type Call = (args: readonly Json[]) => Promise<Answer> | Answer;
+
+/** A context's calls, by the names the shell calls them. */
+export type Calls = readonly (readonly [name: string, call: Call])[];
+
+export const ok: Reply = { ok: true, error: "" };
+
+export const refused = (error: string): Reply => ({ ok: false, error });
+
+/** What went wrong, in the words of the error. */
+export const why = (cause: unknown) =>
+  cause instanceof Error ? cause.message : String(cause);
+
+const isText = (value: Json | undefined): value is string =>
+  typeof value === "string";
+
+/** The text argument at a position; "" when the shell sent none there. */
+export const text = (args: readonly Json[], at: number) => {
+  const value = args[at];
+
+  return isText(value) ? value : "";
 };
 
 export type LiveStream = {

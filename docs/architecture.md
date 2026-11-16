@@ -43,7 +43,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `chats/` | The conversations, and the lines the host adds to a message, such as a routine's | `live` |
 | `routines/` | What the imp does on a schedule, each in a conversation of its own | `chats`, `live` |
 | `notifications/` | What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished | `chats`, `routines`, `secrets`, `live` |
-| `memory/` | The memory contract and the knowledge graph behind it | `chats` |
+| `memory/` | The memory contract and the knowledge graph behind it | `chats`, `live` |
 | `secrets/` | The vault, the egress proxy and typing logins into Chrome | `machine`, `live`, `datadir`, `processes` |
 | `computer/` | The owner's choice of computer, switching to another, their own computers on the tailnet, and the screen | `machine`, `live`, `datadir` |
 | `machine/` | The machine adapter contract, every provider's adapter, and the runtime the host installs on every machine | `processes` |
@@ -51,14 +51,14 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `account/` | The model account: the ChatGPT sign-in or an API key, and their credentials | `live` |
 | `tricks/` | The browser tasks the imp keeps on its computer, and how it uses the web | `live` |
 | `update/` | The host's updates to the latest release |  |
-| `flags/` | The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start | `datadir` |
+| `flags/` | The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start | `datadir`, `live` |
 | `live/` | Live answers: the topics a change names, and the streams that answer again when one changes |  |
 | `datadir/` | Reading back the JSON files the host keeps in its data directory, so a damaged one never stops the host |  |
 | `processes/` | The programs the host runs beside itself, killed when it exits, and the ports they take on its loopback |  |
 
 `npm run check` enforces this map (`scripts/boundaries.ts`). It refuses an import of another part's inner file, a use of a part the table doesn't list, an import of the top files from inside a part, a setting read from the environment anywhere but `server.ts`, and code in `host/machine/` that imports more than types from a part's entry. It also keeps packages to one place each: `e2b` to the E2B adapter, `node:sqlite` to the apps' data and the credentials, and the Flags SDK (`flags`, `@flags-sdk/vercel`) to `flags/flags.ts`, which decides every [feature flag](configuration.md#feature-flags). A part never reads a flag itself: `host.ts` hands it what the flag changes for it, as it hands the app gateway the apps a flag keeps off. A part that needs another one, or a new part, changes the table there and here in the same commit, and the check refuses a table here that differs from the one there. A part the person can see is named as the app names it (`tricks/`, `routines/`, `secrets/`); one they never see is named for what it does.
 
-The agent and the client reach each part the same way. A part installs its tools and prompt section on the agent's registry, usually from its `tools.ts`, and `shell-api.ts` gives its reads and changes the client's names. A part tells the open views about a change by its topic (`live/live.ts`), never by calling the views.
+The agent and the client reach each part the same way. A part installs its tools and prompt section on the agent's registry from its `tools.ts`, and names its reads and changes for the client in its `shell.ts`, which `shell-api.ts` puts together. So a part's folder says what the imp can do with it, what the person can do with it, and what it keeps. A part tells the open views about a change by its topic (`live/live.ts`), never by calling the views.
 
 ## The client
 

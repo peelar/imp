@@ -15,6 +15,8 @@ import { type BackupHistory, backupHistory } from "./history.ts";
 import { readKept } from "../datadir/datadir.ts";
 import type { Topics } from "../live/live.ts";
 
+export { backupCalls } from "./shell.ts";
+
 export const TOPIC = "backup";
 
 export type Backup = {

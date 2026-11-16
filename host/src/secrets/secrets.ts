@@ -31,6 +31,8 @@ import { openVault, type Vault } from "./vault.ts";
 // The messages between the host and agentd's egress proxy, for host/machine/egress.ts (types only).
 export type { FromEgress, ToEgress } from "./egress-protocol.ts";
 
+export { secretsCalls } from "./shell.ts";
+
 export const TOPIC = "secrets";
 
 export type SecretsOptions = {

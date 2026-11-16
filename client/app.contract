@@ -5,7 +5,7 @@
 // black ink, engraved art, square corners, mono labels and one cobalt action.
 //
 // The host writes each app's part between the `// <apps:…>` markers from the props of the app's `component Screen`
-// (host/src/studio/shell.ts); `node host/scripts/shell.ts` writes them for the apps in apps/. Do not edit between them.
+// (host/src/studio/wiring.ts); `node host/scripts/shell.ts` writes them for the apps in apps/. Do not edit between them.
 // <apps:use>
 use Screen as GithubScreen, Inbox as GithubInbox from "./apps/github/app.contract"
 use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"

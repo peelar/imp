@@ -43,6 +43,8 @@ export { messageText } from "./message-text.ts";
 
 export { isRoutineRun, routineRun, saidNothingNew } from "./origin.ts";
 
+export { chatCalls, chatSource } from "./shell.ts";
+
 type Id = Conversation["id"];
 
 /** A conversation in the sidebar: what it is about, when it was last written in, and whether a routine runs in it. */

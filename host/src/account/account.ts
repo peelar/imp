@@ -18,6 +18,8 @@ import { chatgptChoice } from "./fallback.ts";
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { openCredentialStore } from "./credentials.ts";
 
+export { accountCalls } from "./shell.ts";
+
 export const CHATGPT = "openai-codex";
 export const TOPIC = "account";
 

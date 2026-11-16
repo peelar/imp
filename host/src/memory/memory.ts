@@ -13,6 +13,8 @@ import type { Extension } from "@earendil-works/pi-durable";
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { graphMemory } from "./graph.ts";
 
+export { memoryCalls } from "./shell.ts";
+
 export const TOPIC = "memory";
 
 export type MemoryProvider = {

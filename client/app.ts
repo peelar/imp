@@ -92,7 +92,7 @@ const mutations: Record<Exclude<MutationSource, 'updateRestart'>, true> = {
   appsDiscard: true,
   appsUndo: true,
   appsSync: true,
-  // Each app's writes its screen calls, which the host writes from the apps (host/src/studio/shell.ts).
+  // Each app's writes its screen calls, which the host writes from the apps (host/src/studio/wiring.ts).
   // <apps:mutations>
   githubDone: true,
   githubSnooze: true,

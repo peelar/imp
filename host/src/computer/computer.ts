@@ -30,6 +30,7 @@ import {
 } from "./own.ts";
 import type { Topics } from "../live/live.ts";
 import type { MachineProvider } from "../machine/machine.ts";
+import { TOPIC } from "./shell.ts";
 import { COMPUTER_USER, setupPrompt, type TailnetDevice } from "./tailnet.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
@@ -37,9 +38,9 @@ export { screenSockets, serveScreenPage } from "./screen.ts";
 
 export type { ScreenSockets } from "./screen.ts";
 
-export const TOPIC = "computer";
-
 export { SIZES } from "./choice.ts";
+
+export { computerCalls, computerSource, TOPIC } from "./shell.ts";
 
 export type { ComputerDevice } from "./own.ts";
 

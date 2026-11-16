@@ -46,6 +46,8 @@ export type { AppFiles, AppInfo } from "./folders.ts";
 
 export { SYNC_TOPIC } from "./sync.ts";
 
+export { appCall, appSource, appsCalls } from "./shell.ts";
+
 // The messages between the host, agentd and each app's worker, for host/machine/ (types only).
 export type {
   Args,

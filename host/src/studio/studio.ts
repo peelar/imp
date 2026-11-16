@@ -23,14 +23,20 @@ import { codeFolders, impServers } from "./code.ts";
 import { appDecisions } from "./decisions.ts";
 import { versionHistory } from "./history.ts";
 import { appPreview } from "./preview.ts";
+import { APPS_TOPIC, BUILD_TOPIC } from "./shell.ts";
 import { exactToolchain } from "./toolchain.ts";
 import { studioTools } from "./tools.ts";
 import { agentWorkspace } from "./workspace.ts";
 
 export { storedApps } from "./code.ts";
 
-export const APPS_TOPIC = "apps";
-export const BUILD_TOPIC = "build";
+export {
+  APPS_TOPIC,
+  appsSource,
+  BUILD_TOPIC,
+  buildSource,
+  studioCalls,
+} from "./shell.ts";
 
 export type StudioOptions = {
   readonly dataDir: string;
@@ -68,6 +74,8 @@ function oneAtATime() {
     return await run;
   };
 }
+
+export type Studio = ReturnType<typeof studio>;
 
 export function studio(options: StudioOptions) {
   const { gateway, topics } = options;

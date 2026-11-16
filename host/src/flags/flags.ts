@@ -35,6 +35,8 @@ export const FLAGS = [
   },
 ] as const;
 
+export { flagCalls } from "./shell.ts";
+
 /** The topic that changes when the owner chooses a flag. */
 export const TOPIC = "flags";
 
@@ -54,9 +56,6 @@ const chosenPath = (dataDir: string) => path.join(dataDir, "flags.json");
 
 const readChosen = (options: FlagOptions) =>
   readKept(chosenPath(options.dataDir), chosenFile, options.log) ?? {};
-
-export const isFlagKey = (key: string): key is FlagKey =>
-  FLAGS.some((flag) => flag.key === key);
 
 /** A flag as Settings shows it: whether it is on now, and whether it will be on after the next start. */
 export type FlagState = {

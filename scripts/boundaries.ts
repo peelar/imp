@@ -67,7 +67,7 @@ export const CONTEXTS = new Map<string, Context>([
     "memory",
     {
       owns: "The memory contract and the knowledge graph behind it",
-      uses: ["chats"],
+      uses: ["chats", "live"],
     },
   ],
   [
@@ -123,7 +123,7 @@ export const CONTEXTS = new Map<string, Context>([
     "flags",
     {
       owns: "The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start",
-      uses: ["datadir"],
+      uses: ["datadir", "live"],
     },
   ],
   [
