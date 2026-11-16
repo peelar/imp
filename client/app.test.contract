@@ -230,7 +230,6 @@ test "Settings' Experimental section keeps a feature flag for Imp's next start"
 test "the sidebar starts new chats, folds all but the latest three, and lists the imp's tricks"
   size 1280x800
   clock until state account.status == "signedIn" within 5000
-  tap "tab-chat"
   expect tree has "sidebar"
   expect text "conversation-0" == "Please add todo: Book train to Kraków"
   expect text "tricks-count" == "2"
@@ -261,9 +260,14 @@ test "the sidebar starts new chats, folds all but the latest three, and lists th
   expect tree has "tricks"
   expect text "trick-title-0" == "Search Hacker News"
   expect text "trick-title-1" == "Track a parcel"
+  expect state nav.tab == "tricks"
   tap "trick-0"
-  expect tree missing "tricks"
-  expect text "composer" == "Search Hacker News: "
+  expect tree has "tricks"
+  expect text "side-composer" == "Search Hacker News: "
+  tap "home-entry"
+  expect state nav.tab == "chat"
+  clock until state chat.messages.length == 0 within 5000
+  expect tree has "home"
 
 test "on a narrow window the conversations and tricks open as a drawer"
   size 390x844
@@ -279,12 +283,12 @@ test "on a narrow window the conversations and tricks open as a drawer"
 test "the app directory installs an app from a GitHub link through the imp, and opens one already installed"
   size 1280x800
   clock until state account.status == "signedIn" within 5000
-  tap "tab-chat"
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
   tap "directory-entry"
+  clock settle
+  expect state nav.tab == "directory"
   expect tree has "directory"
-  expect tree missing "composer"
   expect text "directory-name-habits" == "Habits"
   expect tree has "directory-install-habits"
   expect tree missing "directory-install-todos"
@@ -293,7 +297,8 @@ test "the app directory installs an app from a GitHub link through the imp, and 
   type "directory-link" "github.com/someone/weather"
   expect tree missing "directory-link-error"
   tap "directory-link-install"
-  expect tree missing "directory"
+  clock settle
+  expect state nav.tab == "chat"
   clock until state chat.messages.0.text == "Install the app from github.com/someone/weather so I can try it." within 5000
   clock until state chat.busy == false within 10000
   tap "directory-entry"
@@ -305,17 +310,17 @@ test "the app directory installs an app from a GitHub link through the imp, and 
 test "a routine the imp saves is listed in the Routines pane, runs now in its own conversation, pauses and is deleted"
   size 1280x800
   clock until state account.status == "signedIn" within 5000
-  tap "tab-chat"
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
-  expect tree missing "routines-entry-count"
   tap "routines-entry"
+  expect state nav.tab == "routines"
   expect tree has "routines-empty"
+  expect tree has "chat-panel"
   tap "routine-new"
-  expect tree missing "routines"
-  expect text "composer" == "Every weekday at 8, "
-  type "composer" "Please save routine: Weather | 0 8 * * 1-5 | Check the weather"
-  tap "send"
+  expect tree has "routines"
+  expect text "side-composer" == "Every weekday at 8, "
+  type "side-composer" "Please save routine: Weather | 0 8 * * 1-5 | Check the weather"
+  tap "side-send"
   clock until state routines.length == 1 within 10000
   clock until state chat.busy == false within 10000
   expect text "routines-count" == "1"
@@ -377,7 +382,6 @@ test "a todo is renamed in place, and deleted"
 test "Enter sends a message, Shift+Enter breaks its line, and one the host never got comes back to the box"
   size 1280x800
   clock until state account.status == "signedIn" within 5000
-  tap "tab-chat"
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
   type "composer" "First line"
@@ -397,14 +401,14 @@ test "Enter sends a message, Shift+Enter breaks its line, and one the host never
   expect tree missing "send-error"
 
 // The hints themselves show only outside a browser (the Mac app), which Chrome cannot emulate.
-test "⌘ chords open the tabs, a new chat and the message box, and a browser tab hints at none of them"
+test "⌘ chords open the apps, Settings, a new chat and the message box, and a browser tab hints at none of them"
   size 1280x800
   prefer pointer fine
   clock until state account.status == "signedIn" within 5000
-  tap "tab-chat"
+  tap "chat-new"
   type "composer" key "Meta+,"
   expect state nav.tab == "settings"
-  type "app" key "Meta+3"
+  type "app" key "Meta+2"
   expect state nav.tab == "todos"
   expect tree has "chat-new"
   type "app" key "Meta+n"
@@ -413,7 +417,8 @@ test "⌘ chords open the tabs, a new chat and the message box, and a browser ta
   type "app" key "Meta+,"
   expect state nav.tab == "settings"
   type "app" key "Meta+l"
-  expect state nav.tab == "chat"
+  expect state nav.tab == "settings"
+  expect tree has "chat-panel"
   expect tree missing "chat-new-keys"
   type "app" key "Meta" down
   clock +500

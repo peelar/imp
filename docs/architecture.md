@@ -62,16 +62,16 @@ The client (`client/`) is written in Exact's Contract language. Everything it sh
 
 Writes name the topics they change, so a change by the imp and a change by you reach every open view the same way. When the imp adds a todo, your open Todos tab updates.
 
-The microphone button in the composer dictates a message with the browser's own speech recognition (Exact's `@exact/speech-recognition`), so the host never hears the audio. Words join the draft as the recognizer settles on them, and the ones it is still unsure of show above the field. Sending while dictating sends those too. The browser chooses where recognition runs: Chrome and Safari send the audio to Google's or Apple's speech service. Browsers without speech recognition, and the Mac app, show no microphone.
+The microphone button in the composer dictates a message with the browser's own speech recognition (Exact's `@exact/speech-recognition`), so the host never hears the audio. Words join the draft as the recognizer settles on them, and the ones it is still unsure of show above the field. Sending while dictating sends those too. The browser chooses where recognition runs: Chrome and Safari send the audio to Google's or Apple's speech service. The Mac app opens the microphone itself (`@exact/media-capture`) and hands its track to Apple's recognizer, which runs on the Mac. Browsers without speech recognition show no microphone.
 
 Each command with a shortcut is a button that declares its chord (`aria-keyshortcuts`), so the chord works only while that button is on the screen, and the Mac app lists it in its menu bar. ⌘L is the one exception: the message box it moves to is no button, so the app's root `key` handler takes it, and it is not in the menu bar.
 
 | Keys | What it does | Where |
 | --- | --- | --- |
 | ⌘N | New chat | Every page: the sidebar's New chat beside the chat on a wide window, the page header's button elsewhere |
-| ⌘1 to ⌘9 | Open the chat, then each app and the Computer in the bar's order | Always |
+| ⌘1 to ⌘9 | Open each app and the Computer in the bar's order | Always |
 | ⌘, | Open Settings | Always |
-| ⌘L | Put the cursor in the message box: the chat's beside an app, else the chat tab's, which it opens | Always |
+| ⌘L | Put the cursor in the message box: the chat's beside the page, else the chat page's, which it opens | Always |
 | ⌘. | Stop the imp | While it works and the message box is empty |
 | ⌘S | Save an app's preview | While the app shows one |
 | ⌘R | Run the open routine now | In a routine's conversation |

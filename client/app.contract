@@ -11,6 +11,7 @@ use Screen as GithubScreen, Inbox as GithubInbox from "./apps/github/app.contrac
 use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 // </apps:use>
 use showNotification, closeNotification, setAppBadge, clearAppBadge, notificationStatus, requestNotificationPermission, notificationclick, NotificationStatus, NotificationEvent from "@exact/notifications"
+use getUserMedia, stopTrack, MediaStream, MediaStreamTrack from "@exact/media-capture"
 use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
 
 font "Instrument Serif" = "assets/fonts/InstrumentSerif-Regular.ttf"
@@ -30,6 +31,10 @@ routes nav
   // </apps:tabs>
   // The imp's computer: its screen, beside the chat on a wide window, as an app's page is.
   tab computer "/computer"
+  // The imp's own pages, which the sidebar opens.
+  tab routines "/routines"
+  tab tricks "/tricks"
+  tab directory "/directory"
   tab settings "/settings"
 
 // Where the host answers: the page's own origin on the web, API_BASE_URL in a native build.
@@ -318,8 +323,8 @@ keyframes pulse
 fn builtVersion(): string = "repo"
 // </apps:version>
 fn tabTitle(name: string, wide: bool, apps: AppTile[]): string = name == "chat" ? (wide ? "Chat" : "Imp") : tabLabel(name, apps)
-// The chord that opens a tab: ⌘1 for the chat, then the tabs the bar shows in order up to ⌘9, and ⌘, for Settings, as
-// on a Mac. A tab the bar hides has none.
+// The chord that opens a tab: ⌘1 to ⌘9 for the apps and the computer in the bar's order, and ⌘, for Settings, as on a
+// Mac. Any other tab has none (⌘N opens the chat).
 fn tabChord(name: string, bar: string[]): string =
   name == "settings" ? "Meta+," : bar.indexOf(name) >= 0 and bar.indexOf(name) < 9 ? `Meta+${bar.indexOf(name) + 1}` : ""
 // A chord as the Mac writes it: "Control+Meta+S" is ⌃⌘S.
@@ -330,7 +335,8 @@ fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUppe
 fn hourOf(ms: number, offset: number): number = floor(((ms + offset * 60000) % 86400000) / 3600000)
 fn greeting(hour: number): string = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
 fn tabLabel(name: string, apps: AppTile[]): string =
-  name == "chat" ? "Chat" : name == "settings" ? "Settings" : name == "computer" ? "Computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.name, case none => capitalized(name) }
+  (name == "chat" ? "Chat" : name == "settings" ? "Settings" : name == "computer" ? "Computer" : name == "routines" ? "Routines"
+    : name == "tricks" ? "Tricks" : name == "directory" ? "App directory" : match first(apps.filter(a => a.id == name)) { case some(a) => a.name, case none => capitalized(name) })
 fn tabSymbol(name: string, apps: AppTile[]): string =
   name == "chat" ? "symbol:icon.messages" : name == "settings" ? "symbol:icon.settings" : name == "computer" ? "symbol:icon.computer" : match first(apps.filter(a => a.id == name)) { case some(a) => a.symbol, case none => "symbol:icon.layers" }
 fn hasDraft(name: string, apps: AppTile[]): bool =
@@ -352,7 +358,6 @@ fn aboutTitle(title: string): string = title == "You" ? "you" : title
 fn shownName(x: Secret): string = x.name == x.service ? x.label : x.name
 fn secretLabel(name: string, secrets: Secret[]): string =
   match first(secrets.filter(x => x.name == name)) { case some(x) => shownName(x), case none => name }
-fn paneTitle(pane: string): string = pane == "tricks" ? "Tricks" : pane == "routines" ? "Routines" : "App directory"
 // A link to a GitHub repository, such as github.com/owner/app, as its path ("owner/app"), or "" for any other text.
 fn repoPath(link: string): string =
   link.includes(" ") ? "" : link.startsWith("https://github.com/") ? link.slice(19) : link.startsWith("github.com/") ? link.slice(11) : ""
@@ -409,9 +414,6 @@ component App
   state unsent = ""
   state scheme = "system" persist
   state now = 0
-  // What the chat tab shows: "chat" (the open conversation), "routines" (what the imp does on a schedule), "tricks"
-  // (what the imp learned in the browser) or "directory" (apps to install).
-  state pane = "chat"
   // The sidebar's conversations past the latest three are folded until this opens them.
   state olderOpen = false
   // On a narrow window the sidebar is a drawer over the chat.
@@ -437,6 +439,8 @@ component App
   state recognitionId = ""
   state dictated = 0
   state dictationEnd = ""
+  // The microphone's track dictation listens to where the recognizer takes only a track (the Mac app), "" for none.
+  state micTrack = ""
   // ⌘ held on its own, before any other key (a chord): held for a moment, it shows each control's shortcut.
   state metaAlone = false
   state keysShown = false
@@ -485,25 +489,32 @@ component App
   mutation alertsAsked as shape NotificationStatus
   mutation listening as shape SpeechRecognitionInfo then listened
   mutation unheard as shape SpeechRecognitionInfo
+  mutation micOpened as shape MediaStream then micReady
+  mutation micClosed as shape MediaStreamTrack
   derive still = media.prefersReducedMotion
-  // Wide enough for the three columns: the sidebar, the page, and the chat beside an open app (its column stays,
-  // empty, on the chat and Settings, so no page moves when another opens). Narrower windows keep the tab bar.
+  // Wide enough for the three columns: the sidebar (the imp's pages and conversations), the page above the bar of apps,
+  // and the chat beside every page but the chat's own (where its column stays, empty, so no page moves when another
+  // opens). Narrower windows have a tab bar and a drawer instead.
   derive wide = media.width >= 1100
-  derive onApp = nav.tab != "chat" and nav.tab != "settings"
-  derive docked = wide and onApp
+  derive docked = wide and nav.tab != "chat"
   // The ⌘ chords are the app's in the Mac app (and an installed desktop app), where no browser takes them first: only
   // there does the screen hint at them.
   derive keyboard = media.pointer == "fine" and media.displayMode != "browser"
   derive keys = keyboard and keysShown and page.hasFocus
   // The apps the top bar lists: the installed ones this build has a screen (a tab) for.
   derive shownApps = apps.filter(a => nav.tabs.map(t => t.name).includes(a.id))
-  // The tabs the bottom bar shows, in order: the chat, the apps the host lists (this build has a tab for every app it
-  // ships, and a feature flag keeps some off the host), and the computer once there is one. Settings is apart.
-  derive barTabs = nav.tabs.map(t => t.name).filter(n => n == "chat"
-    or (n == "computer" ? computer.status != "none" : apps.map(a => a.id).includes(n)))
-  // A tab the bar hides, such as an app a flag keeps off, opened by its address: the host has nothing for it.
-  derive offTab = signedIn and current(apps) and nav.tab != "settings" and not barTabs.includes(nav.tab)
-  derive openAppName = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "this app" }
+  // The apps the bar shows, in order: the ones the host lists (this build has a tab for every app it ships, and a
+  // feature flag keeps some off the host), and the computer once there is one.
+  derive appTabs = nav.tabs.map(t => t.name).filter(n => n == "computer" ? computer.status != "none" : apps.map(a => a.id).includes(n))
+  // On a narrow window, where no sidebar is, the bar adds the chat and Settings.
+  derive barTabs = wide ? appTabs : ["chat"].concat(appTabs).concat(["settings"])
+  // A tab nothing shows, such as an app a flag keeps off, opened by its address: the host has nothing for it.
+  derive offTab = signedIn and current(apps) and not (appTabs.includes(nav.tab)
+    or ["chat", "settings", "routines", "tricks"].includes(nav.tab) or (nav.tab == "directory" and directoryOn))
+  // What the chat beside the page is about: the open app or the computer, "" for the imp's own pages.
+  derive sideSubject = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "" }
+  // The home page: the chat with nothing said yet.
+  derive atHome = nav.tab == "chat" and chat.messages.length == 0 and not chat.busy and chat.routine == ""
   derive signedIn = account.status == "signedIn"
   derive signingIn = account.status == "starting" or account.status == "waiting"
   derive onKey = account.kind == "apiKey"
@@ -520,9 +531,11 @@ component App
   derive lastId = match chat.messages.at(-1) { case some(m) => m.id, case none => "" }
   derive sendLost = failed(sent) and not pending(sent)
   derive sendError = sendLost ? "Your imp couldn't be reached, so that wasn't sent. Send it again in a moment." : match sent { case some(r) => r.error, case none => "" }
-  // Dictation takes the microphone through the browser's own recognizer (the Mac app's takes only a track, so it
-  // offers none). The words it is still unsure of show above the field until they are final and join the draft.
-  derive canDictate = speech.available and speech.state != "denied" and speech.inputs.includes("microphone")
+  // Dictation: the browser's recognizer opens the microphone itself; the Mac app's (Apple's, on the device) listens to
+  // a microphone track the app opens and stops when dictation ends. The words it is still unsure of show above the
+  // field until they are final and join the draft.
+  derive micDirect = speech.inputs.includes("microphone")
+  derive canDictate = speech.available and speech.state != "denied" and (micDirect or speech.inputs.includes("track"))
   derive interimHeard = match heard.interim { case some(i) => i.alternatives.slice(0, 1).map(a => a.transcript).join("").trim(), case none => "" }
   derive dictationError = dictationTrouble(match failure(listening) { case some(f) => f.code, case none => dictationEnd })
   derive composerError = sendError != "" ? sendError : dictationError
@@ -570,6 +583,8 @@ component App
   // A refused start (no microphone, permission denied) runs no `then`.
   task dictationRefused when failed(listening) key=true
     change(dictationOff)
+  task micRefused when failed(micOpened) key=true
+    change(dictationOff)
   task putBack when sendLost and unsent != ""
     after(1, restoreUnsent)
   task revealKeys when keyboard and metaAlone and not keysShown
@@ -601,7 +616,6 @@ component App
     if docked
       focus("side-composer")
     else
-      pane = "chat"
       drawer = false
       nav = select(nav, "chat")
       focus("composer")
@@ -704,7 +718,10 @@ component App
       dictating = true
       recognitionId = ""
       dictationEnd = ""
-      send listening = startSpeechRecognition(microphone=true, continuous=true, interimResults=true)
+      if micDirect
+        send listening = startSpeechRecognition(microphone=true, continuous=true, interimResults=true)
+      else
+        send micOpened = getUserMedia(audio=true)
     else if recognitionId == ""
       hush()
     else if heard.state != "stopping"
@@ -714,10 +731,29 @@ component App
   action hush
     if recognitionId == ""
       send listening = abortSpeechRecognition(recognition="")
+      if not micDirect
+        send micOpened = getUserMedia(audio=false)
     else
       send unheard = abortSpeechRecognition(recognition=recognitionId)
     dictating = false
     recognitionId = ""
+    closeMic()
+  // The microphone opened for dictation: the recognizer listens to its track, unless dictation stopped meanwhile.
+  action micReady
+    match micOpened
+      case some(m)
+        let track = match m.tracks.at(0) { case some(t) => t.id, case none => "" }
+        if dictating and track != ""
+          micTrack = track
+          send listening = startSpeechRecognition(track=track, continuous=true, interimResults=true)
+        else if track != ""
+          send micClosed = stopTrack(track=track)
+      case none
+        micTrack = ""
+  action closeMic
+    if micTrack != ""
+      send micClosed = stopTrack(track=micTrack)
+    micTrack = ""
   action listened
     match listening
       case some(r)
@@ -725,10 +761,13 @@ component App
         dictated = 0
         if r.id == ""
           dictating = false
+          closeMic()
       case none
         dictating = false
+        closeMic()
   action dictationOff
     dictating = false
+    closeMic()
   action foldHeard
     draft = withSpoken(draft, heardSince(heard, dictated))
     dictated = heard.finalCount
@@ -739,6 +778,7 @@ component App
     dictationEnd = match heard.error { case some(e) => e, case none => "" }
     dictating = false
     recognitionId = ""
+    closeMic()
   action suggest(text: string)
     if not pending(sent)
       send sent = chatSend(text, "")
@@ -749,7 +789,6 @@ component App
   action stop
     send stopped = chatStop()
   action newChat
-    pane = "chat"
     drawer = false
     nav = select(nav, "chat")
     // A new chat starts empty: what was typed for the last one stays behind with it.
@@ -757,7 +796,6 @@ component App
     send chatChanged = chatNew()
     focus("composer")
   action showChat(id: string)
-    pane = "chat"
     drawer = false
     nav = select(nav, "chat")
     if id != chat.current
@@ -765,7 +803,6 @@ component App
     seen(id)
   // A routine's conversation, which shows what each run found and takes the person's reply.
   action showRoutine(id: string)
-    pane = "chat"
     drawer = false
     nav = select(nav, "chat")
     send routineOpened = routinesOpen(id)
@@ -810,31 +847,32 @@ component App
   action deleteRoutine
     send routineDeleted = routinesDelete(chat.current)
   action openRoutines
-    pane = "routines"
     drawer = false
-    nav = select(nav, "chat")
-  // A routine asked for from the Routines pane: the message starts with a schedule, and the person adds the rest.
+    nav = select(nav, "routines")
+  // A routine asked for from the Routines page: the message starts with a schedule, and the person adds the rest.
   action askRoutine
-    pane = "chat"
-    draft = "Every weekday at 8, "
-    focus("composer")
+    into("Every weekday at 8, ")
   action openTricks
-    pane = "tricks"
     drawer = false
-    nav = select(nav, "chat")
+    nav = select(nav, "tricks")
   // A trick asked for in the open conversation: its name starts the message, and the person adds what it asks for.
   action useTrick(title: string)
-    pane = "chat"
-    draft = `${title}: `
-    focus("composer")
+    into(`${title}: `)
+  // A message started for the person: in the chat beside the page, or on a narrow window the chat's own page.
+  action into(text: string)
+    draft = text
+    if docked
+      focus("side-composer")
+    else
+      nav = select(nav, "chat")
+      focus("composer")
   action openDirectory
-    pane = "directory"
     drawer = false
-    nav = select(nav, "chat")
+    nav = select(nav, "directory")
   // An app from the directory, or a link to one: the imp brings it in as a preview, in the open conversation.
   action installApp(repo: string)
     if not pending(sent)
-      pane = "chat"
+      nav = select(nav, "chat")
       send sent = chatSend(installAsk(repo), "")
       unsent = ""
   action toggleOlder
@@ -849,7 +887,6 @@ component App
       scrollIntoView("transcript", lastId, block="end")
   // The wordmark: back to the home page, a new chat with its greeting, unless the open one is still empty.
   action goHome
-    pane = "chat"
     drawer = false
     nav = select(nav, "chat")
     if chat.messages.length > 0 or chat.routine != ""
@@ -959,7 +996,7 @@ component App
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
-                column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : `${e.name}-screen`)
+                column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : ["routines", "tricks", "directory"].includes(e.name) ? `${e.name}-list` : `${e.name}-screen`)
                   position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
                   padding-bottom=(wide ? "0px" : "calc(3.5rem + env(safe-area-inset-bottom))")
                   // On a wide window every page's header is the same bar, as tall as the chat column's, its title at
@@ -968,7 +1005,7 @@ component App
                     border-bottom="1px solid line.subtle" background-color="surface.page"
                     row width="100%" max-width=(wide ? "none" : "46rem") align-items="center" gap=12
                       height=(wide ? "3.25rem" : "auto") box-sizing="border-box" padding=(wide ? "0px" : "12px 0 11px")
-                      if e.name == "chat" and not wide
+                      if ["chat", "routines", "tricks", "directory"].includes(e.name) and not wide
                         button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
                           aria-keyshortcuts="Control+Meta+S" testId="drawer-toggle" appearance="none" width=32 height=32
                           padding=0 display="flex" align-items="center" justify-content="center"
@@ -977,7 +1014,7 @@ component App
                           if keys
                             KeyBadge(chord="Control+Meta+S", at="end")
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=(e.name == "chat" and pane != "chat" ? paneTitle(pane) : e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
+                      Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
                       if e.name == "chat" and chat.busy
                         row gap=8 align-items="center" testId="busy"
@@ -997,11 +1034,11 @@ component App
                           image "symbol:icon.compose" width=15 height=15
                           if keys
                             KeyBadge(chord="Meta+N", at="end")
-                  if e.name == "chat" and pane == "routines"
+                  if e.name == "routines"
                     RoutineList(routines=routines, open=showRoutine, ask=askRoutine)
-                  else if e.name == "chat" and pane == "tricks"
+                  else if e.name == "tricks"
                     TrickList(tricks=tricks, use=useTrick)
-                  else if e.name == "chat" and pane == "directory"
+                  else if e.name == "directory"
                     AppDirectory(entries=directory(), installed=apps, sending=pending(sent),
                       install=installApp, open=pick)
                   else if e.name == "chat"
@@ -1189,11 +1226,13 @@ component App
           aside position="absolute" top="3.25rem" left=0 bottom=0 width="15rem" box-sizing="border-box"
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
             aria-label="Conversations, routines and settings"
-            Sidebar(prefix="", conversations=chat.conversations, current=chat.current, pane=pane, tricks=tricks.length,
+            Sidebar(prefix="", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome, tricks=tricks.length,
               routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, openRoutines=openRoutines,
               openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard,
               directory=directoryOn)
-            column padding="10px" border-top="1px solid line.subtle"
+            // As tall as the tab bar beside it, so their top lines meet.
+            column height="3.5rem" box-sizing="border-box" justify-content="center" padding="0 10px"
+              border-top="1px solid line.subtle"
               button press=pick("settings") aria-pressed=(nav.tab == "settings") aria-keyshortcuts="Meta+,"
                 testId="tab-settings" appearance="none" display="flex" align-items="center" gap=10 padding="8px 10px"
                 border="none" text-align="start" color="ink.strong"
@@ -1207,10 +1246,10 @@ component App
           row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left="15rem" right="24rem" bottom=0
             height="3.5rem" box-sizing="border-box" justify-content="center" align-items="stretch"
             background-color="surface.page" border-top="1px solid line.subtle"
-            // Settings' tab stays here, hidden, for its panel: the sidebar's foot opens it.
+            // The chat's, Settings' and the imp's pages' tabs stay here, hidden, for their panels: the sidebar opens them.
             for t in nav.tabs key=t.name
               AppTab(prefix=(t.name == "settings" ? "bar-" : ""), name=t.name, label=tabLabel(t.name, apps),
-                symbol=tabSymbol(t.name, apps), chord=(t.name == "settings" ? "" : tabChord(t.name, barTabs)),
+                symbol=tabSymbol(t.name, apps), chord=(t.name == "settings" ? "" : tabChord(t.name, appTabs)),
                 selected=(nav.tab == t.name), shown=barTabs.includes(t.name), keys=keys, press=pick)
         else
           row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left=0 right=0 bottom=0
@@ -1219,8 +1258,8 @@ component App
             background-color="surface.page" border-top="1px solid line.subtle"
             for t in nav.tabs key=t.name
               AppTab(prefix="", name=t.name, label=tabLabel(t.name, apps), symbol=tabSymbol(t.name, apps),
-                chord=tabChord(t.name, barTabs), selected=(nav.tab == t.name),
-                shown=(t.name == "settings" or barTabs.includes(t.name)), keys=keys, press=pick)
+                chord=tabChord(t.name, appTabs), selected=(nav.tab == t.name),
+                shown=barTabs.includes(t.name), keys=keys, press=pick)
         // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
         // On the chat and Settings its column stays, empty, so the page keeps its width from one tab to the next.
         if docked
@@ -1242,12 +1281,14 @@ component App
                 image "symbol:icon.expand" width=15 height=15
             if chat.messages.length == 0 and not chat.busy
               column flex=1 min-height=0 justify-content="flex-end" padding="24px 18px" gap=8 testId="side-empty"
-                Initialled(word=`Ask about ${openAppName}.`, size="1.75rem", heading=3)
-                text (nav.tab == "computer" ? "Ask your imp to do something on it, and watch it work." : "Your imp can read it, change it, and build on it while you watch.")
+                Initialled(word=(sideSubject == "" ? "Ask your imp." : `Ask about ${sideSubject}.`), size="1.75rem", heading=3)
+                text (nav.tab == "computer" ? "Ask your imp to do something on it, and watch it work."
+                  : sideSubject != "" ? "Your imp can read it, change it, and build on it while you watch."
+                  : "The conversation you have open, beside whatever page you are on.")
                   font-style="italic" color="ink.muted"
             else
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
-            Composer(prefix="side-", placeholder=`Ask about ${openAppName}`, compact=true, draft=draft, busy=chat.busy,
+            Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys)
         else if wide
@@ -1259,7 +1300,7 @@ component App
             aside width="17rem" max-width="85%" box-sizing="border-box" display="flex" flex-direction="column"
               padding-top="env(safe-area-inset-top)" background-color="surface.page" border-right="1px solid line.strong"
               aria-label="Conversations, routines and tricks"
-              Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, pane=pane,
+              Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome,
                 tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat,
                 openRoutines=openRoutines, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder,
                 keyboard=keyboard, directory=directoryOn)
@@ -1611,14 +1652,16 @@ component SecretSettings
                 color=(u.failed ? "-exact-system-red" : "ink.muted")
               text u.when font-size="0.75rem" color="ink.faint"
 
-// The left sidebar: a new chat on a line of its own, the places the chat tab opens besides a conversation (routines,
-// tricks, the app directory), then the three latest conversations and, folded under them, the rest.
+// The left sidebar: a new chat on a line of its own, the imp's pages (home, routines, tricks, the app directory), then the three latest conversations and, folded under them, the rest.
 component Sidebar
   props
     prefix: string
     conversations: ChatSummary[]
     current: string
-    pane: string
+    // The open tab, and whether it is the home page.
+    tab: string
+    atHome: bool
+    home: action
     tricks: number
     routines: Routine[]
     olderOpen: bool
@@ -1647,19 +1690,21 @@ component Sidebar
           if keyboard
             text "⌘N" class=Key border-color="line.subtle" testId=`${prefix}chat-new-keys` aria-hidden=true
       column gap=2 padding="4px 10px 12px" border-bottom="1px solid line.subtle"
+        PlaceEntry(id=`${prefix}home`, label="Home", symbol="symbol:icon.home", count=0, mark="", selected=atHome,
+          press=home)
         PlaceEntry(id=`${prefix}routines`, label="Routines", symbol="symbol:icon.repeat", count=routines.length,
-          mark=routineMark, selected=(pane == "routines"), press=openRoutines)
+          mark=routineMark, selected=(tab == "routines"), press=openRoutines)
         PlaceEntry(id=`${prefix}tricks`, label="Tricks", symbol="symbol:icon.sparkles", count=tricks, mark="",
-          selected=(pane == "tricks"), press=openTricks)
+          selected=(tab == "tricks"), press=openTricks)
         if directory
           PlaceEntry(id=`${prefix}directory`, label="App directory", symbol="symbol:icon.layers", count=0, mark="",
-            selected=(pane == "directory"), press=openDirectory)
+            selected=(tab == "directory"), press=openDirectory)
       scroll flex=1 min-height=0
         if conversations.length > 0
           column gap=2 padding="14px 10px 20px"
             text "Recent" class=Label padding="0 10px 6px"
             for c, i in conversations.slice(0, 3) key=c.id
-              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(pane == "chat" and c.id == current), show=show)
+              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), show=show)
             if conversations.length > 3
               button press=toggleOlder aria-expanded=olderOpen testId=`${prefix}conversations-older` appearance="none"
                 display="flex" align-items="center" gap=8 padding="9px 10px" margin-top=4 border="none"
@@ -1670,7 +1715,7 @@ component Sidebar
                 text (olderOpen ? "Hide older" : `Older (${conversations.length - 3})`) class=Label color="inherit"
               if olderOpen
                 for c, i in conversations.slice(3) key=c.id
-                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(pane == "chat" and c.id == current), show=show)
+                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), show=show)
 
 // A place in the sidebar the chat tab opens: its symbol, its name, a mark in `mark`'s colour ("" for none) and how
 // many it holds, when any.
@@ -1713,7 +1758,7 @@ component ChatEntry
         background-color="surface.soft"
       text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
 
-// The Routines pane: what the imp does on a schedule, each opening its conversation, and a way to ask for one.
+// The Routines page: what the imp does on a schedule, each opening its conversation, and a way to ask for one.
 component RoutineList
   props
     routines: Routine[]

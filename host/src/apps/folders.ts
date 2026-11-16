@@ -24,6 +24,8 @@ const RESERVED = new Set([
   "secrets",
   "backup",
   "flags",
+  "tricks",
+  "directory",
 ]);
 
 /** App ids: lowercase letters and digits, so `todosSetDone` splits into the app and its operation. */

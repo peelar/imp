@@ -68,6 +68,7 @@
     "web": {},
     "macos": {
       "minimumOS": "14.0",
+      "icon": "art/Imp.icon",
       "window": {
         "width": 900,
         "height": 700
