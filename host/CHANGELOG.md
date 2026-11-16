@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.14.4
+
+### Patch Changes
+
+- 7814fd9: Opening another of Imp's pages in a tab that already showed one no longer sticks on the Imp splash screen. A page the browser puts away, in a background tab or for Back and Forward, now lets go of its connections to Imp and picks them up again when it comes back.
+- 972a9c7: You can try Imp's newest code before it is released: `curl -fsSL https://github.com/peelar/imp/releases/download/unreleased/install-host.sh | IMP_VERSION=unreleased sh` installs the build of `main`, which stays put until you run it again. `IMP_VERSION=v0.14.2` installs a given release.
+
 ## 0.14.3
 
 ### Patch Changes
