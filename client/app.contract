@@ -288,8 +288,9 @@ component App
   derive chatLost = match failure(chat) { case some(f) => true, case none => false }
   derive appsLost = match failure(apps) { case some(f) => true, case none => false }
   derive buildLost = match failure(build) { case some(f) => true, case none => false }
-  // The host serves a newer build (an app was added, previewed, saved or undone): relaunch into it.
-  derive stale = build.id != "" and build.id != builtVersion()
+  // The host serves a newer build (an app was added, previewed, saved or undone): relaunch into it. Only where the host
+  // served this shell: the Mac app relaunches into the build it carries, which would be stale again, forever.
+  derive stale = host.served and build.id != "" and build.id != builtVersion()
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
   // Imp is opening: the host has not said whether it is set up yet, or it is and the chat has not arrived.

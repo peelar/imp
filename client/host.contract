@@ -1,9 +1,11 @@
 // What the host answers the shell, by the names its live sources use (host/src/shell-api.ts and each context's
 // shell.ts). The account stream (`Account`) carries everything Settings shows, so the shell opens few streams.
 
-// Where the host answers: the page's own origin on the web, API_BASE_URL in a native build.
+// Where the host answers: the page's own origin on the web, API_BASE_URL in a native build. `served` when the host
+// served this shell too (the web), so a reload loads the build it serves now; a native build carries its own.
 shape Host
   origin: string
+  served: bool
 
 // The model account the agent runs on: a ChatGPT plan, or a key for an OpenAI-compatible API. `status` is
 // "checking", "signedOut", "starting", "waiting" (for the person to enter `code` at `url`), "signedIn", or "failed"

@@ -17,18 +17,19 @@ import type { Answer, MutationSource, Storage, StreamEvent } from './app.contrac
 const configured: string = import.meta.env.API_BASE_URL ?? 'http://127.0.0.1:8787';
 let API = configured;
 
-async function hostOrigin(saved: string): Promise<{ origin: string }> {
+// `served`: only the host's own page asks it for its address, and only that page reloads into the host's newest build.
+async function hostOrigin(saved: string): Promise<{ origin: string; served: boolean }> {
   if (saved) {
     API = saved.replace(/\/+$/, '');
-    return { origin: API };
+    return { origin: API, served: false };
   }
-  if (configured) return { origin: configured };
+  if (configured) return { origin: configured, served: false };
   const response = await fetch('/assets/host.json');
   if (!response.ok) throw new Error(`The host answered ${response.status} for its address.`);
   const { origin } = await response.json();
   if (typeof origin !== 'string' || !/^https?:\/\//.test(origin)) throw new Error('The host sent no address.');
   API = origin;
-  return { origin };
+  return { origin, served: true };
 }
 
 // The Mac app's updater (scripts/install-mac.sh) and the app talk through two files in the app's storage: the updater
