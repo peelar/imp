@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.11.1
+
+### Patch Changes
+
+- 73aa926: Settings is split into sections (General, Computer, Memory, Secrets and Backup) with shorter descriptions, instead of one long page. A notification asking for a key opens Secrets, and the Computer tab's setup button opens Computer.
+
 ## 0.11.0
 
 ### Minor Changes
