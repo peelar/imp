@@ -7,7 +7,7 @@ Imp tells you when something needs you, so you need not open it to find out. It 
 | Notice | When | Clicking it opens |
 | --- | --- | --- |
 | A routine's run | A run ended with something to say, or failed. A run that found nothing new answers only "Nothing new." and tells you nothing. | The routine's conversation |
-| A key or login | The imp asked for a key or login it lacks (`request_secret`). | Settings |
+| A key or login | The imp asked for a key or login it lacks (`request_secret`). | Settings → Secrets |
 | A reply | The imp finished a turn in one of your chats: what it said, or why it stopped. A routine's run is never told as a reply too. | That chat |
 
 The title is the routine's name, the chat's name or what the imp asks for; the body is the start of what it said, on one line. A newer notice about the same conversation replaces the older one, and opening a conversation clears its notice.
@@ -22,8 +22,8 @@ Each open Imp shows a notice that arrives after it opened, while its window is n
 
 | Where | What you need |
 | --- | --- |
-| A browser tab | The tab open, in the background or another window. Turn notifications on in Settings, and allow them when the browser asks. |
-| The Mac app | The app running. Turn notifications on in Settings, and allow them when macOS asks. |
+| A browser tab | The tab open, in the background or another window. Turn notifications on in Settings → General, and allow them when the browser asks. |
+| The Mac app | The app running. Turn notifications on in Settings → General, and allow them when macOS asks. |
 | iPhone | Not yet. See below. |
 
 Each open Imp tells you, so with Imp open in a browser tab and in the Mac app, both show the notice.

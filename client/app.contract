@@ -341,6 +341,10 @@ fn readsOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.reads, case none => "" }
 fn syncOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.sync, case none => "" }
+// The count a Settings tab carries: what is remembered, the secrets, the apps' versions kept; "" for none.
+fn settingsCount(section: string, memory: Memory, secrets: Secrets, backup: Backup): string =
+  (section == "memory" ? `${sum(memory.entries.map(m => m.facts.length + m.links.length))}`
+    : section == "secrets" ? `${secrets.secrets.length}` : section == "backup" ? `${backup.versions}` : "")
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
 // A memory entry's title inside a sentence: the person's own entry is "You", which reads "you" there.
 fn aboutTitle(title: string): string = title == "You" ? "you" : title
@@ -423,6 +427,8 @@ component App
   state keyBase = "https://api.openai.com/v1"
   state keyValue = ""
   state keyModel = ""
+  // Settings' open section: "general", "computer", "memory", "secrets" or "backup".
+  state settingsPane = "general"
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
   state secretRound = 0
   // Dictation into the composer: whether it is on, the browser's recognition once it has started, how many of its
@@ -634,6 +640,10 @@ component App
     // </apps:refresh>
   action pick(name: string)
     nav = select(nav, name)
+  // Settings, open at one of its sections.
+  action openSettings(section: string)
+    settingsPane = section
+    nav = select(nav, "settings")
   action toChat
     nav = select(nav, "chat")
   action follow(url: string)
@@ -775,7 +785,7 @@ component App
   action notify(n: Notice)
     if n.at > noticedAt
       showNotification(title=n.title, body=n.body, tag=noticeTag(n), data=`${n.kind}:${n.conversation}`)
-  // A notification clicked: its conversation opens, or Settings for a key the imp asked for.
+  // A notification clicked: its conversation opens, or Settings' secrets for a key the imp asked for.
   action openNotice(tag: string, e: NotificationEvent)
     let about = match e.data { case some(d) => d, case none => "" }
     if about.startsWith("routine:")
@@ -783,7 +793,7 @@ component App
     else if about.startsWith("reply:")
       showChat(about.slice(6))
     else if about.startsWith("key:")
-      pick("settings")
+      openSettings("secrets")
   action showWaiting
     if waiting > 0
       setAppBadge(contents=waiting)
@@ -1078,65 +1088,82 @@ component App
                       canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
-                      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=32 box-sizing="border-box" width="100%"
-                        if onKey
-                          column
-                            row padding-bottom=10 border-bottom="1px solid ink.strong"
-                              text "API key" class=Label color="ink.strong" role="heading" aria-level=2
-                            column gap=4 padding="16px 0" border-bottom="1px solid line.subtle"
-                              text account.model font-family="family.display" font-size="1.375rem"
-                                line-height=1.15 overflow-wrap="anywhere" testId="account-model"
-                              text account.baseUrl font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
-                                testId="account-base"
-                            text "Your imp runs on this key. Its provider bills what it uses." font-size="0.9375rem"
-                              color="ink.muted" padding-top=10
+                      column max-width="48.5rem" margin="0 auto" padding="20px 20px 32px" gap=24 box-sizing="border-box" width="100%"
+                        // Settings' sections, one at a time.
+                        row role="group" aria-label="Settings sections" gap=12 overflow-x="auto"
+                          border-bottom="1px solid line.subtle" testId="settings-sections"
+                          for s in ["general", "computer", "memory", "secrets", "backup"] key=s
+                            button press=openSettings(s) aria-pressed=(settingsPane == s) testId=`settings-pane-${s}`
+                              appearance="none" display="flex" align-items="baseline" padding="10px 0" margin-bottom="-1px" border="none"
+                              border-bottom=(settingsPane == s ? "2px solid ink.strong" : "2px solid transparent")
+                              background-color="transparent" color=(settingsPane == s ? "ink.strong" : "ink.muted")
+                              font-family="family.mono" font-size="0.6875rem" letter-spacing="0.06em" text-transform="uppercase"
+                              white-space="nowrap"
+                              :hover
+                                color="ink.strong"
+                              text capitalized(s)
+                              if settingsCount(s, memory, secrets, backup) != ""
+                                text settingsCount(s, memory, secrets, backup) color="ink.faint" margin-left=4
+                                  testId=`settings-count-${s}`
+                        if settingsPane == "computer"
+                          ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
+                            switchError=(keyError != "" ? keyError : switchError), setCloudKey=setCloudKey,
+                            refreshing=pending(computerRefreshed), useContainer=useContainer, useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
+                            retry=retryComputer, openScreen=pick("computer"), copyPrompt=copySetupPrompt)
+                        else if settingsPane == "memory"
+                          MemorySettings(memory=memory, forget=forget)
+                        else if settingsPane == "secrets"
+                          for r in [secretRound] key=`${r}`
+                            SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
+                              loginError=loginError, deleteError=secretDeleteError, save=saveSecret, saveLogin=saveLogin,
+                              remove=deleteSecret, dismiss=dismissSecret)
+                        else if settingsPane == "backup"
+                          BackupSettings(backup=backup, busy=(pending(backupStarted) or pending(backupDisconnected)),
+                            connect=connectBackup, cancel=cancelBackup, disconnect=disconnectBackup, copyCode=copyBackupCode)
                         else
+                          if onKey
+                            column
+                              row padding-bottom=10 border-bottom="1px solid ink.strong"
+                                text "API key" class=Label color="ink.strong" role="heading" aria-level=2
+                              column gap=4 padding="16px 0" border-bottom="1px solid line.subtle"
+                                text account.model font-family="family.display" font-size="1.375rem"
+                                  line-height=1.15 overflow-wrap="anywhere" testId="account-model"
+                                text account.baseUrl font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
+                                  testId="account-base"
+                          else
+                            column
+                              row padding-bottom=10 border-bottom="1px solid ink.strong"
+                                text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
+                              row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
+                                text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
+                                  text-align="center" line-height="2.75rem" font-family="family.script" font-size="1.75rem"
+                                  border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                                column flex=1 min-width=0 gap=4 align-items="flex-start"
+                                  text (account.email == "" ? "ChatGPT account" : account.email) font-family="family.display"
+                                    font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere" testId="account-email"
+                                  if account.plan != ""
+                                    text capitalized(account.plan) class=Label testId="account-plan"
                           column
                             row padding-bottom=10 border-bottom="1px solid ink.strong"
-                              text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
-                            row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
-                              text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
-                                text-align="center" line-height="2.75rem" font-family="family.script" font-size="1.75rem"
-                                border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                              column flex=1 min-width=0 gap=4 align-items="flex-start"
-                                text (account.email == "" ? "ChatGPT account" : account.email) font-family="family.display"
-                                  font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere" testId="account-email"
-                                if account.plan != ""
-                                  text capitalized(account.plan) class=Label testId="account-plan"
-                            text "Your imp runs on this plan. Nothing is billed separately." font-size="0.9375rem"
-                              color="ink.muted" padding-top=10
-                        ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
-                          switchError=(keyError != "" ? keyError : switchError), setCloudKey=setCloudKey,
-                          refreshing=pending(computerRefreshed), useContainer=useContainer, useCloud=useCloud, useOwn=useOwn, refresh=refreshDevices,
-                          retry=retryComputer, openScreen=pick("computer"), copyPrompt=copySetupPrompt)
-                        MemorySettings(memory=memory, forget=forget)
-                        for r in [secretRound] key=`${r}`
-                          SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
-                            loginError=loginError, deleteError=secretDeleteError, save=saveSecret, saveLogin=saveLogin,
-                            remove=deleteSecret, dismiss=dismissSecret)
-                        NotificationSettings(alerts=alerts, asking=pending(alertsAsked), allow=allowNotifications)
-                        BackupSettings(backup=backup, busy=(pending(backupStarted) or pending(backupDisconnected)),
-                          connect=connectBackup, cancel=cancelBackup, disconnect=disconnectBackup, copyCode=copyBackupCode)
-                        ExperimentalSettings(flags=account.flags, choose=chooseFlag)
-                        column
-                          row padding-bottom=10 border-bottom="1px solid ink.strong"
-                            text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
-                          row role="radiogroup" aria-label="Appearance" padding-top=14 gap=0
-                            for s, i in ["system", "light", "dark"] key=s
-                              button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
-                                padding="10px 0" border="1px solid line.strong" margin-left=(i == 0 ? "0px" : "-1px")
-                                background-color=(scheme == s ? "ink.strong" : "transparent")
-                                color=(scheme == s ? "surface.page" : "ink.strong")
-                                font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
-                                text capitalized(s)
-                        column
-                          button press=askSignOut disabled=pending(signedOut) testId="signout" display="flex" align-items="center"
-                            gap=10 padding="14px 0" color="-exact-system-red" background-color="transparent" border="none"
-                            border-top="1px solid line.subtle" border-bottom="1px solid line.subtle" text-align="start"
-                            :hover
-                              background-color="danger.soft"
-                            image "symbol:icon.sign-out" width=16 height=16
-                            text "Sign out" class=Label color="-exact-system-red"
+                              text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
+                            row role="radiogroup" aria-label="Appearance" padding-top=14 gap=0
+                              for s, i in ["system", "light", "dark"] key=s
+                                button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
+                                  padding="10px 0" border="1px solid line.strong" margin-left=(i == 0 ? "0px" : "-1px")
+                                  background-color=(scheme == s ? "ink.strong" : "transparent")
+                                  color=(scheme == s ? "surface.page" : "ink.strong")
+                                  font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                                  text capitalized(s)
+                          NotificationSettings(alerts=alerts, asking=pending(alertsAsked), allow=allowNotifications)
+                          ExperimentalSettings(flags=account.flags, choose=chooseFlag)
+                          column
+                            button press=askSignOut disabled=pending(signedOut) testId="signout" display="flex" align-items="center"
+                              gap=10 padding="14px 0" color="-exact-system-red" background-color="transparent" border="none"
+                              border-top="1px solid line.subtle" border-bottom="1px solid line.subtle" text-align="start"
+                              :hover
+                                background-color="danger.soft"
+                              image "symbol:icon.sign-out" width=16 height=16
+                              text "Sign out" class=Label color="-exact-system-red"
                     dialog id="confirm-signout" role="alertdialog" aria-label=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?")
                       text "Your imp stops until you sign in again. Your chats and apps stay."
                       button commandfor="confirm-signout" command="close" testId="signout-cancel"
@@ -1145,7 +1172,7 @@ component App
                         text "Sign out"
                   if e.name == "computer"
                     ComputerScreen(computer=computer, src=`${host.origin}/computer/screen?embed&scheme=${scheme}`,
-                      shown=(nav.tab == "computer"), openTab=openScreen, setUp=pick("settings"))
+                      shown=(nav.tab == "computer"), openTab=openScreen, setUp=openSettings("computer"))
                   // <apps:screens>
                   if e.name == "github"
                     AppPage(id="github", draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
@@ -1417,11 +1444,8 @@ component SecretSettings
         save(name.trim(), adding, value.trim(), hosts, header, prefix, envName)
   view
     column testId="secrets"
-      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
-        text "Secrets" class=Label color="ink.strong" role="heading" aria-level=2
-        text `No. ${numbered(secrets.secrets.length)}` class=Label
-      text "API keys and logins your imp uses without ever seeing them. Its computer gets a stand-in for each key, and your host swaps in the real one only on requests to that key's sites. A login is typed only into the site it belongs to."
-        font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=10
+      text "Keys and logins your imp uses without ever seeing them."
+        font-size="0.9375rem" color="ink.muted" line-height=1.45
       if secrets.status == "failed"
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"
@@ -1540,7 +1564,7 @@ component SecretSettings
                 placeholder=(replacing ? "One-time-code key: leave empty to keep it" : "One-time-code key (optional)")
                 aria-label="One-time-code key" testId="secret-otp" padding="9px 14px" border="1px solid line.strong"
                 background-color="transparent" font-family="family.mono" font-size="0.875rem" color="ink.strong"
-            text "Your host types it only into a page on this site, when your imp asks to sign in. For one-time codes, paste the otpauth:// link or the key the site shows when you set up an authenticator app."
+            text "Typed only into this site. For one-time codes, paste the otpauth:// link or setup key."
               font-size="0.875rem" color="ink.muted" line-height=1.45
           else
             match first(secrets.services.filter(v => v.id == adding))
@@ -1548,7 +1572,7 @@ component SecretSettings
                 text `Goes on requests to ${v.hosts}. Your imp reads it as ${v.env}.` font-size="0.875rem" color="ink.muted"
                   line-height=1.45
               case none
-                text "The key goes in the Authorization header unless you name another. If the service wants a word before the key, such as Bearer, write it in Before the key."
+                text "Sent in the Authorization header unless you name another."
                   font-size="0.875rem" color="ink.muted" line-height=1.45
           if login
             button press=submit disabled=(not ready or saving) testId="secret-save" align-self="flex-start"
@@ -1903,11 +1927,8 @@ component MemorySettings
     forgetting = ""
   view
     column testId="memory"
-      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
-        text "Memory" class=Label color="ink.strong" role="heading" aria-level=2
-        text `No. ${numbered(sum(memory.entries.map(m => m.facts.length + m.links.length)))}` class=Label
       if memory.entries.length == 0
-        text "Nothing yet. Your imp remembers what it learns as you talk: your name, the people and things in your life, how you like things done."
+        text "Nothing remembered yet."
           font-size="0.9375rem" color="ink.muted" line-height=1.45 padding="14px 0" border-bottom="1px solid line.subtle"
           testId="memory-empty"
       for m, j in memory.entries key=m.id
@@ -1962,7 +1983,7 @@ component NotificationSettings
         text "Notifications" class=Label color="ink.strong" role="heading" aria-level=2
         if alerts.available
           text (alerts.state == "granted" ? "On" : "Off") class=Label testId="notifications-state"
-      text "Your imp tells you when a routine finds something, when it needs a key from you, and when it finishes a reply while you are elsewhere. This device shows them while Imp is open on it."
+      text "Routine findings, key requests and finished replies, while Imp is open here."
         font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
       if not alerts.available
         text "This browser can't show notifications." font-style="italic" color="ink.muted" padding-top=12
@@ -1989,7 +2010,7 @@ component ExperimentalSettings
     column testId="experimental"
       row padding-bottom=10 border-bottom="1px solid ink.strong"
         text "Experimental" class=Label color="ink.strong" role="heading" aria-level=2
-      text "Features still being tried out. A change takes effect the next time Imp starts."
+      text "Changes apply after Imp restarts."
         font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
       for f, i in flags key=f.key
         row align-items="center" gap=14 padding="14px 0" border-bottom="1px solid line.subtle"
@@ -2011,11 +2032,8 @@ component BackupSettings
     copyCode: action
   view
     column testId="backup"
-      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
-        text "Backup" class=Label color="ink.strong" role="heading" aria-level=2
-        text `${backup.versions} ${backup.versions == 1 ? "version" : "versions"}` class=Label testId="backup-versions"
-      text (backup.git ? "Your host keeps every version of your apps' code. Connect GitHub to keep a copy there too, in a private repository. Your apps' data stays on your host." : "Your host keeps no versions of your apps' code yet: it needs git. Install git on it, then restart Imp.")
-        font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
+      text (backup.git ? "Your host keeps every version of your apps' code. Connect GitHub for a private copy." : "Needs git on your host. Install it, then restart Imp.")
+        font-size="0.9375rem" color="ink.muted" line-height=1.45
       if backup.status == "on"
         row gap=14 align-items="center" padding="16px 0" margin-top=12 border-top="1px solid line.subtle"
           border-bottom="1px solid line.subtle"
@@ -2268,8 +2286,6 @@ component ComputerSettings
     keyDraft = v
   view
     column
-      row padding-bottom=10 border-bottom="1px solid ink.strong"
-        text "Computer" class=Label color="ink.strong" role="heading" aria-level=2
       row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
         row width="2.75rem" height="2.75rem" min-width="2.75rem" align-items="center" justify-content="center"
           border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
@@ -2305,13 +2321,11 @@ component ComputerSettings
         text "This host fixes the computer for development, so there is nothing to choose." font-size="0.9375rem"
           color="ink.muted" padding-top=10
       else
-        text "Your imp works on one computer at a time. The one you leave keeps its files, so switching back picks up where it was."
-          font-size="0.9375rem" color="ink.muted" padding-top=10 line-height=1.45
         if switchError != "" and not switching
           text switchError color="-exact-system-red" font-size="0.9375rem" padding-top=10 testId="computer-switch-error"
         column gap=10 padding-top=22
           text "Imp cloud" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3
-          text (computer.cloudAvailable ? "A computer in E2B's cloud. It sleeps when idle and keeps its files." : "A computer in E2B's cloud. Paste an API key from e2b.dev/dashboard: a new account gets free credit, with no card.")
+          text (computer.cloudAvailable ? "Sleeps when idle, keeps its files." : "Paste an API key from e2b.dev/dashboard.")
             font-size="0.9375rem" color="ink.muted" line-height=1.45
           if not computer.cloudAvailable
             row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
@@ -2345,7 +2359,7 @@ component ComputerSettings
               :hover
                 background-color="surface.soft"
               image "symbol:icon.refresh" width=15 height=15
-          text "Any Linux computer on your tailnet: a home lab box, a VM, a spare laptop. Tailscale signs your imp in; no keys or passwords."
+          text "A Linux machine on your tailnet."
             font-size="0.9375rem" color="ink.muted" line-height=1.45
           if computer.tailnetError != ""
             text computer.tailnetError font-size="0.9375rem" color="-exact-system-red" testId="computer-tailnet-error"
@@ -2382,7 +2396,7 @@ component ComputerSettings
           row align-items="center" gap=10
             text "This machine" font-family="family.display" font-size="1.25rem" role="heading" aria-level=3 flex=1
             text "Free" class=Label
-          text "No E2B account and no spare computer? Your imp can work in a container on the machine Imp runs on, through Docker, OrbStack or Podman. It costs nothing, but it shares this machine's kernel, so it is walled off less well than the two above. Its first start takes a few minutes."
+          text "A container here, through Docker, OrbStack or Podman. Less isolated; the first start takes minutes."
             font-size="0.9375rem" color="ink.muted" line-height=1.45
           if computer.kind == "container"
             text "In use" class=Label color="ink.strong" testId="computer-container-in-use"

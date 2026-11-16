@@ -11,6 +11,7 @@ test "onboarding signs in with ChatGPT through a device code"
   expect tree missing "onboarding"
   expect tree has "composer"
   tap "tab-settings"
+  tap "settings-pane-general"
   expect text "account-email" == "tester@example.com"
   expect text "account-plan" == "Plus"
 
@@ -59,8 +60,12 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
 test "settings show the computer the agent works on, and offer to turn notifications on"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
+  tap "settings-pane-general"
   expect text "notifications-state" == "Off"
   expect tree has "notifications-allow"
+  expect tree missing "computer-name"
+  tap "settings-pane-computer"
+  expect tree missing "notifications-allow"
   clock until state computer.status == "ready" within 10000
   expect text "computer-name" == "This computer (development)"
   expect text "computer-status" == "Ready"
@@ -78,6 +83,7 @@ test "the computer's screen opens in its own tab, beside the chat on a wide wind
   expect tree has "chat-panel"
   expect text "computer-page-status" == "Ready"
   tap "tab-settings"
+  tap "settings-pane-computer"
   expect tree missing "computer-frame"
   tap "computer-open-screen"
   expect tree has "computer-frame"
@@ -85,6 +91,7 @@ test "the computer's screen opens in its own tab, beside the chat on a wide wind
 test "what the imp is asked to remember shows in Settings, reaches its prompt, and can be forgotten"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
+  tap "settings-pane-memory"
   expect tree has "memory-empty"
   tap "tab-chat"
   type "composer" "Please remember: Lives in Kraków"
@@ -95,6 +102,7 @@ test "what the imp is asked to remember shows in Settings, reaches its prompt, a
   tap "send"
   clock until state chat.messages.10.text == "I know: Lives in Kraków" within 10000
   tap "tab-settings"
+  tap "settings-pane-memory"
   expect text "memory-title-0" == "You"
   expect text "memory-fact-0-0" == "Lives in Kraków"
   tap "memory-forget-0-0"
@@ -113,11 +121,13 @@ test "after a chat the imp remembers what it learned on its own, without a tool 
   clock until state chat.busy == false within 10000
   clock until state memory.entries.0.facts.0 == "Lives in Gdańsk" within 10000
   tap "tab-settings"
+  tap "settings-pane-memory"
   expect text "memory-fact-0-0" == "Lives in Gdańsk"
 
 test "a key added in Settings reaches the imp's commands as a stand-in, never as its value"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
+  tap "settings-pane-secrets"
   clock until state secrets.status == "ready" within 120000
   expect tree has "secrets-empty"
   tap "secret-add-github"
@@ -125,6 +135,7 @@ test "a key added in Settings reaches the imp's commands as a stand-in, never as
   tap "secret-save"
   clock until state secrets.secrets.0.name == "github" within 20000
   expect text "secret-name-0" == "GitHub"
+  expect text "settings-count-secrets" == "1"
   expect tree missing "secret-form"
   tap "secret-add-github"
   expect text "secret-value" == ""
@@ -142,6 +153,7 @@ test "the imp asks for a key it lacks, and the owner adds it from the request"
   clock until state secrets.requests.0.name == "linear" within 10000
   clock until state chat.busy == false within 10000
   tap "tab-settings"
+  tap "settings-pane-secrets"
   expect tree has "secret-request-0"
   tap "secret-request-add-0"
   expect tree has "secret-form"
@@ -163,6 +175,7 @@ test "the imp asks for a login, and the owner adds it with its one-time-code key
   clock until state secrets.requests.0.name == "github-login" within 10000
   clock until state chat.busy == false within 10000
   tap "tab-settings"
+  tap "settings-pane-secrets"
   clock until state secrets.status == "ready" within 120000
   tap "secret-request-add-0"
   expect text "secret-site" == "github.com"
@@ -187,8 +200,9 @@ test "the imp asks for a login, and the owner adds it with its one-time-code key
 test "settings back the apps' code up to GitHub, connected with a device code"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
+  tap "settings-pane-backup"
   clock until state backup.versions == 1 within 5000
-  expect text "backup-versions" == "1 version"
+  expect text "settings-count-backup" == "1"
   tap "backup-connect"
   clock until state backup.status == "waiting" within 5000
   expect text "backup-code" == "TEST-5678"
@@ -202,6 +216,7 @@ test "settings back the apps' code up to GitHub, connected with a device code"
 test "Settings' Experimental section keeps a feature flag for Imp's next start"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
+  tap "settings-pane-general"
   expect text "flag-label-0" == "GitHub app"
   expect tree missing "flag-pending-0"
   tap "flag-github-app"
@@ -420,6 +435,7 @@ test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the
   size 1280x800
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
+  tap "settings-pane-general"
   tap "signout"
   tap "signout-confirm"
   clock until state account.status == "signedOut" within 5000
@@ -442,6 +458,7 @@ test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the
   tap "send"
   clock until state chat.messages.1.text == "Hello from the API." within 10000
   tap "tab-settings"
+  tap "settings-pane-general"
   expect text "account-model" == "fake-model"
   expect text "account-base" == "http://127.0.0.1:8799/v1"
   tap "home-logo"
