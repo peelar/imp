@@ -1,5 +1,17 @@
 # @imp/host
 
+## 0.10.0
+
+### Minor Changes
+
+- 80125f8: Every page now has the same layout on a wide window: the sidebar with your apps, Settings and conversations is always there, and the chat column stays on the right, so nothing moves when you switch apps. The Imp logo takes you home, and the greeting no longer guesses your name from your email. Icons come from one set (Phosphor), with a GitHub logo for GitHub and a checklist for Todos. The E2B key hint in onboarding links to e2b.dev/dashboard, and the home page no longer ends with the workshop picture.
+- 0bd8fc3: The GitHub app is now behind the `github-app` feature flag, off by default. To keep using it, add `{ "github-app": true }` to `flags.json` in the host's data directory and restart the host; its data is still there.
+- c18fab6: On a Mac, the install command now installs the Mac app too and opens it and the web app in your browser, instead of leaving the Mac app as an extra step. On Linux it opens the web app when you run it in a desktop session. Either way it ends with the web app's link and where the logs are.
+
+### Patch Changes
+
+- 0bd8fc3: When ChatGPT says your plan can't use Imp's default model, Imp now answers on the next model your account can use (gpt-6-sol, then gpt-6-luna) instead of showing an error, and if none works it tells you why in plain words.
+
 ## 0.9.0
 
 ### Minor Changes
