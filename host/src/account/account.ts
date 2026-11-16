@@ -3,8 +3,11 @@
 // ChatGPT: the host is usually opened from another device (a phone on the tailnet), where ChatGPT's browser flow
 // cannot reach its localhost callback, so this uses ChatGPT's device code flow: the shell shows a code and a link, the
 // person approves on any device, and the host polls for the tokens.
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 import type { Models, MutableModels } from "@earendil-works/pi-ai/models";
 import { compile, nullable, obj, opt, str } from "@earendil-works/pi-schema";
+import { readKept } from "../datadir/datadir.ts";
 import type { Topics } from "../live/live.ts";
 import {
   API,
@@ -33,9 +36,11 @@ export type Account = {
   plan: string;
   /** What it is signed in with: "chatgpt" or "apiKey" ("" while signed out). */
   kind: string;
-  /** An API key's address and model. */
+  /** An API key's address, and the model the agent runs on. */
   baseUrl: string;
   model: string;
+  /** The models the person can choose between, best first: a ChatGPT sign-in's, when there is more than one. */
+  models: string[];
 };
 
 /** A model the agent runs on. */
@@ -51,6 +56,7 @@ const SIGNED_OUT: Account = {
   kind: "",
   baseUrl: "",
   model: "",
+  models: [],
 };
 
 const withKey = ({ baseUrl, model }: ApiSettings): Account => ({
@@ -84,14 +90,17 @@ const tokenClaims = compile(
   )
 );
 
+/** The ChatGPT model the person chose, in DATA_DIR/model.json. */
+const choiceFile = compile(obj({ chatgpt: str() }));
+
 /**
- * `chatgptModels` are the models a ChatGPT sign-in runs on, best first: it moves down them as ChatGPT refuses one
- * (fallback.ts). An API key names its own model.
+ * `chatgptModels` are the models a ChatGPT sign-in runs on, best first: the person chooses one, and it moves down
+ * them as ChatGPT refuses one (fallback.ts). An API key names its own model.
  */
 export function modelAccount(
   models: MutableModels,
   topics: Topics,
-  chatgptModels: readonly string[]
+  chatgptModels: ChatgptModels
 ) {
   let state: Account = { ...SIGNED_OUT, status: "checking" };
 
@@ -104,18 +113,7 @@ export function modelAccount(
     topics.changed(TOPIC);
   };
 
-  // A stored ChatGPT sign-in wins over a stored key.
-  const ready = (async () => {
-    if (await hasCredential(models)) {
-      set(await signedIn(models));
-
-      return;
-    }
-
-    const key = await storedApiKey(models);
-
-    set(key ? withKey(key) : SIGNED_OUT);
-  })();
+  const ready = stored(models).then(set);
 
   /** Runs one sign-in attempt to its end. A newer attempt, or a cancel, takes the account's state from it. */
   async function signIn(controller: AbortController) {
@@ -134,16 +132,17 @@ export function modelAccount(
 
   return {
     ready,
-    state: () => state,
+    state: () => withChoice(state, chatgpt),
     /** The model the agent runs on, once signed in. */
     model(): ModelRef | undefined {
       if (state.status !== "signedIn") {
         return undefined;
       }
 
-      return state.kind === "apiKey"
-        ? { provider: API, modelId: state.model }
-        : { provider: CHATGPT, modelId: chatgpt.current() };
+      return {
+        provider: state.kind === "apiKey" ? API : CHATGPT,
+        modelId: withChoice(state, chatgpt).model,
+      };
     },
     /** Whether the agent can run: a model account is stored. */
     async usable() {
@@ -182,6 +181,9 @@ export function modelAccount(
         }
       });
     },
+
+    /** Runs a ChatGPT sign-in on one of its models from now on, and after a restart. Answers why not, or "". */
+    chooseModel: chatgpt.choose,
 
     /** Signs in with an API key, once the API takes it. Answers why not, or "". */
     async useKey(input: ApiSettings) {
@@ -225,6 +227,15 @@ export function modelAccount(
 }
 
 export type ModelAccount = ReturnType<typeof modelAccount>;
+
+/** What a ChatGPT sign-in shows of its models: the one the agent runs on, and the ones to choose from. */
+const withChoice = (
+  state: Account,
+  chatgpt: ReturnType<typeof chooseChatgptModel>
+): Account =>
+  state.kind === "chatgpt"
+    ? { ...state, model: chatgpt.current(), models: chatgpt.offered() }
+    : state;
 
 /** The device code flow's side of a sign-in: it picks the method, and hands over the code once ChatGPT issues it. */
 function deviceCodeFlow(
@@ -274,13 +285,23 @@ function failure(cause: unknown): string {
 }
 
 /**
+ * The models a ChatGPT sign-in runs on, best first, and the data directory, where model.json keeps the one the person
+ * chose.
+ */
+export type ChatgptModels = {
+  readonly ids: readonly string[];
+  readonly dataDir: string;
+};
+
+/**
  * Puts the ChatGPT provider, which whoever starts the host sets (server.ts, scripts/test-host.ts), in `models` again
- * with its fallback over `ids` (fallback.ts), and answers which of them the agent runs on.
+ * with its fallback over `ids` (fallback.ts), and answers which of them the agent runs on: the one the person chose,
+ * when it is still one of them, else the best.
  */
 function chooseChatgptModel(
   models: MutableModels,
   topics: Topics,
-  ids: readonly string[]
+  { ids, dataDir }: ChatgptModels
 ) {
   const provider = models.getProvider(CHATGPT);
 
@@ -294,7 +315,41 @@ function chooseChatgptModel(
 
   models.setProvider(chatgpt.provider);
 
-  return chatgpt;
+  const file = path.join(dataDir, "model.json");
+  const chosen = readKept(file, choiceFile, console.error)?.chatgpt ?? "";
+
+  if (ids.includes(chosen)) {
+    chatgpt.choose(chosen);
+  }
+
+  return {
+    current: chatgpt.current,
+    /** The models the person can choose between: none when there is only one. */
+    offered: () => (ids.length > 1 ? [...ids] : []),
+    /** Runs the agent on `id` from now on, and after a restart. Answers why not, or "". */
+    choose: (id: string) => {
+      if (!ids.includes(id)) {
+        return `Imp doesn't run on ${id}.`;
+      }
+
+      writeFileSync(file, JSON.stringify({ chatgpt: id }));
+      chatgpt.choose(id);
+      topics.changed(TOPIC);
+
+      return "";
+    },
+  };
+}
+
+/** The account stored when the host starts. A stored ChatGPT sign-in wins over a stored key. */
+async function stored(models: MutableModels): Promise<Account> {
+  if (await hasCredential(models)) {
+    return await signedIn(models);
+  }
+
+  const key = await storedApiKey(models);
+
+  return key ? withKey(key) : SIGNED_OUT;
 }
 
 /** Whether a ChatGPT credential is stored. A store that cannot be read counts as none: the person signs in again. */

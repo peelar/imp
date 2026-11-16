@@ -20,9 +20,9 @@ const refusal = (event: AssistantMessageEvent): event is Failure =>
   event.type === "error" && REFUSED.test(event.error.errorMessage ?? "");
 
 /**
- * The ChatGPT model the agent runs on, out of `ids`, best first: the best one ChatGPT has not refused since the host
- * started, so a plan that changes takes the best model again on the next start. Its `provider` is the ChatGPT one, with a request for one of `ids` that ChatGPT refuses going again on the
- * next; `changed` hears when the current model moves down.
+ * The ChatGPT model the agent runs on, out of `ids`, best first: the best one, or the one the person chose, until
+ * ChatGPT refuses it; then the next one down. Its `provider` is the ChatGPT one, with a request for one of `ids` that
+ * ChatGPT refuses going again on the next; `changed` hears when the current model moves down.
  */
 export function chatgptChoice(
   provider: Provider,
@@ -56,6 +56,10 @@ export function chatgptChoice(
       },
     } satisfies Provider,
     current: () => current,
+    /** Runs the agent on `id` from now on. */
+    choose(id: string) {
+      current = id;
+    },
   };
 }
 

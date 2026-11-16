@@ -9,6 +9,7 @@ import {
   dataDir,
   done,
   isRow,
+  refused,
   type Row,
   settledChat,
   startTestHost,
@@ -73,4 +74,36 @@ test("when ChatGPT refuses the model, the imp answers on the next one and stays 
   const next = await reply("which model?");
 
   assert.equal(next.at(-1)?.text, "Answered on faux-2.");
+});
+
+test("the person chooses the model, and the host keeps their choice", async () => {
+  const offered = await until("account", (answer) =>
+    isRow(answer) && Array.isArray(answer.models) ? answer.models : undefined
+  );
+
+  assert.deepEqual(offered, ["faux-1", "faux-2"]);
+
+  // The earlier refusal left the imp on faux-2; choosing moves it back up.
+  assert.deepEqual(await call("accountChooseModel", ["faux-1"]), done);
+  assert.equal(
+    (await reply("which model, now?")).at(-1)?.text,
+    "Answered on faux-1."
+  );
+
+  assert.deepEqual(
+    await call("accountChooseModel", ["gpt-0"]),
+    refused("Imp doesn't run on gpt-0.")
+  );
+
+  assert.deepEqual(await call("accountChooseModel", ["faux-2"]), done);
+  await startTestHost();
+  await until("account", (answer) =>
+    isRow(answer) && answer.status === "signedIn" && answer.model === "faux-2"
+      ? answer
+      : undefined
+  );
+  assert.equal(
+    (await reply("which model, after a restart?")).at(-1)?.text,
+    "Answered on faux-2."
+  );
 });

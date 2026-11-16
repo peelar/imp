@@ -41,14 +41,21 @@ const todoTitles = (answer: Json) => rows(answer).map((todo) => todo.title);
  * the backup that ride on the same stream.
  */
 const withStatus = (wanted: string) => (answer: Json) => {
-  const { status, code, url, error, email, plan, kind, baseUrl, model } = isRow(
-    answer
-  )
-    ? answer
-    : {};
+  const {
+    status,
+    code,
+    url,
+    error,
+    email,
+    plan,
+    kind,
+    baseUrl,
+    model,
+    models,
+  } = isRow(answer) ? answer : {};
 
   return status === wanted
-    ? { status, code, url, error, email, plan, kind, baseUrl, model }
+    ? { status, code, url, error, email, plan, kind, baseUrl, model, models }
     : undefined;
 };
 
@@ -190,6 +197,7 @@ test("an API key the API refuses is not kept; one it takes runs the imp until th
     kind: "apiKey",
     baseUrl: address,
     model: "fake-model",
+    models: [],
   });
 
   // The key stays across a restart of the host.
@@ -235,6 +243,7 @@ test("signing in shows the device code, then the account", async () => {
     kind: "",
     baseUrl: "",
     model: "",
+    models: [],
   });
   assert.deepEqual(await until("account", withStatus("signedIn")), {
     status: "signedIn",
@@ -245,7 +254,8 @@ test("signing in shows the device code, then the account", async () => {
     plan: "plus",
     kind: "chatgpt",
     baseUrl: "",
-    model: "",
+    model: "faux-1",
+    models: ["faux-1", "faux-2"],
   });
 });
 

@@ -10,7 +10,7 @@ Almost everything is set up in the app. The few settings outside it are environm
 | `OWNER_LOGIN` | everyone on the tailnet | The one Tailscale login allowed in, such as `you@github`. |
 | `IMP_AUTO_UPDATE` | on | `0` keeps an installed host at its release. |
 | `DATA_DIR` | `~/.imp/data` (installed), `host/data` (checkout) | Where the host keeps everything. |
-| `MODEL` | `gpt-6.1-sol`, then `gpt-6-sol`, then `gpt-6-luna` | The ChatGPT model the agent runs on. Without it, the host starts on `gpt-6.1-sol` and, when ChatGPT says your plan can't use a model, moves to the next one and stays there until the host restarts. Set it to use exactly that model, with no fallback. An API key names its model in the app. |
+| `MODEL` | `gpt-6.1-sol`, then `gpt-6-sol`, then `gpt-6-luna` | The ChatGPT models the agent may run on. Without it, you choose one of the three next to the message box (`gpt-6.1-sol` until you do), and when ChatGPT says your plan can't use it, the host moves to the next one down and stays there until it restarts. Set it to use exactly that model, with no fallback and no choice. An API key names its model in the app. |
 | `E2B_API_KEY` | none | An E2B key for Imp cloud, for a checkout. An installed host takes it in Settings instead. |
 | `MACHINE` | none | `local` fixes the agent's computer to a directory on the host. Development only. |
 | `IMP_REPO` | `peelar/imp` | The GitHub repository releases come from. |
@@ -31,6 +31,7 @@ Everything that is yours lives in `DATA_DIR`, on the host. Back it up, and you h
   - `harness.sqlite`: the conversation and the agent's durable state
   - `memory.jsonl`: what the imp remembers, one JSON object per line
   - `computer.json`: the computer you picked in Settings
+  - `model.json`: the ChatGPT model you chose next to the message box, if you chose one
   - `flags.json`: the [feature flags](#feature-flags) you turned on or off, if any
   - `e2b-api-key`: your E2B key, if you use Imp cloud
   - `ssh/`: known_hosts for your own computers

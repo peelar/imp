@@ -139,6 +139,16 @@ const crossings = [
     says: "uses notifications/, which routines/ may not",
   },
   {
+    crosses: "the model account, which keeps a file, reaching for the computer",
+    files: [
+      [
+        "account/account.ts",
+        'import type { Computer } from "../computer/computer.ts";',
+      ],
+    ],
+    says: "uses computer/, which account/ may not",
+  },
+  {
     crosses: "a context reading a flag instead of being handed what it changes",
     files: [["apps/apps.ts", 'import { openFlags } from "../flags/flags.ts";']],
     says: "uses flags/, which apps/ may not",

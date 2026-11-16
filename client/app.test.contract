@@ -15,6 +15,16 @@ test "onboarding signs in with ChatGPT through a device code"
   expect text "account-email" == "tester@example.com"
   expect text "account-plan" == "Plus"
 
+test "the model is chosen next to the message box"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-chat"
+  expect text "model" == "faux-1"
+  type "model" "faux-2"
+  clock until state account.model == "faux-2" within 5000
+  expect text "model" == "faux-2"
+  type "model" "faux-1"
+  clock until state account.model == "faux-1" within 5000
+
 test "a todo added in the Todos app is listed and counted"
   clock until state account.status == "signedIn" within 5000
   tap "tab-todos"

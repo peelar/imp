@@ -65,6 +65,7 @@ const mutations: Record<Exclude<MutationSource, 'updateRestart'>, true> = {
   accountCancel: true,
   accountUseKey: true,
   accountSignOut: true,
+  accountChooseModel: true,
   chatSend: true,
   chatStop: true,
   chatNew: true,

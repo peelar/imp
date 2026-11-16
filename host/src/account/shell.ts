@@ -1,5 +1,5 @@
-// The person's side of the model account, in Settings and the onboarding: sign in to ChatGPT, use an API key instead,
-// cancel a sign-in, sign out. What they see of it rides on the account stream (account.ts, `state`).
+// The person's side of the model account, in Settings, the onboarding and the composer: sign in to ChatGPT, use an API
+// key instead, cancel a sign-in, sign out, choose the model. What they see of it rides on the account stream (account.ts, `state`).
 import { type Calls, ok, refused, text } from "../live/live.ts";
 import type { ModelAccount } from "./account.ts";
 
@@ -21,6 +21,14 @@ export function accountCalls(account: ModelAccount): Calls {
           key: text(args, 1),
           model: text(args, 2),
         });
+
+        return error ? refused(error) : ok;
+      },
+    ],
+    [
+      "accountChooseModel",
+      (args) => {
+        const error = account.chooseModel(text(args, 0));
 
         return error ? refused(error) : ok;
       },

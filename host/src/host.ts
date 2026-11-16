@@ -408,7 +408,10 @@ export async function startHost(options: HostOptions) {
     liveChanged: backup.record,
   });
 
-  const account = modelAccount(options.models, topics, chatgptModels(options));
+  const account = modelAccount(options.models, topics, {
+    ids: chatgptModels(options),
+    dataDir: options.dataDir,
+  });
 
   const agent = await openAgent(parts, { gateway, secrets, account });
   const { harness, chats, routines, tricks, notifications } = agent;

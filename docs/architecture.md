@@ -48,7 +48,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `computer/` | The owner's choice of computer, switching to another, their own computers on the tailnet, and the screen | `machine`, `live`, `datadir` |
 | `machine/` | The machine adapter contract, every provider's adapter, and the runtime the host installs on every machine | `processes` |
 | `backup/` | Every saved version of the apps' code, in git and on GitHub | `apps`, `live`, `datadir` |
-| `account/` | The model account: the ChatGPT sign-in or an API key, and their credentials | `live` |
+| `account/` | The model account: the ChatGPT sign-in or an API key, their credentials, and the model the person chose | `live`, `datadir` |
 | `tricks/` | The browser tasks the imp keeps on its computer, and how it uses the web | `live` |
 | `update/` | The host's updates to the latest release |  |
 | `flags/` | The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start | `datadir`, `live` |

@@ -101,8 +101,8 @@ export const CONTEXTS = new Map<string, Context>([
   [
     "account",
     {
-      owns: "The model account: the ChatGPT sign-in or an API key, and their credentials",
-      uses: ["live"],
+      owns: "The model account: the ChatGPT sign-in or an API key, their credentials, and the model the person chose",
+      uses: ["live", "datadir"],
     },
   ],
   [

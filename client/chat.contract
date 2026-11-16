@@ -82,6 +82,10 @@ component Composer
     heard: string
     dictate: action
     keys: bool
+    // The model the agent runs on, and the ones the person can choose between (none: no picker).
+    model: string
+    models: string[]
+    chooseModel: action
   derive said = withSpoken(draft, heard).trim()
   // Enter sends, as a chat's composer does; Shift+Enter breaks the line, and the Enter that picks an input method's
   // candidate stays the input method's.
@@ -100,34 +104,44 @@ component Composer
             row width=6 height=6 min-width=6 background-color="-exact-system-red" aria-hidden=true
             text (heard == "" ? "Listening…" : heard) font-style="italic" color="ink.muted" flex=1 min-width=0
               font-size=(compact ? "0.9375rem" : "1rem") overflow-wrap="break-word" testId=`${prefix}dictation-heard`
-        row align-items="flex-end" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
-          background-color="surface.page" position="relative"
+        // As Amp's composer: the field across the top, and under it a toolbar with the model on the left and
+        // dictation and send on the right, all in one box.
+        column border="1px solid line.strong" background-color="surface.page" position="relative"
           if keys
             KeyBadge(chord="Meta+L", at="start")
           textarea id=`${prefix}composer` value=draft input=edit key=compose rows=1 field-sizing="content" max-height=180
-            placeholder=placeholder aria-label="Message" testId=`${prefix}composer` flex=1 min-width=0
-            padding="9px 0" border="none" background-color="transparent" outline="none" resize="none"
-            font-family="family.text" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.5 color="ink.strong"
-          if canDictate or dictating
-            button press=dictate retainFocus=true aria-pressed=dictating
-              aria-label=(dictating ? "Stop dictating" : "Dictate") testId=`${prefix}dictate` width=38 height=38
-              min-width=38 padding=0 border="none" display="flex" align-items="center" justify-content="center"
-              background-color=(dictating ? "danger.soft" : "transparent")
-              color=(dictating ? "-exact-system-red" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
-              image "symbol:icon.microphone" width=16 height=16
-          if busy and said == ""
-            button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
-              width=38 height=38 min-width=38 padding=0 border="none" background-color="ink.strong"
-              color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
-              image "symbol:icon.stop" width=13 height=13
-              if keys
-                KeyBadge(chord="Meta+.", at="end")
-          else
-            button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
-              testId=`${prefix}send` width=38 height=38 min-width=38 padding=0 border="none"
-              background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
-              justify-content="center" transition="background-color 120ms ease"
-              :disabled
-                background-color="surface.soft"
-                color="ink.faint"
-              image "symbol:icon.send" width=16 height=16
+            placeholder=placeholder aria-label="Message" testId=`${prefix}composer` min-width=0
+            padding=(compact ? "12px 14px 4px" : "14px 16px 6px") border="none" background-color="transparent"
+            outline="none" resize="none" font-family="family.text" font-size=(compact ? "1rem" : "1.0625rem")
+            line-height=1.5 color="ink.strong"
+          row align-items="center" gap=4 padding="4px 6px 6px"
+            if models.length > 1
+              select value=model change=chooseModel aria-label="Model" testId=`${prefix}model` min-width=0
+                max-width=(compact ? "9rem" : "12rem") height=32 border="none" background-color="transparent"
+                color="ink.muted" font-family="family.text" font-size="0.8125rem"
+                for m in models key=m
+                  option m value=m
+            row flex=1
+            if canDictate or dictating
+              button press=dictate retainFocus=true aria-pressed=dictating
+                aria-label=(dictating ? "Stop dictating" : "Dictate") testId=`${prefix}dictate` width=34 height=34
+                min-width=34 padding=0 border="none" display="flex" align-items="center" justify-content="center"
+                background-color=(dictating ? "danger.soft" : "transparent")
+                color=(dictating ? "-exact-system-red" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
+                image "symbol:icon.microphone" width=16 height=16
+            if busy and said == ""
+              button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
+                width=34 height=34 min-width=34 padding=0 border="none" background-color="ink.strong"
+                color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
+                image "symbol:icon.stop" width=12 height=12
+                if keys
+                  KeyBadge(chord="Meta+.", at="end")
+            else
+              button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
+                testId=`${prefix}send` width=34 height=34 min-width=34 padding=0 border="none"
+                background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
+                justify-content="center" transition="background-color 120ms ease"
+                :disabled
+                  background-color="surface.soft"
+                  color="ink.faint"
+                image "symbol:icon.send" width=16 height=16

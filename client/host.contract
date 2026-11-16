@@ -7,7 +7,8 @@ shape Host
 
 // The model account the agent runs on: a ChatGPT plan, or a key for an OpenAI-compatible API. `status` is
 // "checking", "signedOut", "starting", "waiting" (for the person to enter `code` at `url`), "signedIn", or "failed"
-// (with `error`). `kind` is "chatgpt" or "apiKey" once signed in; a key's API is at `baseUrl` and runs `model`.
+// (with `error`). `kind` is "chatgpt" or "apiKey" once signed in; the agent runs on `model`, at `baseUrl` for a key.
+// `models` are the ones the composer offers to choose from, best first: none unless a ChatGPT sign-in has several.
 shape Account
   status: string
   code: string
@@ -18,6 +19,7 @@ shape Account
   kind: string
   baseUrl: string
   model: string
+  models: string[]
   // The agent's computer, what the imp remembers and the owner's secrets ride on the account's stream: a browser opens
   // at most six connections to a host over HTTP/1.1, and a seventh request (a mutation) would wait for one of the
   // shell's streams to end.
