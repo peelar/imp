@@ -97,7 +97,6 @@ export function appPreview(options: PreviewOptions) {
   /** Checks the workspace's version of an app and makes it the app's draft, shown in its tab. */
   return async function preview(id: string) {
     requireAppId(id);
-    gateway.requireOn(id);
 
     const files = await workspace.read(id);
 

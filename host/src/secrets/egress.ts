@@ -16,7 +16,12 @@ import { connect } from "node:net";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createWebSocketStream, type RawData, WebSocket } from "ws";
-import { type EgressRules, type EgressUse, mitmProxy } from "./egress-proxy.ts";
+import {
+  type EgressRules,
+  type EgressUse,
+  type MitmProxy,
+  mitmProxy,
+} from "./egress-proxy.ts";
 import type { Endpoint, Machine } from "../machine/machine.ts";
 import {
   type FromEgress,
@@ -96,6 +101,17 @@ const withPassword = (
         : value,
     ])
   );
+
+/** A program's proxy variables for mitmproxy, started if it is not, and the CA it signs with as git reads it. */
+async function programEnv(proxy: MitmProxy) {
+  const address = `http://127.0.0.1:${(await proxy.running()).port}`;
+
+  return {
+    HTTPS_PROXY: address,
+    https_proxy: address,
+    GIT_SSL_CAINFO: proxy.caFile,
+  };
+}
 
 export function openEgress(options: EgressOptions) {
   const dir = path.join(options.dataDir, "egress");
@@ -209,6 +225,8 @@ export function openEgress(options: EgressOptions) {
       ca: proxy.caCertificate(),
       token: hostToken,
     }),
+    /** mitmproxy, started if it is not, for a program the host runs itself, such as the backup's git. */
+    programEnv: async () => await programEnv(proxy),
     /** A command's environment for the machine's proxy, its proxy variables given the proxy password. */
     commandEnv: (env: Readonly<Record<string, string>>) =>
       withPassword(env, password),

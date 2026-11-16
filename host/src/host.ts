@@ -8,8 +8,9 @@ import type { MutableModels } from "@earendil-works/pi-ai/models";
 import type { Registry } from "@earendil-works/pi-durable";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { agentRegistry, openHarness } from "./agent/agent.ts";
-import { type AppGateway, appGateway } from "./apps/apps.ts";
-import { appBackup } from "./backup/backup.ts";
+import { type AppGateway, appGateway, hasAppData } from "./apps/apps.ts";
+import { type AppBackup, appBackup, type GithubApi } from "./backup/backup.ts";
+import { openConnections } from "./connections/connections.ts";
 import { TOPIC as CHAT, openChats } from "./chats/chats.ts";
 import {
   type Computer,
@@ -19,7 +20,7 @@ import {
 import { serveHttp } from "./http.ts";
 import { openRoutines, routinesExtension } from "./routines/routines.ts";
 import { openTricks, tricksExtension } from "./tricks/tricks.ts";
-import { type Flags, TOPIC as FLAGS, openFlags } from "./flags/flags.ts";
+import { TOPIC as FLAGS, openFlags } from "./flags/flags.ts";
 import { Topics } from "./live/live.ts";
 import type { Machine, MachineProvider } from "./machine/machine.ts";
 import {
@@ -80,8 +81,10 @@ export type HostOptions = {
   readonly tailscale?: string | undefined;
   /** Where the programs the host downloads are kept (secrets/programs.ts). Default: DATA_DIR/tools. */
   readonly toolsDir?: string | undefined;
-  /** The GitHub CLI the backup signs in and creates its repository with (backup/backup.ts). Default: gh on PATH. */
+  /** The GitHub CLI that Connect GitHub signs in with (connections/connections.ts). Default: gh on PATH. */
   readonly gh?: string | undefined;
+  /** GitHub's REST API as the backup reaches it. Default: api.github.com, with the github key the proxy puts on. */
+  readonly github?: GithubApi | undefined;
 };
 
 /** The ChatGPT models the agent may run on, best first. */
@@ -173,21 +176,80 @@ function openOwnerSecrets(
   return secrets;
 }
 
+/** GitHub's REST API, with the owner's github key, which the egress proxy puts on each request. */
+const githubApi =
+  (secrets: Secrets): GithubApi =>
+  async ({ method, path: route, body }) =>
+    await secrets.sendForApp({
+      app: "backup",
+      url: `https://api.github.com${route}`,
+      method,
+      headers: {
+        accept: "application/vnd.github+json",
+        "content-type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : "",
+      secret: "github",
+      address: "",
+    });
+
 /** Every version of the apps' code, which the host keeps for the owner beside the apps' data. */
-function openBackup({ options, topics }: Parts, gateway: AppGateway) {
+function openBackup(
+  { options, topics }: Parts,
+  gateway: AppGateway,
+  secrets: Secrets
+) {
   const { dataDir } = options;
 
-  // Every live app's code, versioned on the host and pushed to GitHub once connected.
+  // Every live app's code, versioned on the host and pushed to GitHub once turned on, with the GitHub connection.
   const backup = appBackup({
     dataDir,
     topics,
-    gh: options.gh,
     apps: () => gateway.apps().flatMap((app) => gateway.live(app.id) ?? []),
+    github: {
+      connected: () => secrets.keyHosts("github") !== undefined,
+      api: options.github ?? githubApi(secrets),
+      pushEnv: secrets.programEnv,
+    },
   });
 
   backup.start();
 
   return backup;
+}
+
+/** The accounts the host connects to, whose sign-ins the vault keeps as keys: GitHub, which the backup pushes with. */
+function openAccountConnections(
+  { options, topics }: Parts,
+  { secrets, backup }: { secrets: Secrets; backup: AppBackup }
+) {
+  const connections = openConnections({
+    dataDir: options.dataDir,
+    gh: options.gh,
+    topics,
+    keys: {
+      ready: secrets.ready,
+      has: (name) => secrets.keyHosts(name) !== undefined,
+      put: async (name, value) =>
+        await secrets.put({
+          name,
+          service: name,
+          value,
+          hosts: "",
+          header: "",
+          prefix: "",
+          envName: "",
+        }),
+      remove: secrets.remove,
+    },
+    disconnected: () => {
+      backup.turnOff();
+    },
+  });
+
+  connections.start();
+
+  return connections;
 }
 
 type Followers = {
@@ -324,24 +386,21 @@ async function hostFlags({ dataDir, flagsKey }: HostOptions, topics: Topics) {
   });
 }
 
-/** The app gateway: the stored live apps, but those a feature flag keeps off, with the owner's keys. */
+/** The app gateway: the stored live apps, with the owner's keys. */
 function openAppGateway(
   { options, topics, registry }: Parts,
   {
     stored,
     machine,
     secrets,
-    flags,
   }: {
     stored: ReturnType<typeof storedApps>;
     machine: () => Promise<Machine>;
     secrets: ReturnType<typeof openOwnerSecrets>;
-    flags: Flags;
   }
 ) {
   return appGateway({
     apps: stored.live,
-    off: new Set(flags.on.has("github-app") ? [] : ["github"]),
     dataDir: options.dataDir,
     topics,
     registry,
@@ -390,17 +449,23 @@ export async function startHost(options: HostOptions) {
     registry: imp(computer, memory),
   };
 
-  const stored = storedApps(dataDir, options.appsDir, (message) => {
-    console.error(message);
+  const stored = storedApps({
+    dataDir,
+    repoAppsDir: options.appsDir,
+    hasData: (id) => hasAppData(dataDir, id),
+    log: (message) => {
+      console.error(message);
+    },
   });
 
   const machine = machineInUse(computer);
   const secrets = openOwnerSecrets(parts, machine);
 
   const flags = await hostFlags(options, topics);
-  const gateway = openAppGateway(parts, { stored, machine, secrets, flags });
+  const gateway = openAppGateway(parts, { stored, machine, secrets });
 
-  const backup = openBackup(parts, gateway);
+  const backup = openBackup(parts, gateway, secrets);
+  const connections = openAccountConnections(parts, { secrets, backup });
 
   // Every save and undo changes the live code, which the backup keeps.
   const apps = openStudio(parts, gateway, {
@@ -439,6 +504,7 @@ export async function startHost(options: HostOptions) {
       memory,
       secrets,
       backup,
+      connections,
       flags,
       studio: apps,
       gateway,
@@ -467,7 +533,7 @@ export async function startHost(options: HostOptions) {
       gateway.close();
       computer.close();
       secrets.close();
-      backup.close();
+      connections.close();
       routines.close();
       await chats.close();
       await harness.close(context);

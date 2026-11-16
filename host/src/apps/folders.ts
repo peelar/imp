@@ -25,6 +25,7 @@ const RESERVED = new Set([
   "memory",
   "secrets",
   "backup",
+  "connections",
   "flags",
   "tricks",
   "directory",

@@ -217,6 +217,8 @@ export function openSecrets(options: SecretsOptions) {
   };
 
   return {
+    /** The vault running and the secrets read; throws why not. */
+    ready: list.load,
     /** Starts the vault in the background, so Settings has the secrets when it opens. */
     start: () => {
       list.load().catch((cause: unknown) => {
@@ -290,6 +292,11 @@ export function openSecrets(options: SecretsOptions) {
     /** Sends an app's request, which the app gateway checked, with the key it names (app-fetch.ts). */
     sendForApp: async (request: AppRequest) =>
       await sendAppRequest(request, egress.viaProxy),
+    /**
+     * The environment for a program the host runs itself whose requests go through the egress proxy, so the addon
+     * puts the owner's keys on them, as it does the imp's commands': the backup's git pushes with the github key.
+     */
+    programEnv: egress.programEnv,
     /** The agent moved to another machine. */
     switched: () => {
       egress.disconnect();

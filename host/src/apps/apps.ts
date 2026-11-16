@@ -46,6 +46,8 @@ export type { AppFiles, AppInfo } from "./folders.ts";
 
 export { SYNC_TOPIC } from "./sync.ts";
 
+export { hasAppData } from "./data.ts";
+
 export { appCall, appSource, appsCalls } from "./shell.ts";
 
 // The messages between the host, agentd and each app's worker, for host/machine/ (types only).
@@ -64,11 +66,6 @@ export type {
 export type GatewayOptions = {
   /** The live apps to start with. */
   readonly apps: readonly AppInfo[];
-  /**
-   * The ids of apps a feature flag keeps off: no version of them runs, so the shell, the agent, the studio and a sync
-   * never reach them.
-   */
-  readonly off?: ReadonlySet<string> | undefined;
   readonly dataDir: string;
   readonly topics: Topics;
   readonly registry: Registry;
@@ -125,10 +122,8 @@ export function appGateway(options: GatewayOptions) {
       console.log(message);
     });
 
-  const { apps, requireOn, allowed } = flagGate(options.off);
-
   const machine = appMachine({
-    slots: apps(options.apps).map((app) => [app.id, app] as const),
+    slots: options.apps.map((app) => [app.id, app] as const),
     machine: options.machine,
     data,
     topics,
@@ -179,8 +174,7 @@ export function appGateway(options: GatewayOptions) {
     machine,
     data,
     scratchDir: path.join(options.dataDir, "apps"),
-    install: async (slot, app) =>
-      (await machine.install(slot, allowed(app))).manifest,
+    install: async (slot, app) => (await machine.install(slot, app)).manifest,
     uninstall,
   });
 
@@ -189,7 +183,6 @@ export function appGateway(options: GatewayOptions) {
     apps: () => shown(slots),
     /** Each app's live version and draft, which only the studio moves (versions.ts). */
     ...versions,
-    requireOn,
     /** The app and the operation name of a shell source such as `todosSetDone`, if an app owns it. */
     route: (source: string) => route(slots, source),
     fromShell: async (call: ShellCall) => {
@@ -243,30 +236,6 @@ const agentTools = (machine: AppMachine) =>
         agent: true,
       }),
   });
-
-/**
- * The apps a feature flag keeps off (GatewayOptions.off): the rest of a list, a check that throws for one, and the
- * same check on every version the studio tries, previews, saves or restores, as it is installed.
- */
-function flagGate(off: ReadonlySet<string> = new Set()) {
-  const requireOn = (id: string) => {
-    if (off.has(id)) {
-      throw new Error(
-        `The ${id} app is behind a feature flag that is off on this host, so it does not run here.`
-      );
-    }
-  };
-
-  return {
-    apps: (all: readonly AppInfo[]) => all.filter(({ id }) => !off.has(id)),
-    requireOn,
-    allowed: (app: AppInfo) => {
-      requireOn(app.id);
-
-      return app;
-    },
-  };
-}
 
 /** Holds the `app.fetch` of the version in `slot` to its connections, then sends it. */
 async function checkedFetch(

@@ -1,9 +1,10 @@
-// The backup of the apps' code, as the client uses it: the host keeps the apps it starts with as the first version,
-// and Settings connects GitHub with a device code. The GitHub CLI is a stand-in (scripts/fake-gh.ts) whose
-// repositories are bare git repositories in the host's data directory. The backup rides on the account stream.
+// Settings' Connections, as the client uses it: the host keeps every version of the apps' code, connecting GitHub
+// signs in with a device code and keeps the token in the vault, and Backup then pushes the versions to GitHub. The
+// GitHub CLI (scripts/fake-gh.ts) and GitHub's API (scripts/fake-github.ts) are stand-ins, whose repositories are bare
+// git repositories in the host's data directory. Both ride on the account stream.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../sdk/app.ts";
@@ -16,7 +17,9 @@ import {
   type Row,
   startTestHost,
   stopTestHost,
+  rows,
   until,
+  vaultReady,
 } from "./harness.ts";
 
 /** The backup as Settings shows it, once `accept` takes it. */
@@ -24,6 +27,15 @@ const backupWhen = (accept: (backup: Row) => boolean) => (answer: Json) => {
   const backup = isRow(answer) ? answer.backup : undefined;
 
   return isRow(backup) && accept(backup) ? backup : undefined;
+};
+
+/** GitHub's connection as Settings shows it, once `accept` takes it. */
+const githubWhen = (accept: (github: Row) => boolean) => (answer: Json) => {
+  const github = isRow(answer)
+    ? rows(answer.connections).find(({ id }) => id === "github")
+    : undefined;
+
+  return github && accept(github) ? github : undefined;
 };
 
 const withStatus = (status: string) =>
@@ -37,7 +49,10 @@ after(async () => {
   await stopTestHost();
 });
 
-test("the host keeps the apps it starts with as the first version, a folder per app", async () => {
+test("an installed app's code is the first version the host keeps, a folder per app", async () => {
+  // A new host has no apps: the onboarding installs GitHub.
+  assert.deepEqual(await call("appsInstall", ["github"]), done);
+
   const backup = await until(
     "account",
     backupWhen(({ versions }) => versions === 1)
@@ -46,8 +61,6 @@ test("the host keeps the apps it starts with as the first version, a folder per 
   assert.deepEqual(backup, {
     git: true,
     status: "off",
-    code: "",
-    url: "",
     repo: "",
     error: "",
     versions: 1,
@@ -58,14 +71,19 @@ test("the host keeps the apps it starts with as the first version, a folder per 
       cwd: path.join(dataDir, "backup"),
       encoding: "utf-8",
     }),
-    "github/app.contract\ngithub/app.json\ngithub/server.ts\ntodos/app.contract\ntodos/app.json\ntodos/server.ts\n"
+    "github/app.contract\ngithub/app.json\ngithub/server.ts\n"
   );
 });
 
-test("connecting GitHub shows the device code, then pushes every version to the person's private repository", async () => {
-  const waiting = until("account", withStatus("waiting"));
+test("connecting GitHub shows the device code, then keeps the account's key in the vault", async () => {
+  await vaultReady();
 
-  assert.deepEqual(await call("backupConnect", []), done);
+  const waiting = until(
+    "account",
+    githubWhen(({ status }) => status === "waiting")
+  );
+
+  assert.deepEqual(await call("connectionsConnect", []), done);
 
   const { code, url } = await waiting;
 
@@ -73,6 +91,38 @@ test("connecting GitHub shows the device code, then pushes every version to the 
     { code, url },
     { code: "TEST-5678", url: "https://github.com/login/device" }
   );
+  assert.deepEqual(
+    await until(
+      "account",
+      githubWhen(({ status }) => status === "on")
+    ),
+    {
+      id: "github",
+      label: "GitHub",
+      status: "on",
+      code: "",
+      url: "",
+      login: "tester",
+      error: "",
+    }
+  );
+
+  // The token is the owner's key named github, and the sign-in left nothing of it on the host.
+  const kept = await until("account", (answer) =>
+    isRow(answer) && isRow(answer.secrets)
+      ? rows(answer.secrets.secrets).find(({ name }) => name === "github")
+      : undefined
+  );
+
+  assert.equal(kept.name, "github");
+  assert.equal(
+    existsSync(path.join(dataDir, "connections", "github-sign-in")),
+    false
+  );
+});
+
+test("turning on Backup pushes every version to the person's private repository", async () => {
+  assert.deepEqual(await call("backupTurnOn", []), done);
 
   const pushed = await until(
     "account",
@@ -93,8 +143,8 @@ test("connecting GitHub shows the device code, then pushes every version to the 
   );
 });
 
-test("disconnecting stops the backup to GitHub and signs the host out; a sign-in can be cancelled", async () => {
-  assert.deepEqual(await call("backupDisconnect", []), done);
+test("disconnecting GitHub takes its key out of the vault and turns Backup off; a sign-in can be cancelled", async () => {
+  assert.deepEqual(await call("connectionsDisconnect", []), done);
 
   const off = await until("account", withStatus("off"));
 
@@ -103,12 +153,47 @@ test("disconnecting stops the backup to GitHub and signs the host out; a sign-in
     { repo: "", synced: false, versions: 1 }
   );
 
-  const waiting = until("account", withStatus("waiting"));
+  const signedOut = await until("account", (answer) =>
+    isRow(answer) &&
+    isRow(answer.secrets) &&
+    rows(answer.connections).some(({ status }) => status === "off")
+      ? answer.secrets
+      : undefined
+  );
 
-  assert.deepEqual(await call("backupConnect", []), done);
+  assert.equal(
+    rows(signedOut.secrets).some(({ name }) => name === "github"),
+    false
+  );
+  // Without GitHub, Backup does not turn on.
+  assert.deepEqual(await call("backupTurnOn", []), done);
+  assert.equal(
+    (
+      await until(
+        "account",
+        backupWhen(({ error }) => error !== "")
+      )
+    ).error,
+    "Connect GitHub first."
+  );
+
+  const waiting = until(
+    "account",
+    githubWhen(({ status }) => status === "waiting")
+  );
+
+  assert.deepEqual(await call("connectionsConnect", []), done);
   await waiting;
-  assert.deepEqual(await call("backupCancel", []), done);
-  assert.equal((await until("account", withStatus("off"))).code, "");
+  assert.deepEqual(await call("connectionsCancel", []), done);
+  assert.equal(
+    (
+      await until(
+        "account",
+        githubWhen(({ status }) => status === "off")
+      )
+    ).code,
+    ""
+  );
 });
 
 test("a host whose kept files were damaged still starts, and reads them as empty", async () => {
@@ -117,6 +202,7 @@ test("a host whose kept files were damaged still starts, and reads them as empty
 
   for (const file of [
     "backup.json",
+    "connections.json",
     "computer.json",
     "secrets-uses.json",
     path.join("builds", "current.json"),

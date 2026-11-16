@@ -36,6 +36,20 @@ import {
 
 const todoTitles = (answer: Json) => rows(answer).map((todo) => todo.title);
 
+/** The Todos app as the shell lists it. */
+const todos = {
+  id: "todos",
+  name: "Todos",
+  description: "A list of things to do. Your imp can read and change it.",
+  symbol: "symbol:icon.todos",
+  cover: "",
+  draft: false,
+  undo: "",
+  // Todos reads nothing from outside and has no sync.
+  reads: "",
+  sync: "",
+};
+
 /**
  * The account once it has this status: the sign-in's own fields, without the computer, the memory, the secrets and
  * the backup that ride on the same stream.
@@ -110,6 +124,9 @@ test("the host tells a web client the address it was reached at", async () => {
 });
 
 test("the shell lists the installed apps and the running version", async () => {
+  // The onboarding installs GitHub, and the app directory Todos.
+  assert.deepEqual(await call("appsInstall", ["github"]), done);
+  assert.deepEqual(await call("appsInstall", ["todos"]), done);
   assert.deepEqual(await first("apps"), [
     {
       id: "github",
@@ -125,18 +142,7 @@ test("the shell lists the installed apps and the running version", async () => {
         "Reads api.github.com with your github key, every 15 min, and when api.github.com/notifications changes.",
       sync: "Not synced yet",
     },
-    {
-      id: "todos",
-      name: "Todos",
-      description: "A list of things to do. Your imp can read and change it.",
-      symbol: "symbol:icon.todos",
-      cover: "",
-      draft: false,
-      undo: "",
-      // Todos reads nothing from outside and has no sync.
-      reads: "",
-      sync: "",
-    },
+    todos,
   ]);
   assert.deepEqual(await first("version"), { version: "dev" });
 });
@@ -505,9 +511,9 @@ it("only a draft is saved or discarded and only a save undone; Save makes the dr
   assert.deepEqual(await call("appsSave", ["notes"]), done);
   // What was tried in the draft went with it. Undoing the save that made the app would remove the app.
   assert.deepEqual(await notes(), saved("remove"));
-  // The save is a version of the apps' code the backup keeps, after the one the host started with.
+  // The save is a version of the apps' code the backup keeps, after GitHub's and Todos' installs.
   await until("account", (answer) =>
-    isRow(answer) && isRow(answer.backup) && answer.backup.versions === 2
+    isRow(answer) && isRow(answer.backup) && answer.backup.versions === 3
       ? answer
       : undefined
   );
@@ -574,7 +580,7 @@ it("a host started again has the saved app, its draft and its build; Discard dro
   assert.deepEqual(await call("appsDiscard", ["notes"]), done);
   assert.deepEqual(await notes(), saved("remove", "Kept", "Later"));
   assert.deepEqual(await call("appsUndo", ["notes"]), done);
-  // The apps Imp ships are left: GitHub and Todos.
+  // The apps from before are left: GitHub and Todos.
   assert.equal(rows(await first("apps")).length, 2);
   assert.equal((await fetch(`${base}/api/live/notesNotes`)).status, 404);
   assert.ok(!existsSync(path.join(dataDir, "code", "notes")));

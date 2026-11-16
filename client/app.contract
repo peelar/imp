@@ -1,4 +1,4 @@
-// Imp's shell: onboarding first (a model account, then a computer), then the chat home and the installed apps, compiled into one
+// Imp's shell: onboarding first (a model account, a computer, then the first app), then the chat home and the installed apps, compiled into one
 // plan. Every source goes to the host through the one data module in app.ts, which streams each resource live. Each
 // app's resources and mutations live here, in the root, because Contract allows them only there; its screen is
 // imported from apps/<id>/app.contract. Colours and type are app.tamber's; the look is "Catalogue": white paper,
@@ -25,15 +25,15 @@ use SecretSettings from "./settings/secrets.contract"
 use MemorySettings from "./settings/memory.contract"
 use NotificationSettings from "./settings/notifications.contract"
 use ExperimentalSettings from "./settings/experimental.contract"
-use BackupSettings from "./settings/backup.contract"
-use AppTile, Memory, Secrets, Backup, Notice, Host, Account, ChatState, Build, Update, Reply from "./host.contract"
+use ConnectionsSettings from "./settings/connections.contract"
+use AppTile, Memory, Secrets, Connection, Notice, Host, Account, ChatState, Build, Update, Reply from "./host.contract"
 use repoPath, AppDirectory, directory from "./app-directory.contract"
 use withSpoken, Transcript, Composer from "./chat.contract"
-use KeyBadge, Initialled, numbered from "./parts.contract"
+use KeyBadge, Initialled, numbered, Confirm from "./parts.contract"
 use RoutineList, RoutineBar from "./routines.contract"
 use TrickList from "./tricks.contract"
 use ComputerSettings, ComputerScreen, ComputerWizard from "./computer.contract"
-use AppPage, AppTab from "./apps.contract"
+use AppPage, AppTab, FirstAppWizard from "./apps.contract"
 use Sidebar from "./sidebar.contract"
 use WizardTitle, WizardFold, KeyField, WizardButton from "./onboarding.contract"
 
@@ -98,10 +98,10 @@ fn readsOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.reads, case none => "" }
 fn syncOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.sync, case none => "" }
-// The count a Settings tab carries: what is remembered, the secrets, the apps' versions kept; "" for none.
-fn settingsCount(section: string, memory: Memory, secrets: Secrets, backup: Backup): string =
+// The count a Settings tab carries: what is remembered, the secrets; "" for none.
+fn settingsCount(section: string, memory: Memory, secrets: Secrets): string =
   (section == "memory" ? `${sum(memory.entries.map(m => m.facts.length + m.links.length))}`
-    : section == "secrets" ? `${secrets.secrets.length}` : section == "backup" ? `${backup.versions}` : "")
+    : section == "secrets" ? `${secrets.secrets.length}` : "")
 // What the person asks for when they install an app from GitHub, in their own words. How the imp does it (clone,
 // copy the app's folder into its workspace, preview) is the studio's to tell it (host/src/studio/tools.ts).
 fn installAsk(repo: string): string = `Install the app from github.com/${repoPath(repo)} so I can try it.`
@@ -146,7 +146,16 @@ component App
   state keyBase = "https://api.openai.com/v1"
   state keyValue = ""
   state keyModel = ""
-  // Settings' open section: "general", "computer", "memory", "secrets" or "backup".
+  // The onboarding's ask for the first app, and whether its install sends that ask to the imp ("build") or not ("skip").
+  state firstAsk = "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review."
+  state firstApp = ""
+  // The app the last install was for, and the one to open once the shell lists it.
+  state added = ""
+  state toOpen = ""
+  // The app whose page shows what an app is: the first app, once the onboarding installed it, until the person
+  // dismisses it.
+  state guide = "" persist
+  // Settings' open section: "general", "computer", "memory", "secrets", "connections" or "experimental".
   state settingsPane = "general"
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
   state secretRound = 0
@@ -199,6 +208,8 @@ component App
   mutation appDiscarded as shape Reply
   mutation appUndone as shape Reply
   mutation appSynced as shape Reply
+  mutation appInstalled as shape Reply then afterInstall
+  mutation appUninstalled as shape Reply
   mutation computerSwitched as shape Reply
   mutation computerRefreshed as shape Reply
   mutation computerRetried as shape Reply
@@ -208,9 +219,11 @@ component App
   mutation loginSaved as shape Reply then afterLoginSaved
   mutation secretDeleted as shape Reply queue
   mutation secretDismissed as shape Reply queue
-  mutation backupStarted as shape Reply
-  mutation backupCancelled as shape Reply
-  mutation backupDisconnected as shape Reply
+  mutation githubConnected as shape Reply
+  mutation githubCancelled as shape Reply
+  mutation githubDisconnected as shape Reply
+  mutation backupTurnedOn as shape Reply
+  mutation backupTurnedOff as shape Reply
   mutation flagChosen as shape Reply queue
   mutation alertsAsked as shape NotificationStatus
   mutation listening as shape SpeechRecognitionInfo then listened
@@ -246,6 +259,10 @@ component App
   derive onKey = account.kind == "apiKey"
   // Onboarding's second step: a computer, until the imp has one or the person tries the chat without.
   derive needsComputer = signedIn and computer.status == "none"
+  // Its third: the first app, until the person adds it or skips it.
+  derive needsFirstApp = signedIn and not needsComputer and account.introduceApps
+  derive installError = match appInstalled { case some(r) => r.error, case none => "" }
+  derive uninstallError = match appUninstalled { case some(r) => r.error, case none => "" }
   // An onboarding section waiting on something done outside Imp (a computer set up with the setup prompt, a container
   // engine started) has the host look again every few seconds, so it shows up without a click.
   derive computerAwaited = (needsComputer and not pending(computerSwitched) and not pending(computerKeySaved)
@@ -289,6 +306,9 @@ component App
   derive loginError = match loginSaved { case some(r) => r.error, case none => "" }
   derive secretDeleteError = match secretDeleted { case some(r) => r.error, case none => "" }
   derive backup = account.backup
+  // GitHub, the one connection there is so far.
+  derive github = match first(account.connections.filter(c => c.id == "github")) {
+    case some(c) => c, case none => Connection(id="github", label="GitHub", status="off", code="", url="", login="", error="") }
   derive switchError = match computerSwitched { case some(r) => r.error, case none => "" }
   derive keyError = match computerKeySaved { case some(r) => r.error, case none => "" }
   // Notifications: what the host noticed since this page last looked, shown while no Imp window is in front, and
@@ -333,6 +353,8 @@ component App
     change(startHome)
   task homeRefused when failed(openedHome) key=true
     change(land)
+  task openAdded when toOpen != "" and appTabs.includes(toOpen)
+    after(1, showAdded)
 
   action applyScheme
     setScheme(scheme)
@@ -661,6 +683,43 @@ component App
     send appUndone = appsUndo(id)
   action syncApp(id: string)
     send appSynced = appsSync(id)
+  // An app Imp ships, from the onboarding or the app directory: the host installs it.
+  action addApp(id: string)
+    if not pending(appInstalled)
+      added = id
+      send appInstalled = appsInstall(id)
+  // The first app: Imp's GitHub app, then the person's ask to the imp to build theirs over it, or Imp's as it ships.
+  action buildFirstApp
+    if firstAsk.trim() != ""
+      firstApp = "build"
+      addApp("github")
+  action skipFirstApp
+    firstApp = "skip"
+    addApp("github")
+  action editFirstAsk(v: string)
+    firstAsk = v
+  // An installed app opens once the shell lists it. The first one shows what an app is above it; asked to build, the
+  // imp starts in the chat beside it, or on a narrow window in the chat's own page, to watch it work.
+  action afterInstall
+    if match appInstalled { case some(r) => r.ok, case none => false }
+      if firstApp != ""
+        guide = added
+      if firstApp == "build"
+        send sent = chatSend(firstAsk.trim(), wide ? added : "")
+      if firstApp == "build" and not wide
+        nav = select(nav, "chat")
+      else
+        toOpen = added
+    firstApp = ""
+  action showAdded
+    nav = select(nav, toOpen)
+    toOpen = ""
+  action dismissGuide
+    guide = ""
+  action uninstallApp(id: string)
+    send appUninstalled = appsUninstall(id)
+    if guide == id
+      guide = ""
   // <apps:members>
   resource githubReadInbox = githubInbox() when signedIn and nav.tab == "github" as shape GithubInbox else empty()
   derive githubReadInboxLost = match failure(githubReadInbox) { case some(f) => true, case none => false }
@@ -728,14 +787,18 @@ component App
     send secretDeleted = secretsDelete(name)
   action dismissSecret(id: string)
     send secretDismissed = secretsDismiss(id)
-  action connectBackup
-    send backupStarted = backupConnect()
-  action cancelBackup
-    send backupCancelled = backupCancel()
-  action disconnectBackup
-    send backupDisconnected = backupDisconnect()
-  action copyBackupCode
-    copyText(backup.code)
+  action connectGithub
+    send githubConnected = connectionsConnect()
+  action cancelGithub
+    send githubCancelled = connectionsCancel()
+  action disconnectGithub
+    send githubDisconnected = connectionsDisconnect()
+  action copyGithubCode
+    copyText(github.code)
+  action turnOnBackup
+    send backupTurnedOn = backupTurnOn()
+  action turnOffBackup
+    send backupTurnedOff = backupTurnOff()
   action chooseFlag(key: string, on: bool)
     send flagChosen = flagsChoose(key, on)
 
@@ -754,7 +817,7 @@ component App
           text aria-hidden=true font-family="family.display" font-size="2.25rem" line-height=1.05
             text "I" font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.04em"
             text "mp"
-      else if signedIn and not needsComputer
+      else if signedIn and not needsComputer and not needsFirstApp
         // The routes. On a wide window they sit under the top bar, between the sidebar and the chat's column, above the
         // tab bar.
         column position="absolute" left=(wide ? "15rem" : "0px") bottom=(wide ? "3.5rem" : "0px") top=(wide ? "3.25rem" : "0px") right=(wide ? "24rem" : "0px")
@@ -818,18 +881,14 @@ component App
                     TrickList(tricks=tricks, use=useTrick)
                   else if e.name == "directory"
                     AppDirectory(entries=directory(), installed=apps, sending=pending(sent),
-                      install=installApp, open=pick)
+                      install=installApp, add=addApp, adding=pending(appInstalled), open=pick)
                   else if e.name == "chat"
                     for r in routines.filter(r => r.id == chat.current) key=r.id
                       RoutineBar(routine=r, busy=(pending(routineRan) or pending(routinePaused) or pending(routineDeleted)),
                         run=runRoutine, pause=pauseRoutine, remove=askDeleteRoutine, keys=keys)
-                    dialog id="confirm-routine-delete" role="alertdialog" aria-label="Delete this routine?"
-                      text "It stops running, and its conversation goes with it."
-                      button commandfor="confirm-routine-delete" command="close" testId="routine-delete-cancel"
-                        text "Cancel"
-                      button press=deleteRoutine commandfor="confirm-routine-delete" command="close" destructive=true
-                        testId="routine-delete-confirm"
-                        text "Delete"
+                    Confirm(id="confirm-routine-delete", question="Delete this routine?",
+                      message="It stops running, and its conversation goes with it.", label="Delete",
+                      confirm=deleteRoutine, testId="routine-delete")
                     if chat.messages.length == 0 and not chat.busy and chat.routine == ""
                       // Home with nothing said yet: a greeting, the apps, and what to try.
                       scroll id="home-scroll" flex=1 min-height=0
@@ -887,7 +946,8 @@ component App
                           column gap=10
                             text "Try" class=Label
                             row flex-wrap="wrap" gap=8
-                              for s in ["Add todo: Buy flowers", "What's on my todo list?", "Build me an app that tracks my runs"] key=s
+                              // The todos ones only while Todos is installed.
+                              for s in (apps.map(a => a.id).includes("todos") ? ["Add todo: Buy flowers", "What's on my todo list?"] : []).concat(["Build me an app that tracks my runs"]) key=s
                                 button press=suggest(s) disabled=pending(sent) padding="8px 12px"
                                   background-color="transparent" border="1px solid line.strong" color="ink.strong"
                                   font-size="0.9375rem" transition="border-color 120ms ease, background-color 120ms ease"
@@ -908,7 +968,7 @@ component App
                         // Settings' sections, one at a time.
                         row role="group" aria-label="Settings sections" gap=12 overflow-x="auto"
                           border-bottom="1px solid line.subtle" testId="settings-sections"
-                          for s in ["general", "computer", "memory", "secrets", "backup"] key=s
+                          for s in ["general", "computer", "memory", "secrets", "connections", "experimental"] key=s
                             button press=openSettings(s) aria-pressed=(settingsPane == s) testId=`settings-pane-${s}`
                               appearance="none" display="flex" align-items="baseline" padding="10px 0" margin-bottom="-1px" border="none"
                               border-bottom=(settingsPane == s ? "2px solid ink.strong" : "2px solid transparent")
@@ -918,8 +978,8 @@ component App
                               :hover
                                 color="ink.strong"
                               text capitalized(s)
-                              if settingsCount(s, memory, secrets, backup) != ""
-                                text settingsCount(s, memory, secrets, backup) color="ink.faint" margin-left=4
+                              if settingsCount(s, memory, secrets) != ""
+                                text settingsCount(s, memory, secrets) color="ink.faint" margin-left=4
                                   testId=`settings-count-${s}`
                         if settingsPane == "computer"
                           ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
@@ -933,9 +993,13 @@ component App
                             SecretSettings(secrets=secrets, saving=(pending(secretSaved) or pending(loginSaved)), error=secretError,
                               loginError=loginError, deleteError=secretDeleteError, save=saveSecret, saveLogin=saveLogin,
                               remove=deleteSecret, dismiss=dismissSecret)
-                        else if settingsPane == "backup"
-                          BackupSettings(backup=backup, busy=(pending(backupStarted) or pending(backupDisconnected)),
-                            connect=connectBackup, cancel=cancelBackup, disconnect=disconnectBackup, copyCode=copyBackupCode)
+                        else if settingsPane == "connections"
+                          ConnectionsSettings(github=github, backup=backup,
+                            busy=(pending(githubConnected) or pending(githubDisconnected) or pending(backupTurnedOn) or pending(backupTurnedOff)),
+                            connect=connectGithub, cancel=cancelGithub, disconnect=disconnectGithub, copyCode=copyGithubCode,
+                            turnOn=turnOnBackup, turnOff=turnOffBackup)
+                        else if settingsPane == "experimental"
+                          ExperimentalSettings(flags=account.flags, choose=chooseFlag)
                         else
                           if onKey
                             column
@@ -971,7 +1035,6 @@ component App
                                   font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
                                   text capitalized(s)
                           NotificationSettings(alerts=alerts, asking=pending(alertsAsked), allow=allowNotifications)
-                          ExperimentalSettings(flags=account.flags, choose=chooseFlag)
                           column
                             button press=askSignOut disabled=pending(signedOut) testId="signout" display="flex" align-items="center"
                               gap=10 padding="14px 0" color="-exact-system-red" background-color="transparent" border="none"
@@ -980,21 +1043,18 @@ component App
                                 background-color="danger.soft"
                               image "symbol:icon.sign-out" width=16 height=16
                               text "Sign out" class=Label color="-exact-system-red"
-                    dialog id="confirm-signout" role="alertdialog" aria-label=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?")
-                      text "Your imp stops until you sign in again. Your chats and apps stay."
-                      button commandfor="confirm-signout" command="close" testId="signout-cancel"
-                        text "Cancel"
-                      button press=signOut commandfor="confirm-signout" command="close" destructive=true testId="signout-confirm"
-                        text "Sign out"
+                    Confirm(id="confirm-signout", question=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?"),
+                      message="Your imp stops until you sign in again. Your chats and apps stay.", label="Sign out",
+                      confirm=signOut, testId="signout")
                   if e.name == "computer"
                     ComputerScreen(computer=computer, src=`${host.origin}/computer/screen?embed&scheme=${scheme}`,
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=openSettings("computer"))
                   // <apps:screens>
                   if e.name == "github"
-                    AppPage(id="github", draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
+                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "github"), dismissGuide=dismissGuide, keys=keys)
                       GithubScreen(inbox=githubReadInbox, done=githubDoDone, snooze=githubDoSnooze, restore=githubDoRestore)
                   if e.name == "todos"
-                    AppPage(id="todos", draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, keys=keys)
+                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "todos"), dismissGuide=dismissGuide, keys=keys)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The tabs, in a bar along the bottom: on a wide window under the page, between the sidebar and the chat's
@@ -1114,7 +1174,7 @@ component App
               Initialled(word="Imp", size="2rem", heading=1)
               row flex=1
               if not unreachable
-                text (signedIn ? "2 / 2" : "1 / 2") class=Label testId="onboarding-step"
+                text (needsFirstApp ? "3 / 3" : signedIn ? "2 / 3" : "1 / 3") class=Label testId="onboarding-step"
             if unreachable
               column gap=14 testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
                 WizardTitle(title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"),
@@ -1131,6 +1191,9 @@ component App
                       background-color="surface.soft"
                       color="ink.faint"
                     text "Connect"
+            else if needsFirstApp
+              FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=pending(appInstalled), error=installError,
+                build=buildFirstApp, skip=skipFirstApp, still=still)
             else if signedIn
               ComputerWizard(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
                 error=(keyError != "" ? keyError : switchError),

@@ -1,15 +1,15 @@
 // Feature flags: what lands for some hosts before every host. Each flag is declared here, off unless its default says
 // otherwise, and the Flags SDK (`flags`) decides it once, as the host starts:
 //
-// 1. The owner's choice in DATA_DIR/flags.json, such as { "github-app": true }: the local provider, which every host
+// 1. The owner's choice in DATA_DIR/flags.json, such as { "app-directory": true }: the local provider, which every host
 //    has and which needs no network.
 // 2. Else Vercel Flags (@flags-sdk/vercel), only when FLAGS holds a Vercel Flags SDK key. Without one, the adapter is
 //    never loaded and deciding a flag reaches nothing outside the host.
 // 3. Else the flag's default.
 //
 // A part of the host never decides a flag itself: the files that put the host together read the decisions and hand
-// each part what a flag changes for it, such as the apps the gateway keeps off. Settings lists the flags and writes the
-// owner's choice to flags.json (openFlags), which the next start decides by: a flag never changes while the host runs.
+// each part what a flag changes for it. Settings lists the flags and writes the owner's choice to flags.json
+// (openFlags), which the next start decides by: a flag never changes while the host runs.
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { bool, compile, map } from "@earendil-works/pi-schema";
@@ -19,13 +19,6 @@ import { readKept } from "../datadir/datadir.ts";
 
 /** Every feature flag: its key, what it turns on, and whether it is on for a host whose owner did not choose. */
 export const FLAGS = [
-  {
-    key: "github-app",
-    label: "GitHub app",
-    description:
-      "One inbox for what needs you on GitHub, with Done and Snooze, which your imp can read and act on.",
-    defaultValue: false,
-  },
   {
     key: "app-directory",
     label: "App directory",

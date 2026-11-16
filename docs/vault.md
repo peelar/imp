@@ -72,6 +72,8 @@ The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp V
 
 **Settings → Secrets** lists your secrets, with the hosts each one works for and when it was last used. A saved value is never shown again; you can only **Replace** or **Delete** it, and Delete asks first.
 
+For GitHub you don't need to make a token: **Connect GitHub** in Settings → Connections signs in with a device code and keeps the token here as your key named `github`, with the GitHub preset's hosts ([Apps](apps.md#every-version-kept-in-git)).
+
 **Add a key** has presets that fill in the hosts and variables:
 
 | Service | Hosts | Variables |

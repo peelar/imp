@@ -1,6 +1,7 @@
 // The host the client's Exact tests start (app.json "commands.server"): the real host with a scripted model in place
 // of ChatGPT, a sign-in that approves itself a moment after it shows its code, the local machine adapter, so the apps
-// run in real workers, and a GitHub CLI (fake-gh.ts) whose repositories are folders in the data directory. When the
+// run in real workers, a GitHub CLI (fake-gh.ts) whose sign-in approves itself, and a GitHub API (fake-github.ts) whose
+// repositories are folders in the data directory. When the
 // user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
 // "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for a login: <site>", "sign in: <login>",
 // "run: <command>" and "save routine: <name> | <cron> | <instruction>" make it call the memory's, the studio's, the
@@ -26,6 +27,7 @@ import {
 import { startHost } from "../src/host.ts";
 import { localProvider } from "../src/machine/local.ts";
 import { CHATGPT, openCredentialStore } from "../src/account/account.ts";
+import { fakeGithub } from "./fake-github.ts";
 
 type Content =
   Parameters<FauxResponseFactory>[0]["messages"][number]["content"];
@@ -359,14 +361,11 @@ writeFileSync(
 
 process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
 
-// The tests reach every feature, so the test host turns the GitHub app's flag on, unless a test chose for itself.
+// The tests reach every feature, so the test host turns the app directory's flag on, unless a test chose for itself.
 const flags = path.join(dataDir, "flags.json");
 
 if (!existsSync(flags)) {
-  writeFileSync(
-    flags,
-    JSON.stringify({ "github-app": true, "app-directory": true })
-  );
+  writeFileSync(flags, JSON.stringify({ "app-directory": true }));
 }
 
 await startHost({
@@ -380,6 +379,7 @@ await startHost({
   // OpenBao and mitmproxy, downloaded once for every test run.
   toolsDir: path.join(tmpdir(), "imp-tools"),
   gh: path.join(import.meta.dirname, "fake-gh.ts"),
+  github: fakeGithub(path.join(dataDir, "github")),
   exact: process.env.EXACT,
   port: Number(process.env.PORT ?? 8787),
 });

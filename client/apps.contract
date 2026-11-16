@@ -1,16 +1,20 @@
 // An installed app in the shell: its tab, and its page around the app's own screen (apps/<id>/app.contract), with
-// the bar that says what it reads and offers Save, Discard and Undo for a draft.
+// the bar that says what it reads and offers Save, Discard and Undo for a draft, and Uninstall; and the onboarding's
+// step that installs the first app.
 
-use Label from "./look.contract"
-use KeyBadge from "./parts.contract"
+use Label, rise from "./look.contract"
+use KeyBadge, Confirm from "./parts.contract"
+use WizardTitle, WizardButton from "./onboarding.contract"
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
 // An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
 // preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
-// Otherwise it says how the app's sync went, with Sync now, and after a save offers to undo it.
+// Otherwise it says how the app's sync went, with Sync now, after a save offers to undo it, and offers to uninstall it.
+// `guide` shows what an app is above the first one the onboarding installed, until the person dismisses it.
 component AppPage
   props
     id: string
+    name: string
     draft: bool
     undo: string
     reads: string
@@ -19,6 +23,10 @@ component AppPage
     discard: action
     undoSave: action
     syncNow: action
+    uninstall: action
+    uninstallError: string
+    guide: bool
+    dismissGuide: action
     keys: bool
   slot
   view
@@ -39,7 +47,7 @@ component AppPage
             text "Save" class=Label color="inherit"
             if keys
               KeyBadge(chord="Meta+S", at="end")
-      else if undo != "" or sync != ""
+      else
         // Under the page's header, in line with its title.
         row padding="8px 24px" border-bottom="1px solid line.subtle"
           row width="100%" align-items="center" gap=12
@@ -54,19 +62,41 @@ component AppPage
                   :disabled
                     color="ink.faint"
                   text "Sync now" class=Label color="inherit"
+            else if uninstallError != ""
+              text uninstallError font-size="0.8125rem" color="-exact-system-red" flex=1 min-width=0
+                overflow-wrap="anywhere" testId="uninstall-error"
             else
               row flex=1
             if undo != ""
               button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
                 border="1px solid line.strong" background-color="transparent" color="ink.strong" flex-shrink=0
                 text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
-        dialog id=`undo-${id}` role="alertdialog" aria-label="Undo the last save?"
-          text (undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays.")
-          button commandfor=`undo-${id}` command="close" testId="undo-cancel"
-            text "Cancel"
-          button press=undoSave(id) commandfor=`undo-${id}` command="close" destructive=true testId="undo-confirm"
-            text "Undo"
+            button commandfor=`uninstall-${id}` command="show-modal" testId="uninstall" padding="4px 0" border="none"
+              background-color="transparent" color="ink.muted" flex-shrink=0
+              :hover
+                color="-exact-system-red"
+              text "Uninstall" class=Label color="inherit"
+        Confirm(id=`undo-${id}`, question="Undo the last save?",
+          message=(undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays."),
+          label="Undo", confirm=undoSave(id), testId="undo")
+        Confirm(id=`uninstall-${id}`, question=`Uninstall ${name}?`,
+          message="Are you sure you want to delete the app and all its data?", label="Uninstall", confirm=uninstall(id),
+          testId="uninstall")
       scroll id=`${id}-screen` flex=1 min-height=0
+        if guide and not draft
+          column gap=10 padding="16px 24px" border-bottom="1px solid line.subtle" background-color="surface.soft"
+            testId="app-guide"
+            text "Your first app" class=Label color="ink.strong" role="heading" aria-level=2
+            column gap=6 max-width="40rem"
+              text `This is ${name}. Use it here, or ask your imp in the chat: it uses the same app, and you see what it changes.`
+                font-size="0.9375rem" line-height=1.45
+              text "Ask your imp to change how it works, or to build you an app of your own. Uninstall an app you no longer need, with its data, from the bar above."
+                font-size="0.9375rem" line-height=1.45 color="ink.muted"
+            button press=dismissGuide testId="app-guide-dismiss" align-self="flex-start" padding="7px 12px"
+              border="1px solid line.strong" background-color="transparent" color="ink.strong"
+              :hover
+                background-color="surface.page"
+              text "Got it" class=Label color="inherit"
         children
 
 // One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
@@ -97,3 +127,35 @@ component AppTab
         text-transform="uppercase" aria-hidden=true
       if keys and chord != ""
         KeyBadge(chord=chord, at="tab")
+
+// The onboarding's last step: the first app. The person describes the GitHub app they want, and the imp builds it
+// over Imp's GitHub app, which reads GitHub for it, while they watch; or they skip, and have Imp's as it ships.
+component FirstAppWizard
+  props
+    ask: string
+    edit: action
+    busy: bool
+    error: string
+    build: action
+    skip: action
+    still: bool
+  view
+    column gap=18 testId="first-app" animation=(still ? "none" : "rise 260ms ease-out both")
+      WizardTitle(title="Build your first app", note="Say what you want to see. Your imp builds it while you watch.")
+      row gap=14 align-items="center" padding="14px 0" border-top="1px solid line.subtle"
+        border-bottom="1px solid line.subtle"
+        row width=44 height=44 min-width=44 align-items="center" justify-content="center" border="1px solid line.strong"
+          box-sizing="border-box" aria-hidden=true
+          image "symbol:icon.github" width=20 height=20
+        column gap=4 flex=1 min-width=0
+          text "GitHub" font-family="family.display" font-size="1.375rem" line-height=1.1
+          text "Imp reads your review requests, your pull requests, what's assigned to you and your notifications. Your app shows what you choose."
+            font-size="0.9375rem" color="ink.muted" line-height=1.4
+      textarea value=ask input=edit rows=4 aria-label="The app you want" testId="first-app-ask" padding="12px 14px"
+        border="1px solid line.strong" background-color="transparent" outline="none" resize="vertical"
+        font-family="family.text" font-size="1rem" line-height=1.5 color="ink.strong"
+      if error != ""
+        text error color="-exact-system-red" font-size="0.9375rem" testId="first-app-error"
+      WizardButton(label=(busy ? "Starting…" : "Build it"), press=build, testId="first-app-build", primary=true,
+        disabled=(busy or ask.trim() == ""))
+      WizardButton(label="Skip, use Imp's GitHub app", press=skip, testId="first-app-skip", primary=false, disabled=busy)

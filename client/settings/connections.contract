@@ -1,0 +1,129 @@
+// Settings' Connections: the accounts the host signs in to, and what each one turns on. GitHub first: connecting
+// signs in with a device code, and below it the person turns on Backup, which pushes their apps' code to it.
+
+use Label from "../look.contract"
+use Connection, Backup from "../host.contract"
+use Step from "../onboarding.contract"
+
+component ConnectionsSettings
+  props
+    github: Connection
+    backup: Backup
+    busy: bool
+    connect: action
+    cancel: action
+    disconnect: action
+    copyCode: action
+    turnOn: action
+    turnOff: action
+  view
+    column testId="connections"
+      row padding-bottom=10 border-bottom="1px solid ink.strong"
+        text "GitHub" class=Label color="ink.strong" role="heading" aria-level=2
+      if github.status == "on"
+        row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
+          column flex=1 min-width=0 gap=4 align-items="flex-start"
+            text (github.login == "" ? "Connected" : `@${github.login}`) font-family="family.display" font-size="1.375rem"
+              line-height=1.15 overflow-wrap="anywhere" testId="github-login"
+            text "Your apps, your imp and Backup reach GitHub as you." font-size="0.9375rem" color="ink.muted"
+          button press=disconnect disabled=busy testId="github-disconnect" padding="10px 0" border="none"
+            background-color="transparent" color="ink.muted"
+            :hover
+              color="-exact-system-red"
+            text "Disconnect" class=Label color="inherit"
+      else if github.status == "waiting"
+        column gap=10 padding="18px 0" border-bottom="1px solid line.subtle" testId="github-waiting"
+          Step(number="01", title="Open GitHub's sign-in page")
+          link href=github.url testId="github-open" display="flex" align-items="center" justify-content="center"
+            gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
+            font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
+            text-decoration-line="none"
+            text "Open GitHub"
+            image "symbol:icon.open" width=14 height=14 aria-hidden=true
+          Step(number="02", title="Enter this code")
+          row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
+            text github.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
+              letter-spacing="0.18em" user-select="all" testId="github-code"
+            button press=copyCode testId="github-copy" display="flex" align-items="center" gap=6
+              padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
+              font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+              :hover
+                background-color="surface.soft"
+              image "symbol:icon.copy" width=13 height=13 aria-hidden=true
+              text "Copy"
+          row gap=10 align-items="center" padding-top=2
+            progress aria-label="Waiting for approval"
+            text "Waiting for you to approve…" font-style="italic" color="ink.muted"
+          button press=cancel testId="github-cancel" align-self="flex-start" padding="4px 0" border="none"
+            background-color="transparent" color="ink.muted"
+            :hover
+              color="ink.strong"
+            text "Cancel" class=Label color="inherit"
+      else if github.status == "starting"
+        row gap=10 align-items="center" padding="18px 0" border-bottom="1px solid line.subtle" testId="github-starting"
+          progress aria-label="Loading"
+          text "Asking GitHub for a code…" font-style="italic" color="ink.muted"
+      else
+        column gap=14 align-items="flex-start" padding="16px 0" border-bottom="1px solid line.subtle"
+          text "Sign in once, and your apps, your imp and Backup reach GitHub as you." font-size="0.9375rem"
+            color="ink.muted" line-height=1.45
+          button press=connect disabled=busy testId="github-connect" padding="10px 14px" border="none"
+            background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.75rem"
+            letter-spacing="0.1em" text-transform="uppercase"
+            :disabled
+              background-color="surface.soft"
+              color="ink.faint"
+            text "Connect GitHub"
+      if github.error != ""
+        row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
+          border-left="2px solid -exact-system-red"
+          image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+          text github.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="github-error"
+      // Backup: what the connection turns on. Every version stays on the host either way.
+      column testId="backup" padding="16px 0" gap=12 border-bottom="1px solid line.subtle"
+        row gap=14 align-items="baseline"
+          text "Backup" font-family="family.display" font-size="1.25rem" flex=1
+          text `${backup.versions} ${backup.versions == 1 ? "version" : "versions"} kept` class=Label testId="backup-versions"
+        text (not backup.git ? "Needs git on your host. Install it, then restart Imp."
+          : github.status != "on" ? "Your host keeps every version of your apps' code. Connect GitHub to keep a private copy there too."
+          : "Your host keeps every version of your apps' code. Push a private copy to your imp-apps repository on GitHub.")
+          font-size="0.9375rem" color="ink.muted" line-height=1.45
+        if backup.status == "on"
+          row gap=14 align-items="center"
+            column flex=1 min-width=0 gap=4 align-items="flex-start"
+              text backup.repo font-family="family.mono" font-size="0.875rem" overflow-wrap="anywhere" testId="backup-repo"
+              row gap=8 align-items="center"
+                row width=6 height=6 aria-hidden=true background-color=(backup.synced ? "-exact-system-green" : "ink.faint")
+                text (backup.synced ? "Up to date" : "Not backed up yet") class=Label testId="backup-state"
+            link href=`https://github.com/${backup.repo}` testId="backup-open-repo" display="flex" align-items="center"
+              gap=8 padding="8px 12px" border="1px solid line.strong" color="ink.strong" font-family="family.mono"
+              font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase" text-decoration-line="none"
+              :hover
+                background-color="surface.soft"
+              text "Open"
+              text "↗" aria-hidden=true
+          button press=turnOff disabled=busy testId="backup-turn-off" align-self="flex-start" padding="4px 0"
+            border="none" background-color="transparent" color="ink.muted"
+            :hover
+              color="-exact-system-red"
+            text "Turn off" class=Label color="inherit"
+        else if backup.status == "starting"
+          row gap=10 align-items="center" testId="backup-starting"
+            progress aria-label="Loading"
+            text "Finding your imp-apps repository…" font-style="italic" color="ink.muted"
+        else
+          button press=turnOn disabled=(not backup.git or github.status != "on" or busy) testId="backup-turn-on"
+            align-self="flex-start" padding="10px 14px" border="1px solid line.strong" background-color="transparent"
+            color="ink.strong" font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em"
+            text-transform="uppercase"
+            :hover
+              background-color="surface.soft"
+            :disabled
+              border-color="line.subtle"
+              color="ink.faint"
+            text "Turn on backup"
+        if backup.error != ""
+          row gap=8 align-items="flex-start" padding="10px 14px" background-color="danger.soft"
+            border-left="2px solid -exact-system-red"
+            image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+            text backup.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="backup-error"

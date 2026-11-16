@@ -1,31 +1,32 @@
 // A copy of the apps' code away from the host's own folders. Every save and undo commits the live apps' code to a git
 // repository in DATA_DIR/backup, a folder per app, so every version is kept for good (history.ts; Undo's
-// history, which also holds the data, lasts 48 hours). Connected in Settings, the host also pushes each commit to a
-// private GitHub repository of the person's, imp-apps (github.ts). Only code is backed up: the apps' data
-// stays on the host.
+// history, which also holds the data, lasts 48 hours). Turned on in Settings, under the GitHub connection
+// (connections/), the host also pushes each commit to a private GitHub repository of the person's, imp-apps
+// (github.ts), through the egress proxy, which puts the github key on the push. Only code is backed up: the apps'
+// data stays on the host.
 //
-// The host needs git for the history and the GitHub CLI (gh) for GitHub; Settings says which one is missing.
+// The host needs git for the history; Settings says when it is missing.
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
 import type { AppInfo } from "../apps/apps.ts";
 import { backupCommands } from "./commands.ts";
-import { githubSignIn, type Remote } from "./github.ts";
+import { type GithubApi, personalRepository, type Remote } from "./github.ts";
 import { type BackupHistory, backupHistory } from "./history.ts";
 import { readKept } from "../datadir/datadir.ts";
 import type { Topics } from "../live/live.ts";
 
 export { backupCalls } from "./shell.ts";
 
+export type { GithubApi } from "./github.ts";
+
 export const TOPIC = "backup";
 
 export type Backup = {
   /** Whether the host has git, which keeps the versions. */
   readonly git: boolean;
-  /** GitHub: "off", "starting", "waiting" (for the person to enter `code` at `url`) or "on" (pushing to `repo`). */
+  /** GitHub: "off", "starting" (finding the repository) or "on" (pushing to `repo`). */
   readonly status: string;
-  readonly code: string;
-  readonly url: string;
   /** "owner/imp-apps" while on. */
   readonly repo: string;
   /** Why connecting or the last push failed; "" when neither did. */
@@ -41,8 +42,14 @@ export type BackupOptions = {
   readonly topics: Topics;
   /** The live apps, whose code is backed up. */
   readonly apps: () => readonly AppInfo[];
-  /** The GitHub CLI to run. Default: gh on PATH. */
-  readonly gh?: string | undefined;
+  /** The GitHub connection the backup pushes with. */
+  readonly github: {
+    /** Whether GitHub is connected: the vault has the github key. */
+    readonly connected: () => boolean;
+    readonly api: GithubApi;
+    /** The environment git pushes in: through the egress proxy, which puts the key on the push. */
+    readonly pushEnv: () => Promise<Record<string, string>>;
+  };
   readonly log?: ((message: string) => void) | undefined;
 };
 
@@ -76,9 +83,9 @@ function oneAtATime() {
   };
 }
 
-/** Where the host pushes to, kept in DATA_DIR/backup.json while GitHub is connected. */
+/** Where the host pushes to, kept in DATA_DIR/backup.json while the backup is on. */
 function keptRemote(file: string, log: (message: string) => void) {
-  // A damaged file reads as not connected: Settings then offers to connect GitHub again.
+  // A damaged file reads as off: Settings then offers to turn the backup on again.
   let remote = readKept(file, remoteJson, (problem) => {
     log(`backup: ${problem}`);
   });
@@ -96,7 +103,7 @@ function keptRemote(file: string, log: (message: string) => void) {
   };
 }
 
-const NOT_CONNECTED = { status: "off", code: "", url: "", repo: "" };
+const NOT_CONNECTED = { status: "off", repo: "" };
 
 type KeptRemote = ReturnType<typeof keptRemote>;
 
@@ -123,13 +130,14 @@ function backupState(topics: Topics, remote: KeptRemote) {
 
 type Keeping = {
   readonly history: BackupHistory;
+  readonly pushEnv: () => Promise<Record<string, string>>;
   readonly remote: KeptRemote;
   readonly state: ReturnType<typeof backupState>;
   readonly log: (message: string) => void;
 };
 
 /** Keeping the versions: each one committed to the history, then pushed to GitHub when it is connected. */
-function versionKeeper({ history, remote, state, log }: Keeping) {
+function versionKeeper({ history, pushEnv, remote, state, log }: Keeping) {
   // One change at a time: commits and pushes.
   const serial = oneAtATime();
 
@@ -156,7 +164,7 @@ function versionKeeper({ history, remote, state, log }: Keeping) {
     }
 
     try {
-      await history.push(to.url);
+      await history.push(to.url, await pushEnv());
       state.set({ synced: true, error: "" });
     } catch (cause) {
       state.set({
@@ -189,8 +197,8 @@ function versionKeeper({ history, remote, state, log }: Keeping) {
 }
 
 export function appBackup(options: BackupOptions) {
+  const { github } = options;
   const commands = backupCommands(options);
-  const github = githubSignIn(commands);
 
   const log =
     options.log ??
@@ -203,22 +211,19 @@ export function appBackup(options: BackupOptions) {
 
   const keeper = versionKeeper({
     history: backupHistory({ commands, apps: options.apps }),
+    pushEnv: github.pushEnv,
     remote,
     state,
     log,
   });
 
-  /** After the sign-in: the person's repository is where the versions go, starting with the ones there are. */
+  /** The person's repository is where the versions go, starting with the ones there are. */
   const finish = async () => {
-    const found = await github.repository();
+    const found = await personalRepository(github.api);
 
     remote.keep(found);
-    state.set({ status: "on", repo: found.repo, code: "", url: "", error: "" });
+    state.set({ status: "on", repo: found.repo, error: "" });
     await keeper.push();
-  };
-
-  const fail = (error: string) => {
-    state.set({ ...NOT_CONNECTED, error });
   };
 
   return {
@@ -228,40 +233,27 @@ export function appBackup(options: BackupOptions) {
     start: () => {
       keeper.record("Keep the apps as the host started with them");
     },
-    /** GitHub's device code sign-in: the code shows in Settings, and the person approves on any device. */
-    connect: () => {
+    /** Starts pushing to the person's imp-apps repository on GitHub, which must be connected. */
+    turnOn: () => {
       if (state.now().status !== "off") {
         return;
       }
 
-      state.set({ status: "starting", code: "", url: "", error: "" });
-      github.start({
-        onCode: (code, url) => {
-          if (state.now().status === "starting") {
-            state.set({ status: "waiting", code, url });
-          }
-        },
-        onSignedIn: () => {
-          keeper.serial(finish).catch((cause: unknown) => {
-            fail(`Signed in to GitHub, but ${why(cause)}`);
-          });
-        },
-        onFailed: fail,
+      if (!github.connected()) {
+        state.set({ error: "Connect GitHub first." });
+
+        return;
+      }
+
+      state.set({ status: "starting", error: "" });
+      keeper.serial(finish).catch((cause: unknown) => {
+        state.set({ ...NOT_CONNECTED, error: why(cause) });
       });
     },
-    cancel: () => {
-      github.stop();
-
-      if (state.now().status !== "on") {
-        fail("");
-      }
-    },
-    /** Stops pushing and signs the host out of GitHub. The repository on GitHub stays. */
-    disconnect: async () => {
-      await github.signOut();
+    /** Stops pushing. The repository on GitHub stays. */
+    turnOff: () => {
       remote.forget();
       state.set({ ...NOT_CONNECTED, error: "", synced: false });
     },
-    close: github.stop,
   };
 }

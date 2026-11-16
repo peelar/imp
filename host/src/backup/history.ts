@@ -46,13 +46,13 @@ export function backupHistory({ commands, apps }: BackupHistoryOptions) {
       mkdirSync(dir, { recursive: true });
 
       if (!existsSync(path.join(dir, ".git"))) {
-        await git("init", "--quiet", "--initial-branch=main");
+        await git(["init", "--quiet", "--initial-branch=main"]);
       }
     },
     /** How many versions the history keeps. */
     count: async () => {
       try {
-        return Number(await git("rev-list", "--count", "HEAD"));
+        return Number(await git(["rev-list", "--count", "HEAD"]));
       } catch {
         // No commit yet.
         return 0;
@@ -61,19 +61,19 @@ export function backupHistory({ commands, apps }: BackupHistoryOptions) {
     /** Commits the live apps as they are now; false when that is what the last version already holds. */
     commit: async (summary: string) => {
       writeApps();
-      await git("add", "--all");
+      await git(["add", "--all"]);
 
-      if (!(await git("status", "--porcelain"))) {
+      if (!(await git(["status", "--porcelain"]))) {
         return false;
       }
 
-      await git("commit", "--quiet", "--message", summary);
+      await git(["commit", "--quiet", "--message", summary]);
 
       return true;
     },
-    /** Sends every version to the repository at `url`. */
-    push: async (url: string) => {
-      await git("push", "--quiet", url, "HEAD:refs/heads/main");
+    /** Sends every version to the repository at `url`, with git's environment for it (the egress proxy's). */
+    push: async (url: string, env: Record<string, string>) => {
+      await git(["push", "--quiet", url, "HEAD:refs/heads/main"], env);
     },
   };
 }

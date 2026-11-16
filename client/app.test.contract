@@ -9,7 +9,25 @@ test "onboarding signs in with ChatGPT through a device code"
   clock until state account.status == "waiting" within 5000
   expect text "signin-code" == "TEST-1234"
   clock until state account.status == "signedIn" within 5000
+  // The test host's computer is fixed, so the onboarding goes on to the first app: GitHub, which the imp is asked to
+  // build, and on a narrow window the chat opens to watch it.
+  expect tree has "first-app"
+  expect text "onboarding-step" == "3 / 3"
+  tap "first-app-build"
+  clock until state account.introduceApps == false within 10000
   expect tree missing "onboarding"
+  clock until state chat.messages.0.text == "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review." within 5000
+  expect state nav.tab == "chat"
+  clock until state chat.busy == false within 10000
+  // GitHub shows what an app is above it, until that is dismissed.
+  tap "tab-github"
+  expect tree has "app-guide"
+  tap "app-guide-dismiss"
+  expect tree missing "app-guide"
+  expect tree has "uninstall"
+  tap "tab-chat"
+  tap "new-chat-chat"
+  clock until state chat.messages.length == 0 within 5000
   expect tree has "composer"
   tap "tab-settings"
   tap "settings-pane-general"
@@ -25,6 +43,17 @@ test "the model is chosen next to the message box"
   expect text "model" == "faux-2"
   type "model" "faux-1"
   clock until state account.model == "faux-1" within 5000
+
+test "the app directory installs Todos, which Imp ships, and opens it"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "directory-entry"
+  tap "directory-install-todos"
+  clock until state apps.length == 2 within 5000
+  clock settle
+  expect state nav.tab == "todos"
+  expect tree missing "app-guide"
+  tap "home-entry"
 
 test "a todo added in the Todos app is listed and counted"
   clock until state account.status == "signedIn" within 5000
@@ -208,33 +237,38 @@ test "the imp asks for a login, and the owner adds it with its one-time-code key
   clock until state secrets.secrets.0.username == "adrian-p" within 20000
   expect text "secret-detail-0" == "github.com · adrian-p · one-time codes"
 
-test "settings back the apps' code up to GitHub, connected with a device code"
+test "settings connect GitHub with a device code, then back the apps' code up to it"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
-  tap "settings-pane-backup"
-  clock until state backup.versions == 1 within 5000
-  expect text "settings-count-backup" == "1"
-  tap "backup-connect"
-  clock until state backup.status == "waiting" within 5000
-  expect text "backup-code" == "TEST-5678"
+  tap "settings-pane-connections"
+  // GitHub, which the onboarding installed, then Todos, from the app directory.
+  clock until state backup.versions == 2 within 5000
+  expect text "backup-versions" == "2 versions kept"
+  expect tree has "backup-turn-on"
+  tap "github-connect"
+  clock until state github.status == "waiting" within 5000
+  expect text "github-code" == "TEST-5678"
+  clock until state github.status == "on" within 30000
+  expect text "github-login" == "@tester"
+  tap "backup-turn-on"
   clock until state backup.synced == true within 10000
   expect text "backup-repo" == "tester/imp-apps"
   expect text "backup-state" == "Up to date"
-  tap "backup-disconnect"
+  tap "github-disconnect"
   clock until state backup.status == "off" within 5000
-  expect tree has "backup-connect"
+  expect tree has "github-connect"
 
-test "Settings' Experimental section keeps a feature flag for Imp's next start"
+test "Settings' Experimental tab keeps a feature flag for Imp's next start"
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
-  tap "settings-pane-general"
-  expect text "flag-label-0" == "GitHub app"
+  tap "settings-pane-experimental"
+  expect text "flag-label-0" == "App directory"
   expect tree missing "flag-pending-0"
-  tap "flag-github-app"
+  tap "flag-app-directory"
   clock until state account.flags.0.next == false within 5000
   expect state account.flags.0.on == true
   expect text "flag-pending-0" == "Off after Imp restarts"
-  tap "flag-github-app"
+  tap "flag-app-directory"
   clock until state account.flags.0.next == true within 5000
   expect tree missing "flag-pending-0"
 
@@ -480,6 +514,22 @@ test "the GitHub app opens to an empty inbox that says it has not synced yet"
   expect text "github-heading" == "Nothing needs you"
   expect tree has "github-empty"
   expect tree has "github-filter-review"
+
+test "an app is uninstalled with its data only once the person confirms it"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-todos"
+  clock until state todosReadList.length == 3 within 5000
+  tap "uninstall"
+  tap "uninstall-cancel"
+  clock settle
+  expect state apps.length == 2
+  tap "uninstall"
+  tap "uninstall-confirm"
+  clock until state apps.length == 1 within 5000
+  clock settle
+  expect state nav.tab == "chat"
+  expect state uninstallError == ""
 
 // Last: it signs the shared host out of ChatGPT. scripts/test-host.ts serves an OpenAI-compatible API on port 8799.
 test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the imp answers on it"

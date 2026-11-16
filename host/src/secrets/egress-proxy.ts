@@ -309,6 +309,8 @@ export function mitmProxy(options: MitmProxyOptions) {
     hosts: () => Object.keys(rules.hosts),
     /** The certificate of the CA mitmproxy signs with, which it made on its first start. */
     caCertificate: () => readFileSync(certificate, "utf-8"),
+    /** Where that certificate is, for a program that reads it from a file. */
+    caFile: certificate,
     /** New rules: the addon reads them at once. */
     setRules: (next: EgressRules) => {
       rules = next;

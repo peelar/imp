@@ -157,5 +157,5 @@ component Screen
         column gap=8 align-items="center" padding-top=12 testId="github-empty"
           text (not status.synced ? "Not synced yet" : q != "" ? "Nothing matches" : "All clear") font-family="family.display"
             font-size="1.625rem" role="heading" aria-level=2
-          text (not status.synced ? "The bar above says how the sync is going. The app reads GitHub with your key named github, from Settings → Secrets." : "Ask your imp in Chat to review, reply or merge: it acts on GitHub for you.")
+          text (not status.synced ? "The bar above says how the sync is going. The app reads GitHub as you once you connect it, in Settings → Connections." : "Ask your imp in Chat to review, reply or merge: it acts on GitHub for you.")
             color="ink.muted" font-style="italic" text-align="center"

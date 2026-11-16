@@ -13,6 +13,10 @@ const changeCount = compile(obj({ n: int() }));
 
 export type AppData = ReturnType<typeof openAppData>;
 
+/** Whether the app has data in DATA_DIR/apps, where the gateway keeps it, before the gateway opens any. */
+export const hasAppData = (dataDir: string, id: string) =>
+  existsSync(path.join(dataDir, "apps", `${id}.sqlite`));
+
 export function openAppData(dir: string) {
   mkdirSync(dir, { recursive: true });
 

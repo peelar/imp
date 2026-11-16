@@ -1,6 +1,6 @@
 // The person's side of making apps: the apps and their drafts as the shell lists them, which build of the shell the
-// host serves, and the person's decisions on a draft: Save, Discard and Undo. Only the person makes them; the agent
-// only previews (tools.ts).
+// host serves, the person's decisions on a draft: Save, Discard and Undo, and installing and uninstalling an app. Only
+// the person makes them; the agent only previews (tools.ts).
 import { SYNC_TOPIC } from "../apps/apps.ts";
 import {
   type Call,
@@ -60,6 +60,18 @@ export function studioCalls(studio: Studio): Calls {
       "appsUndo",
       decision(async (id) => {
         await studio.undo(id);
+      }),
+    ],
+    [
+      "appsInstall",
+      decision(async (id) => {
+        await studio.install(id);
+      }),
+    ],
+    [
+      "appsUninstall",
+      decision(async (id) => {
+        await studio.uninstall(id);
       }),
     ],
   ];

@@ -1,21 +1,18 @@
 #!/usr/bin/env node
-// The GitHub CLI as the test host's backup sees it (test-host.ts): a device code sign-in that approves itself, an
-// account named "tester", and its repositories as bare git repositories next to the sign-in (GH_CONFIG_DIR).
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+// The GitHub CLI as Connect GitHub sees it (test-host.ts): a device code sign-in that approves itself, for an account
+// named "tester".
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const [command = "", sub = "", name = ""] = process.argv.slice(2);
+const [command = "", sub = ""] = process.argv.slice(2);
 const config = process.env.GH_CONFIG_DIR;
 
 if (!config) {
   throw new Error("fake gh: GH_CONFIG_DIR is not set");
 }
 
-const repo = path.join(path.dirname(config), "github", `${name}.git`);
-
-/** What each `gh <command> <sub>` the backup runs does here. */
+/** What each `gh <command> <sub>` the sign-in runs does here. */
 const COMMANDS = new Map<string, () => Promise<void> | void>([
   [
     "auth login",
@@ -38,34 +35,15 @@ const COMMANDS = new Map<string, () => Promise<void> | void>([
     },
   ],
   [
+    "auth token",
+    () => {
+      console.log("gho_tester");
+    },
+  ],
+  [
     "api user",
     () => {
       console.log("tester");
-    },
-  ],
-  [
-    "repo view",
-    () => {
-      if (existsSync(repo)) {
-        console.log(repo);
-      } else {
-        console.error(
-          `GraphQL: Could not resolve to a Repository with the name '${name}'.`
-        );
-        process.exitCode = 1;
-      }
-    },
-  ],
-  [
-    "repo create",
-    () => {
-      execFileSync("git", [
-        "init",
-        "--quiet",
-        "--bare",
-        "--initial-branch=main",
-        repo,
-      ]);
     },
   ],
 ]);

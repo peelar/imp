@@ -3,7 +3,13 @@
 // reads; and it holds every app.fetch to the app's connections, to reads, and away from the host's own network.
 // The apps are written into the host's data directory before it starts, as the studio keeps saved code and drafts.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -298,9 +304,12 @@ test("an app Imp ships keeps Imp's server code under the person's screen", () =>
     }
   }
 
-  const hub = storedApps(data, repo, () => {}).live.find(
-    ({ id }) => id === "hub"
-  );
+  const hub = storedApps({
+    dataDir: data,
+    repoAppsDir: repo,
+    hasData: () => false,
+    log: () => {},
+  }).live.find(({ id }) => id === "hub");
 
   assert.equal(hub?.files["server.ts"], ours["server.ts"]);
   assert.match(hub?.files["app.contract"] ?? "", /Mine/);
@@ -312,4 +321,54 @@ test("an app Imp ships keeps Imp's server code under the person's screen", () =>
   assert.throws(() => {
     requireImpServer({ ...ours, "server.ts": "changed" }, imp);
   }, /Put back server.ts as app_code wrote them/);
+});
+
+test("an app Imp ships runs once installed, or where it ran before apps had to be installed; an uninstalled one stays out", () => {
+  const repo = mkdtempSync(path.join(tmpdir(), "imp-repo-"));
+  const data = mkdtempSync(path.join(tmpdir(), "imp-data-"));
+
+  for (const [id, json] of [
+    ["notes", { id: "notes", name: "Notes" }],
+    ["hub", { id: "hub", name: "Hub", server: "imp" }],
+  ] as const) {
+    mkdirSync(path.join(repo, id));
+    writeFileSync(path.join(repo, id, "app.json"), JSON.stringify(json));
+    writeFileSync(path.join(repo, id, "app.contract"), contract);
+    writeFileSync(
+      path.join(repo, id, "server.ts"),
+      "export default { operations: {} };"
+    );
+  }
+
+  const live = (hasData: (id: string) => boolean) =>
+    storedApps({ dataDir: data, repoAppsDir: repo, hasData, log: () => {} })
+      .live.map(({ id }) => id)
+      .sort();
+
+  // A new host runs none of them.
+  assert.deepEqual(
+    live(() => false),
+    []
+  );
+  assert.equal(existsSync(path.join(data, "code")), false);
+
+  // A host that ran them before keeps them: Imp's own as the repository has it, any other as its own live version.
+  assert.deepEqual(
+    live(() => true),
+    ["hub", "notes"]
+  );
+  assert.ok(existsSync(path.join(data, "code", "hub", "installed")));
+  assert.ok(existsSync(path.join(data, "code", "notes", "live", "server.ts")));
+
+  // Uninstalled, neither comes back, even with data left behind.
+  for (const id of ["notes", "hub"]) {
+    rmSync(path.join(data, "code", id), { recursive: true, force: true });
+    mkdirSync(path.join(data, "code", id), { recursive: true });
+    writeFileSync(path.join(data, "code", id, "uninstalled"), "");
+  }
+
+  assert.deepEqual(
+    live(() => true),
+    []
+  );
 });

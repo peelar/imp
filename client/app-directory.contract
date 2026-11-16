@@ -5,31 +5,33 @@ use Label from "./look.contract"
 use AppTile from "./host.contract"
 use numbered from "./parts.contract"
 
-// An app in the directory, kept in a GitHub repository (`repo`, its link). `symbol` is its icon.
+// An app in the directory, kept in a GitHub repository (`repo`, its link). `symbol` is its icon. `shipped` says Imp
+// ships it, so the host installs it itself, without the imp.
 shape DirectoryApp
   id: string
   name: string
   description: string
   repo: string
   symbol: string
+  shipped: bool
 
 // The directory's apps. Mock entries for now, except Todos, which this repository ships: the rest name repositories
 // that do not exist yet, so the imp cannot install them.
 fn directory(): DirectoryApp[] = [
   DirectoryApp(id="todos", name="Todos", description="A list of things to do. Your imp can read and change it.",
-    repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:icon.todos"),
+    repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:icon.todos", shipped=true),
   DirectoryApp(id="habits", name="Habits", description="A streak for each habit, ticked off once a day.",
-    repo="https://github.com/imp-apps/habits", symbol="symbol:icon.star"),
+    repo="https://github.com/imp-apps/habits", symbol="symbol:icon.star", shipped=false),
   DirectoryApp(id="reading", name="Reading list", description="Books and articles to read, with a note on each one you finish.",
-    repo="https://github.com/imp-apps/reading", symbol="symbol:icon.book"),
+    repo="https://github.com/imp-apps/reading", symbol="symbol:icon.book", shipped=false),
   DirectoryApp(id="runs", name="Runs", description="Distance and pace for every run, and how the month adds up.",
-    repo="https://github.com/marta/imp-runs", symbol="symbol:icon.chart"),
+    repo="https://github.com/marta/imp-runs", symbol="symbol:icon.chart", shipped=false),
   DirectoryApp(id="places", name="Places", description="Places to go, each pinned with who told you about it.",
-    repo="https://github.com/imp-apps/places", symbol="symbol:icon.pin"),
+    repo="https://github.com/imp-apps/places", symbol="symbol:icon.pin", shipped=false),
   DirectoryApp(id="people", name="People", description="Who you met, where, and what to ask them next time.",
-    repo="https://github.com/kuba/imp-people", symbol="symbol:icon.people"),
+    repo="https://github.com/kuba/imp-people", symbol="symbol:icon.people", shipped=false),
   DirectoryApp(id="journal", name="Journal", description="A line a day. Your imp can write it for you from your chats.",
-    repo="https://github.com/imp-apps/journal", symbol="symbol:icon.pencil")]
+    repo="https://github.com/imp-apps/journal", symbol="symbol:icon.pencil", shipped=false)]
 
 // A link to a GitHub repository, such as github.com/owner/app, as its path ("owner/app"), or "" for any other text.
 fn repoPath(link: string): string =
@@ -38,7 +40,7 @@ fn repoPath(link: string): string =
 fn repoLink(link: string): string = repoPath(link).split("/").filter(p => p != "").length >= 2 ? `https://github.com/${repoPath(link)}` : ""
 
 // The app directory: a link to any app on GitHub, and apps others built, each installed by the imp as a preview to try
-// before keeping it. An app already installed opens instead.
+// before keeping it, but the ones Imp ships, which the host installs at once. An app already installed opens instead.
 component AppDirectory
   props
     entries: DirectoryApp[]
@@ -46,11 +48,19 @@ component AppDirectory
     installed: AppTile[]
     sending: bool
     install: action
+    // Installs an app Imp ships, by its id.
+    add: action
+    adding: bool
     open: action
   state link = ""
   derive repo = repoLink(link.trim())
   action editLink(v: string)
     link = v
+  action installEntry(a: DirectoryApp)
+    if a.shipped
+      add(a.id)
+    else
+      install(a.repo)
   action installLink
     if repo != "" and not sending
       install(repo)
@@ -106,7 +116,8 @@ component AppDirectory
                     background-color="surface.soft"
                   text "Open"
               else
-                button press=install(a.repo) disabled=sending aria-label=`Install ${a.name}` testId=`directory-install-${a.id}`
+                button press=installEntry(a) disabled=(sending or adding)
+                  aria-label=`Install ${a.name}` testId=`directory-install-${a.id}`
                   padding="8px 12px" border="1px solid AccentColor" background-color="transparent" color="AccentColor"
                   font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
                   :hover

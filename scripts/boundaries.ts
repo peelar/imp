@@ -94,8 +94,15 @@ export const CONTEXTS = new Map<string, Context>([
   [
     "backup",
     {
-      owns: "Every saved version of the apps' code, in git and on GitHub",
+      owns: "Every saved version of the apps' code, in git and pushed to GitHub with the GitHub connection",
       uses: ["apps", "live", "datadir"],
+    },
+  ],
+  [
+    "connections",
+    {
+      owns: "The accounts the host connects to, such as GitHub: signing in, and handing the sign-in to the vault as a key",
+      uses: ["live", "datadir", "processes"],
     },
   ],
   [

@@ -27,10 +27,13 @@ shape Account
   memory: Memory
   secrets: Secrets
   backup: Backup
+  connections: Connection[]
   tricks: Trick[]
   routines: Routine[]
   notices: Notice[]
   flags: Flag[]
+  // Whether the onboarding still shows the person their first app, Todos: until it is installed, or turned down.
+  introduceApps: bool
 
 // A feature flag, as Settings shows it: whether it is `on` now, and whether it is on after the host's `next` start,
 // which the person's choice decides.
@@ -186,17 +189,27 @@ shape Secrets
   services: SecretService[]
 
 // Where the apps' code is kept: every version in a history on the host (`git` is false when the host has no git to
-// keep it), and on GitHub once connected. `status` is GitHub's: "off", "starting", "waiting" (for the person to enter
-// `code` at `url`) or "on" (pushing to `repo`, which has the newest version when `synced`).
+// keep it), and on GitHub once the person turns it on, over the GitHub connection. `status` is GitHub's: "off",
+// "starting" (finding the repository) or "on" (pushing to `repo`, which has the newest version when `synced`).
 shape Backup
   git: bool
   status: string
-  code: string
-  url: string
   repo: string
   error: string
   versions: number
   synced: bool
+
+// An account the host signs in to, such as GitHub: `status` is "off", "starting", "waiting" (for the person to enter
+// `code` at `url`) or "on", as `login` ("" when the host does not know the name). `error` says why the last sign-in
+// failed.
+shape Connection
+  id: string
+  label: string
+  status: string
+  code: string
+  url: string
+  login: string
+  error: string
 
 // A browser task the imp recorded once and runs again without the page (agent-browser's saved flow): what it does,
 // on which site, and what it asks for each time.

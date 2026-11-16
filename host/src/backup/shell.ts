@@ -1,29 +1,21 @@
-// The person's side of the backup, in Settings: connect GitHub, cancel the sign-in, disconnect.
+// The person's side of the backup, in Settings under the GitHub connection: turn it on, turn it off.
 import { type Calls, ok } from "../live/live.ts";
 import type { AppBackup } from "./backup.ts";
 
 export function backupCalls(backup: AppBackup): Calls {
   return [
     [
-      "backupConnect",
+      "backupTurnOn",
       () => {
-        backup.connect();
+        backup.turnOn();
 
         return ok;
       },
     ],
     [
-      "backupCancel",
+      "backupTurnOff",
       () => {
-        backup.cancel();
-
-        return ok;
-      },
-    ],
-    [
-      "backupDisconnect",
-      async () => {
-        await backup.disconnect();
+        backup.turnOff();
 
         return ok;
       },

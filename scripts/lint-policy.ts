@@ -162,6 +162,17 @@ const crossings = [
     says: "uses live/, which update/ may not",
   },
   {
+    crosses:
+      "a connection keeping its sign-in in the vault itself, not through the keys host.ts hands it",
+    files: [
+      [
+        "connections/connections.ts",
+        'import type { Secrets } from "../secrets/secrets.ts";',
+      ],
+    ],
+    says: "uses secrets/, which connections/ may not",
+  },
+  {
     crosses: "a context using the files that put the host together",
     files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
     says: "a context never uses the files that put the host together",

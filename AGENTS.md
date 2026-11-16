@@ -23,7 +23,7 @@ Rules and conventions you can't read from the code. For how things work, read th
 - If you change `oxlint.config.ts`, add a probe to `scripts/lint-policy.ts` that shows the rule fires.
 - When a file or function grows past a lint limit, split it by what each part is responsible for, and say so in the new file's opening comment.
 - `client/exact-rev` is the only place that pins Exact's version. Setup, CI and releases all read it.
-- Before you build a new feature, ask the user whether it lands for everyone or behind a feature flag. A flag is declared in `host/src/flags/flags.ts`, off by default, and `host.ts` hands the parts what it changes; no part decides a flag itself.
+- A new feature lands for everyone, unless the user says it goes behind a feature flag; say in the chat which it does, without asking. A flag is declared in `host/src/flags/flags.ts`, off by default, and `host.ts` hands the parts what it changes; no part decides a flag itself.
 - Every change to what Imp does needs a changeset in the same commit: `.changeset/<name>.md`, marked `patch` or `minor`, with a sentence or two written for the person using Imp. Pushing to `main` releases it to every installed host. A refactor says `Changeset: none` in its commit message instead. Changes to tests, CI and docs need neither.
 - When the host's behavior, settings or files change, update the page in `docs/` that describes it.
 - New behavior in the host's HTTP API gets a test in `host/test/`.

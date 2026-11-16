@@ -65,22 +65,39 @@ On disk, under `DATA_DIR/code/<id>/`:
 
 The host keeps the last three web builds in `DATA_DIR/builds/`, and `builds/current.json` names the one it serves.
 
+## Install and uninstall
+
+No app runs until it is installed. A new host has none until the onboarding installs GitHub.
+
+**Uninstall**, on the bar of every app's page, asks "Are you sure you want to delete the app and all its data?" and then removes the app: its worker, its live version and draft, Undo's history and its database (`host/src/studio/installs.ts`). Its git backup keeps its code. The host leaves `DATA_DIR/code/<id>/uninstalled` behind, which says the app stays out. The shell stops listing the app at once, and its screen leaves the shell's build the next time the host builds it.
+
+**Install** puts in an app Imp ships, from `client/apps/`, without the imp: the onboarding installs GitHub this way, and the **App directory** Todos. To have an uninstalled app again, install it again, or ask the imp: `app_code` writes an app Imp ships that you don't have as Imp ships it, and you save its preview like any app's.
+
+A host that ran an app Imp ships before apps had to be installed has its data, and keeps it installed (`storedApps` in `host/src/studio/code.ts`).
+
 ## Every version, kept in git
 
 Undo's history, which holds the data too, lasts 48 hours. The code lasts longer: every save and undo commits the live apps' code to a git repository in `DATA_DIR/backup`, a folder per app (`host/src/backup/backup.ts`). The host also commits at start, so apps from before backup existed are kept too.
 
-**Backup** in Settings connects GitHub with the GitHub CLI's device code sign-in, shown like the ChatGPT one. The host keeps that sign-in in `DATA_DIR/gh` and never takes a token from its environment. It finds or creates a private `<you>/imp-apps` repository and pushes each version there. A failed push is shown in Settings and retried on the next save.
+**Settings → Connections** is where the host signs in to GitHub, and where you turn on Backup. **Connect GitHub** runs the GitHub CLI's device code sign-in, shown like the ChatGPT one, and asks for the `notifications` scope beside gh's own, so the GitHub app can read them (`host/src/connections/`). The token goes into the vault as your key named `github`, and the host keeps only the account's name, in `DATA_DIR/connections.json`. From there it works like a key you added: the GitHub app, the imp's `gh` and `git`, and Backup all use it through the vault, and none of them holds it. **Disconnect** deletes the key and turns Backup off; the account on GitHub is untouched. A `github` key you add in Settings → Secrets connects GitHub too. A host whose backup signed in before Connections existed has that sign-in moved from `DATA_DIR/gh` into the vault at its first start.
 
-Only code is backed up. The apps' data stays on the host, so back up `DATA_DIR` for that. The host needs `git` for the history and `gh` for GitHub, and Settings says which one is missing.
+With GitHub connected, **Turn on backup** finds or creates a private `<you>/imp-apps` repository through GitHub's API and pushes each version there. A failed push is shown in Settings and retried on the next save.
+
+Only code is backed up. The apps' data stays on the host, so back up `DATA_DIR` for that. The host needs `git` for the history and `gh` to connect GitHub, and Settings says which one is missing.
 
 ## Apps Imp ships
 
-An app in `client/apps/` whose `app.json` says `"server": "imp"` keeps Imp's server code. Its screen is yours to change, like any app's, but its `server.ts` and `app.json` are Imp's: the host always runs the repository's copy of them under the screen you saved (`host/src/studio/code.ts`), at start, in a preview and on Undo, so Imp's updates to them reach you and your screen stays yours. A preview that changes them is refused, and the imp is told to say what data the screen is missing instead.
+The onboarding's last step, **Build your first app**, shows you what an app is with GitHub. You describe the GitHub app you want, such as one that shows only the pull requests waiting for your review. The host installs Imp's GitHub app, the shell opens it with the chat beside it (on a narrow window, the chat), and your words go to the imp, which builds your version over Imp's while you watch: its preview shows in the GitHub tab, on a copy of what Imp's version read, and you save it or discard it. **Skip, use Imp's GitHub app** installs Imp's as it ships. Either way, GitHub opens with a short note on what an app is, and once a host has had an app, the onboarding doesn't show again.
+
+Todos (`client/apps/todos`) is in the **App directory**. Installed, it is yours like an app the imp built: the host copies it into `DATA_DIR/code/todos/live/` and runs it from there, and Imp's later changes to it don't reach it.
+
+An app in `client/apps/` whose `app.json` says `"server": "imp"` keeps Imp's server code: installed, it runs as the repository has it (`DATA_DIR/code/<id>/installed`). Its screen is yours to change, like any app's, but its `server.ts` and `app.json` are Imp's: the host always runs the repository's copy of them under the screen you saved (`host/src/studio/code.ts`), at start, in a preview and on Undo, so Imp's updates to them reach you and your screen stays yours. A preview that changes them is refused, and the imp is told to say what data the screen is missing instead.
 
 ### GitHub
 
-The GitHub app (`client/apps/github`) is the first app Imp ships this way. It is behind the `github-app` [feature flag](configuration.md#feature-flags), which is off unless you turn it on. While it is off, the host runs none of it: there is no tab, no sync, and the imp can neither use it nor make an app in its place. Its data stays on the host for when you turn it on. Its sync reads, with your key named `github`, the pull requests waiting for your review, your own open pull requests, the issues and pull requests assigned to you, and your unread notifications, and merges them into one item per issue or pull request. It watches `api.github.com/notifications`, so a new notification brings a sync within a minute or so.
+The GitHub app (`client/apps/github`) is the first app Imp ships this way: its server code reads GitHub, and the screen is yours, or the one the imp builds you. Its sync reads, with your key named `github`, the pull requests waiting for your review, your own open pull requests, the issues and pull requests assigned to you, and your unread notifications, and merges them into one item per issue or pull request. It watches `api.github.com/notifications`, so a new notification brings a sync within a minute or so.
 
+- **It needs your key named `github`.** Without one it shows nothing yet, and the imp asks you for one with a request in Settings, without waiting for it to build.
 - **Notifications need a classic token** with the `notifications` scope (or `repo`): GitHub gives them to nothing else. With another key, the app shows the rest and says so.
 - **Done and Snooze are the app's own.** They change nothing on GitHub, and a sync keeps them. A done item comes back when it changes on GitHub again, and a snoozed one when its snooze ends.
 - **Acting on GitHub is the imp's.** Ask in the chat beside the app ("review the gift card PR", "mark my notifications read"): the imp reads the app's items and acts with `gh`.

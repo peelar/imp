@@ -1,6 +1,6 @@
 // What the shell reads and changes, by name. Each read is a live source and each change a call (live/live.ts); every
 // context names its own in its shell.ts, and this file puts them together. The shell's own names start with one of a
-// few words (account, chat, routines, apps, build, version, computer, memory, secrets, backup, flags), which no app
+// few words (account, chat, routines, apps, build, version, computer, memory, secrets, backup, connections, flags), which no app
 // may take as its id (apps/folders.ts); every other name goes to the app that owns it, such as `todosSetDone` to the
 // todos app's `setDone`.
 import type { Json } from "../../sdk/app.ts";
@@ -18,6 +18,11 @@ import {
   backupCalls,
   TOPIC as BACKUP,
 } from "./backup/backup.ts";
+import {
+  type Connections,
+  connectionsCalls,
+  TOPIC as CONNECTIONS,
+} from "./connections/connections.ts";
 import {
   TOPIC as MEMORY,
   type MemoryProvider,
@@ -45,6 +50,7 @@ import {
 } from "./notifications/notifications.ts";
 import { TOPIC as TRICKS, type Tricks } from "./tricks/tricks.ts";
 import {
+  APPS_TOPIC,
   appsSource,
   buildSource,
   type Studio,
@@ -66,6 +72,8 @@ export type ShellApiOptions = {
   readonly secrets: Secrets;
   /** The apps' code, kept in git and pushed to GitHub. */
   readonly backup: AppBackup;
+  /** The accounts the host connects to, such as GitHub. */
+  readonly connections: Connections;
   /** The feature flags, for Settings: each one's state and the owner's choice for the next start. */
   readonly flags: Flags;
   /** The app studio: drafts, saved versions and the shell's builds. */
@@ -94,6 +102,7 @@ export function shellApi(options: ShellApiOptions) {
     ...memoryCalls(options.memory),
     ...secretsCalls(options.secrets),
     ...backupCalls(options.backup),
+    ...connectionsCalls(options.connections),
     ...flagCalls(options.flags),
   ]);
 
@@ -120,6 +129,7 @@ function shellSources(options: ShellApiOptions) {
     account,
     backup,
     chats,
+    connections,
     computer,
     flags,
     memory,
@@ -141,10 +151,12 @@ function shellSources(options: ShellApiOptions) {
     },
     secrets: secrets.state(),
     backup: backup.state(),
+    connections: connections.state(),
     tricks: tricks.list(),
     routines: routines.state(),
     notices: notifications.state(),
     flags: flags.list(),
+    introduceApps: studio.introduceApps(),
   });
 
   return new Map<string, LiveSource>([
@@ -157,10 +169,12 @@ function shellSources(options: ShellApiOptions) {
           MEMORY,
           SECRETS,
           BACKUP,
+          CONNECTIONS,
           TRICKS,
           ROUTINES,
           NOTICES,
           FLAGS,
+          APPS_TOPIC,
         ],
         load: whole,
       },

@@ -194,6 +194,12 @@ function isInternalV4(ip: string) {
   );
 }
 
+/** What an app reading a service lacks without the key: GitHub has its own place in Settings. */
+const missingKey = (secret: string) =>
+  secret === "github"
+    ? "needs GitHub: connect it in Settings → Connections."
+    : `needs secret ${secret}: add it in Settings → Secrets.`;
+
 /** Holds an app's `app.fetch` to the rules; throws with what to fix, which the app's code sees. */
 export async function checkFetch(
   rules: FetchRules,
@@ -244,7 +250,7 @@ export async function checkFetch(
     const hosts = rules.keyHosts(secret);
 
     if (!hosts) {
-      throw new Error(`needs secret ${secret}: add it in Settings → Secrets.`);
+      throw new Error(missingKey(secret));
     }
 
     if (!hosts.includes(host)) {

@@ -12,7 +12,7 @@ component ExperimentalSettings
   view
     column testId="experimental"
       row padding-bottom=10 border-bottom="1px solid ink.strong"
-        text "Experimental" class=Label color="ink.strong" role="heading" aria-level=2
+        text "Feature flags" class=Label color="ink.strong" role="heading" aria-level=2
       text "Changes apply after Imp restarts."
         font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
       for f, i in flags key=f.key

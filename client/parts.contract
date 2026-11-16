@@ -1,7 +1,7 @@
-// Small parts more than one screen of the shell uses: a shortcut's keys on its control, a person's initial, and a
-// number in words.
+// Small parts more than one screen of the shell uses: a shortcut's keys on its control, a person's initial, a
+// number in words, and the question asked before what can't be undone.
 
-use Key from "./look.contract"
+use Key, Label from "./look.contract"
 
 // A chord as the Mac writes it: "Control+Meta+S" is ⌃⌘S.
 fn keysOf(chord: string): string =
@@ -31,3 +31,33 @@ component Initialled
       text word.slice(1)
 
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
+
+// Asks before what can't be undone, in the catalogue's look rather than the platform's alert: square, ruled, the
+// question in the display serif and the answers as mono labels. A button opens it with `commandfor=id
+// command="show-modal"`; Cancel and Escape close it, and `label` does `confirm` and closes it.
+component Confirm
+  props
+    id: string
+    question: string
+    message: string
+    label: string
+    confirm: action
+    testId: string
+  view
+    dialog id=id aria-label=question width="min(26rem, calc(100vw - 32px))" box-sizing="border-box"
+      padding=0 border="1px solid ink.strong" border-radius=0 background-color="surface.page" color="ink.strong"
+      box-shadow="none"
+      column gap=8 padding="22px 24px 0"
+        text question font-family="family.display" font-size="1.5rem" line-height=1.15 role="heading" aria-level=2
+        text message font-size="0.9375rem" line-height=1.45 color="ink.muted"
+      row justify-content="flex-end" gap=8 padding="20px 24px 22px"
+        button commandfor=id command="close" testId=`${testId}-cancel` padding="8px 14px" border="1px solid line.strong"
+          border-radius=0 background-color="transparent" color="ink.strong"
+          :hover
+            background-color="surface.soft"
+          text "Cancel" class=Label color="inherit"
+        button press=confirm commandfor=id command="close" destructive=true testId=`${testId}-confirm` padding="8px 14px"
+          border="1px solid -exact-system-red" border-radius=0 background-color="-exact-system-red" color="ink.on-fill"
+          :hover
+            opacity=0.9
+          text label class=Label color="inherit"

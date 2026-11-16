@@ -1,9 +1,6 @@
-// The backup's GitHub side: the host signs in with the GitHub CLI's device code flow, as the ChatGPT sign-in does
-// (account/account.ts), and finds or creates the person's private imp-apps repository. The sign-in is the host's own
-// (commands.ts), kept in DATA_DIR/gh.
-import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
-import type { BackupCommands } from "./commands.ts";
+// The backup's GitHub side: the person's private imp-apps repository, found or made through GitHub's API with the
+// GitHub connection (connections/), which the host hands the backup as `GithubApi`.
+import { compile, obj, str } from "@earendil-works/pi-schema";
 
 /** The repository the apps go to, under the person's GitHub account. */
 const REPO_NAME = "imp-apps";
@@ -11,136 +8,60 @@ const REPO_NAME = "imp-apps";
 /** Where the versions are pushed: "owner/imp-apps" and its address. */
 export type Remote = { readonly repo: string; readonly url: string };
 
-export type SignInEvents = {
-  /** GitHub shows the code the person enters at `url`. */
-  readonly onCode: (code: string, url: string) => void;
-  readonly onSignedIn: () => void;
-  /** The sign-in stopped, with what to tell the person. */
-  readonly onFailed: (error: string) => void;
-};
+/** A request to GitHub's REST API, such as GET /user, sent with the owner's github key; answers its status and body. */
+export type GithubApi = (request: {
+  readonly method: "GET" | "POST";
+  readonly path: string;
+  readonly body?: Record<string, string | boolean>;
+}) => Promise<{ readonly status: number; readonly body: string }>;
 
-const isSystemError = (error: Error): error is NodeJS.ErrnoException =>
-  "code" in error;
+const userJson = compile(obj({ login: str() }, { open: true }));
+const repoJson = compile(obj({ clone_url: str() }, { open: true }));
 
-export type GithubSignIn = ReturnType<typeof githubSignIn>;
+/** What GitHub answered, checked; throws what went wrong. */
+function answered<T>(
+  what: string,
+  answer: { status: number; body: string },
+  expected: { check: (value: unknown) => value is T }
+): T {
+  let value: unknown;
 
-export function githubSignIn({ gh, ghDir, env, run }: BackupCommands) {
-  /** The sign-in under way. */
-  let login: ChildProcess | undefined;
+  try {
+    value = JSON.parse(answer.body);
+  } catch {
+    value = undefined;
+  }
 
-  const stop = () => {
-    const child = login;
+  if (answer.status < 200 || answer.status > 299 || !expected.check(value)) {
+    throw new Error(`GitHub answered ${answer.status} for ${what}.`);
+  }
 
-    login = undefined;
-    child?.kill();
-  };
+  return value;
+}
 
-  return {
-    /** GitHub's device code sign-in: the code shows in Settings, and the person approves on any device. */
-    start: ({ onCode, onSignedIn, onFailed }: SignInEvents) => {
-      mkdirSync(ghDir, { recursive: true, mode: 0o700 });
+/** The person's imp-apps repository, made private if it is not there yet. */
+export async function personalRepository(api: GithubApi): Promise<Remote> {
+  const { login } = answered(
+    "your account",
+    await api({ method: "GET", path: "/user" }),
+    userJson
+  );
 
-      // --insecure-storage keeps the token in DATA_DIR/gh, as the ChatGPT one is in DATA_DIR, not in a keychain
-      // that a background service may not reach.
-      const child = spawn(
-        gh,
-        [
-          "auth",
-          "login",
-          "--hostname",
-          "github.com",
-          "--web",
-          "--git-protocol",
-          "https",
-          "--skip-ssh-key",
-          "--insecure-storage",
-        ],
-        { env, stdio: ["ignore", "pipe", "pipe"] }
-      );
+  const repo = `${login}/${REPO_NAME}`;
+  const found = await api({ method: "GET", path: `/repos/${repo}` });
 
-      login = child;
-      let output = "";
+  const made =
+    found.status === 404
+      ? await api({
+          method: "POST",
+          path: "/user/repos",
+          body: {
+            name: REPO_NAME,
+            private: true,
+            description: "My Imp apps' code, backed up by my Imp host.",
+          },
+        })
+      : found;
 
-      const read = (chunk: Buffer) => {
-        output += chunk.toString("utf-8");
-
-        const [, code] =
-          /one-time code: ([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(output) ?? [];
-
-        const [url] = /https:\/\/\S+\/login\/device/.exec(output) ?? [];
-
-        if (code && url && login === child) {
-          onCode(code, url);
-        }
-      };
-
-      child.stdout.on("data", read);
-      child.stderr.on("data", read);
-      child.on("error", (error) => {
-        if (login !== child) {
-          return;
-        }
-
-        login = undefined;
-        onFailed(
-          isSystemError(error) && error.code === "ENOENT"
-            ? "The host needs the GitHub CLI: install gh (cli.github.com) on it, then connect again."
-            : error.message
-        );
-      });
-      child.on("close", (exit) => {
-        if (login !== child) {
-          return;
-        }
-
-        login = undefined;
-
-        const [said = ""] = output.trim().split("\n").slice(-1);
-
-        if (exit === 0) {
-          onSignedIn();
-        } else {
-          onFailed(said || `GitHub's sign-in stopped (${String(exit)}).`);
-        }
-      });
-    },
-    /** Stops a sign-in under way. */
-    stop,
-    /** After the sign-in: the person's imp-apps repository, made private if it is not there yet. */
-    repository: async (): Promise<Remote> => {
-      const owner = await run(gh, ["api", "user", "--jq", ".login"]);
-      const repo = `${owner}/${REPO_NAME}`;
-
-      const view = async () =>
-        await run(gh, ["repo", "view", repo, "--json", "url", "--jq", ".url"]);
-
-      try {
-        return { repo, url: await view() };
-      } catch {
-        // Not there yet.
-        await run(gh, [
-          "repo",
-          "create",
-          repo,
-          "--private",
-          "--description",
-          "My Imp apps' code, backed up by my Imp host.",
-        ]);
-
-        return { repo, url: await view() };
-      }
-    },
-    /** Signs the host out of GitHub and forgets its sign-in. The repository on GitHub stays. */
-    signOut: async () => {
-      stop();
-
-      try {
-        await run(gh, ["auth", "logout", "--hostname", "github.com"]);
-      } catch {
-        // Signed out already, or no gh: the sign-in's folder goes either way.
-      }
-
-      rmSync(ghDir, { recursive: true, force: true });
-    },
-  };
+  return { repo, url: answered(repo, made, repoJson).clone_url };
 }

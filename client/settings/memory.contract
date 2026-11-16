@@ -2,6 +2,7 @@
 
 use Label from "../look.contract"
 use Memory from "../host.contract"
+use Confirm from "../parts.contract"
 
 // A memory entry's title inside a sentence: the person's own entry is "You", which reads "you" there.
 fn aboutTitle(title: string): string = title == "You" ? "you" : title
@@ -53,13 +54,9 @@ component MemorySettings
                 image "symbol:icon.close" width=11 height=11
           for l in m.links key=l
             text l font-family="family.mono" font-size="0.75rem" color="ink.muted" padding-left=20
-      dialog id="confirm-memory-forget" role="alertdialog" aria-label=`Forget everything about ${aboutTitle(forgettingTitle)}?`
-        text "Your imp loses every fact here. It may learn some of them again as you talk."
-        button commandfor="confirm-memory-forget" command="close" testId="memory-forget-cancel"
-          text "Cancel"
-        button press=confirmForget commandfor="confirm-memory-forget" command="close" destructive=true
-          testId="memory-forget-confirm"
-          text "Forget"
+      Confirm(id="confirm-memory-forget", question=`Forget everything about ${aboutTitle(forgettingTitle)}?`,
+        message="Your imp loses every fact here. It may learn some of them again as you talk.", label="Forget",
+        confirm=confirmForget, testId="memory-forget")
       if memory.name != ""
         column gap=2 padding-top=10
           text `${memory.name}, kept on your host.` font-size="0.8125rem" font-style="italic" color="ink.faint"

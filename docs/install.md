@@ -35,6 +35,10 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
 
    The app asks next. Imp cloud takes an E2B key, and a computer of yours is any Linux computer on your tailnet, which a setup prompt you hand to a coding agent prepares. With neither, or to try Imp first, **Skip, use a container here** runs it in a container on the host's machine, free, once Docker, OrbStack or Podman is installed there. See [The agent's computer](computer.md).
 
+4. **Build your first app**
+
+   Describe the GitHub app you want, such as one that shows only the pull requests waiting for your review, and **Build it**: the imp builds it over Imp's GitHub app while you watch, and you save its preview. **Skip, use Imp's GitHub app** installs Imp's as it ships. GitHub reads GitHub as you once you connect it in **Settings → Connections**; until then the imp can ask you for a `github` key, and the app says what it lacks. See [Apps](apps.md#apps-imp-ships).
+
 ## The Mac app on another Mac
 
 The installer puts the Mac app on the Mac that runs the host. On any other Mac on your tailnet, install it from your host:
