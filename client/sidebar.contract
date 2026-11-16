@@ -1,7 +1,7 @@
 // The sidebar: its places (Chat, the apps, the computer, Routines, Tricks, App directory), New chat and the
 // conversations.
 
-use Label, Key from "./look.contract"
+use Label, Key, Body, Mono from "./look.contract"
 use ChatSummary, Routine from "./host.contract"
 
 // A place in the sidebar the chat tab opens: its symbol, its name, a mark in `mark`'s colour ("" for none) and how
@@ -17,12 +17,12 @@ component PlaceEntry
     press: action
   view
     button press=press aria-pressed=selected testId=`${id}-entry` appearance="none" display="flex" align-items="center"
-      gap=10 padding="8px 10px" border="none" text-align="start" color="ink.strong"
+      gap="space.sm" padding="space.sm space.sm" border="none" text-align="start" color="ink.strong"
       background-color=(selected ? "surface.soft" : "transparent")
       :hover
         background-color="surface.soft"
       image symbol width=15 height=15 aria-hidden=true
-      text label font-size="0.9375rem" flex=1
+      text label class=Body flex=1
       if mark != ""
         row width=7 height=7 min-width=7 background-color=mark aria-hidden=true testId=`${id}-mark`
       if count > 0
@@ -50,13 +50,13 @@ component ChatEntry
     row hover=hover position="relative" align-items="center" min-width=0 testId=`${prefix}conversation-row-${index}`
       background-color=(selected or hovered ? "surface.soft" : "transparent")
       button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
-        flex=1 padding="8px 10px" border="none" text-align="start" color="ink.strong" min-width=0
+        flex=1 padding="space.sm space.sm" border="none" text-align="start" color="ink.strong" min-width=0
         background-color="transparent"
-        text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+        text title class=Body flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
       if hovered or touch
         button press=act(id) aria-label=`${verb} ${title}` title=verb testId=`${prefix}conversation-${verb.toLowerCase()}-${index}`
           appearance="none" position="absolute" top=0 bottom=0 right=0 display="flex" align-items="center"
-          justify-content="center" padding="0 10px" border="none" background-color="surface.soft" color="ink.muted"
+          justify-content="center" padding="0 space.sm" border="none" background-color="surface.soft" color="ink.muted"
           :hover
             color="ink.strong"
           image (verb == "Archive" ? "symbol:icon.archive" : "symbol:icon.restore") width=14 height=14 aria-hidden=true
@@ -96,10 +96,10 @@ component Sidebar
   derive routineMark = routines.filter(r => r.running).length > 0 ? "AccentColor" : routines.filter(r => r.unread).length > 0 ? "ink.strong" : ""
   view
     column flex=1 min-height=0 testId=`${prefix}sidebar`
-      column padding="14px 10px 8px"
+      column padding="space.ms space.sm space.sm"
         // Beside the chat on a wide window ⌘N is this button's; on a narrow one, the page header's (under the drawer).
         button press=newChat aria-keyshortcuts=(prefix == "" ? "Meta+N" : "") testId=`${prefix}chat-new`
-          appearance="none" display="flex" align-items="center" gap=8 padding="7px 10px"
+          appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
           border="1px solid line.strong" background-color="transparent" color="ink.strong" text-align="start"
           :hover
             background-color="surface.soft"
@@ -107,7 +107,7 @@ component Sidebar
           text "New chat" class=Label color="inherit" flex=1
           if keyboard
             text "⌘N" class=Key border-color="line.subtle" testId=`${prefix}chat-new-keys` aria-hidden=true
-      column gap=2 padding="4px 10px 12px" border-bottom="1px solid line.subtle"
+      column gap="space.xxs" padding="space.xs space.sm space.ms" border-bottom="1px solid line.subtle"
         PlaceEntry(id=`${prefix}home`, label="Home", symbol="symbol:icon.home", count=0, mark="", selected=atHome,
           press=home)
         PlaceEntry(id=`${prefix}routines`, label="Routines", symbol="symbol:icon.repeat", count=routines.length,
@@ -119,17 +119,17 @@ component Sidebar
             selected=(tab == "directory"), press=openDirectory)
       scroll flex=1 min-height=0
         if conversations.length > 0
-          column gap=2 padding="14px 10px 20px"
-            text "Recent" class=Label padding="0 10px 6px"
+          column gap="space.xxs" padding="space.ms space.sm space.md"
+            text "Recent" class=Label padding="0 space.sm space.xs"
             for c, i in conversations.slice(0, 3) key=c.id
               ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
             if conversations.length > 3
               button press=toggleOlder aria-expanded=olderOpen testId=`${prefix}conversations-older` appearance="none"
-                display="flex" align-items="center" gap=8 padding="9px 10px" margin-top=4 border="none"
+                display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm" margin-top="space.xs" border="none"
                 background-color="transparent" color="ink.muted" text-align="start"
                 :hover
                   color="ink.strong"
-                text (olderOpen ? "−" : "+") font-family="family.mono" width=12 aria-hidden=true
+                text (olderOpen ? "−" : "+") class=Mono width=12 aria-hidden=true
                 text (olderOpen ? "Hide older" : `Older (${conversations.length - 3})`) class=Label color="inherit"
               if olderOpen
                 for c, i in conversations.slice(3) key=c.id
@@ -138,17 +138,17 @@ component Sidebar
       // opened here can be read and written in, and Restore puts it back under Recent. Open, the list scrolls on its own
       // past a third of the window, so Recent keeps its room.
       if archived.length > 0
-        column padding="6px 10px 8px" testId=`${prefix}archived`
+        column padding="space.xs space.sm space.sm" testId=`${prefix}archived`
           button press=toggleArchived aria-expanded=archivedOpen testId=`${prefix}conversations-archived`
-            appearance="none" display="flex" align-items="center" gap=8 padding="9px 10px" border="none"
+            appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm" border="none"
             background-color="transparent" color="ink.muted" text-align="start"
             :hover
               color="ink.strong"
-            text (archivedOpen ? "−" : "+") font-family="family.mono" width=12 aria-hidden=true
+            text (archivedOpen ? "−" : "+") class=Mono width=12 aria-hidden=true
             text `Archived (${archived.length})` class=Label color="inherit"
           if archivedOpen
             scroll max-height="33vh"
-              column gap=2 padding-bottom=4
+              column gap="space.xxs" padding-bottom="space.xs"
                 for c, i in archived key=c.id
                   ChatEntry(prefix=`${prefix}archived-`, index=i, id=c.id, title=c.title,
                     selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Restore", act=restore)

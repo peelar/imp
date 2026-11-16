@@ -11,6 +11,7 @@ import {
   mapProblems,
   violations,
 } from "./boundaries.ts";
+import { designProblems } from "./design.ts";
 
 const branches = (count: number) =>
   Array.from(
@@ -283,6 +284,70 @@ for (const { drifts, rows, says } of [
 }
 
 console.log("The context map refuses a drawing that drifts from it.");
+
+// The design system's check (design.ts) must refuse a screen that writes its own look, and leave alone what it allows.
+for (const { writes, line, says } of [
+  {
+    writes: "a font size",
+    line: 'text "Hi" font-size="0.9375rem"',
+    says: "sets a font size",
+  },
+  {
+    writes: "a font family",
+    line: 'text "Hi" font-family="family.mono"',
+    says: "sets a font",
+  },
+  {
+    writes: "a hex colour",
+    line: 'row background-color="#2341d6"',
+    says: "writes a colour",
+  },
+  {
+    writes: "a system colour",
+    line: 'text "No" color="-exact-system-red"',
+    says: "writes a colour",
+  },
+  {
+    writes: "a gap in pixels",
+    line: "row gap=12",
+    says: "spaces in pixels",
+  },
+  {
+    writes: "a padding in pixels",
+    line: 'column padding="8px space.md"',
+    says: "spaces in pixels",
+  },
+  {
+    writes: "a computed padding in pixels",
+    line: 'row padding=(wide ? "0 24px" : "0 space.md")',
+    says: "spaces in pixels",
+  },
+]) {
+  assert.ok(
+    designProblems(new Map([["apps.contract", line]])).some((problem) =>
+      problem.includes(says)
+    ),
+    `The design check did not refuse ${writes}`
+  );
+}
+
+assert.deepEqual(
+  designProblems(
+    new Map([
+      [
+        "apps.contract",
+        'row gap="space.sm" padding="space.xs 0" margin-bottom="-1px" margin-left="-6px"',
+      ],
+      [
+        "look.contract",
+        'style Body\n  font = "type.body"\n  font-size = "1rem"',
+      ],
+    ])
+  ),
+  []
+);
+
+console.log("The design check refuses a screen's own look, and allows tokens.");
 
 // Inside host/src, so the probes are linted and type-checked as the host's own files are.
 const folder = mkdtempSync(path.resolve("host/src/.lint-policy-"));

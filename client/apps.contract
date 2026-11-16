@@ -2,13 +2,13 @@
 // the bar that says what it reads and offers Save, Discard and Undo for a draft, and Uninstall; and the onboarding's
 // step that installs the first app.
 
-use Label, rise from "./look.contract"
+use Label, Body, Small, Heading, Lead, rise from "./look.contract"
+use Button, DialogButton, Callout from "./controls.contract"
 use KeyBadge, Confirm from "./parts.contract"
 use WizardTitle, WizardButton from "./onboarding.contract"
 use Connection from "./host.contract"
 use GithubSignIn from "./settings/connections.contract"
 
-// A word set in the display serif with its first letter in the script, the catalogue's drop capital.
 // An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
 // preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
 // Otherwise it says how the app's sync went, with Sync now, after a save offers to undo it, and offers to uninstall it.
@@ -38,50 +38,42 @@ component AppPage
   view
     column flex=1 min-height=0
       if draft
-        row testId="preview-bar" align-items="center" gap=12 padding="10px 20px" background-color="fill.preview"
-          color="ink.on-fill" flex-wrap="wrap"
+        // The preview's own surface, in the accent: its two buttons are drawn in white on it rather than as Buttons.
+        row testId="preview-bar" align-items="center" gap="space.ms" padding="space.sm space.md"
+          background-color="fill.preview" color="ink.on-fill" flex-wrap="wrap"
           text "Preview" class=Label color="ink.on-fill"
-          column flex=1 min-width="12rem" gap=2
-            text "A new version, on a copy of your data. Nothing you do here is kept." font-size="0.9375rem"
+          column flex=1 min-width="12rem" gap="space.xxs"
+            text "A new version, on a copy of your data. Nothing you do here is kept." class=Body
             if reads != ""
-              text reads font-size="0.875rem" opacity=0.85 testId="preview-reads"
-          button press=discard(id) testId="preview-discard" padding="7px 12px" border="1px solid ink.on-fill"
+              text reads class=Small opacity=0.85 testId="preview-reads"
+          button press=discard(id) testId="preview-discard" padding="space.sm space.ms" border="1px solid ink.on-fill"
             background-color="transparent" color="ink.on-fill"
             text "Discard" class=Label color="inherit"
-          button press=save(id) aria-keyshortcuts="Meta+S" testId="preview-save" padding="7px 12px"
+          button press=save(id) aria-keyshortcuts="Meta+S" testId="preview-save" padding="space.sm space.ms"
             border="1px solid ink.on-fill" background-color="ink.on-fill" color="fill.preview" position="relative"
             text "Save" class=Label color="inherit"
             if keys
               KeyBadge(chord="Meta+S", at="end")
       else
         // Under the page's header, in line with its title.
-        row padding="8px 24px" border-bottom="1px solid line.subtle"
-          row width="100%" align-items="center" gap=12
+        row padding="space.sm space.lg" border-bottom="1px solid line.subtle"
+          row width="100%" align-items="center" gap="space.ms"
             if sync != ""
-              row flex=1 min-width=0 align-items="center" gap=10 testId="sync-bar"
-                text sync font-size="0.8125rem" color=(sync.startsWith("Sync failing") ? "-exact-system-red" : "ink.muted")
+              row flex=1 min-width=0 align-items="center" gap="space.sm" testId="sync-bar"
+                text sync class=Small color=(sync.startsWith("Sync failing") ? "ink.danger" : "ink.muted")
                   min-width=0 overflow-wrap="anywhere" testId="sync-status"
-                button press=syncNow(id) disabled=(sync == "Syncing…") testId="sync-now" padding="4px 0" border="none"
-                  background-color="transparent" color="ink.muted" flex-shrink=0
-                  :hover
-                    color="ink.strong"
-                  :disabled
-                    color="ink.faint"
-                  text "Sync now" class=Label color="inherit"
+                Button(press=syncNow(id), variant="quiet", disabled=(sync == "Syncing…"), testId="sync-now")
+                  text "Sync now"
             else if uninstallError != ""
-              text uninstallError font-size="0.8125rem" color="-exact-system-red" flex=1 min-width=0
-                overflow-wrap="anywhere" testId="uninstall-error"
+              text uninstallError class=Small color="ink.danger" flex=1 min-width=0 overflow-wrap="anywhere"
+                testId="uninstall-error"
             else
               row flex=1
             if undo != ""
-              button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
-                border="1px solid line.strong" background-color="transparent" color="ink.strong" flex-shrink=0
-                text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
-            button commandfor=`uninstall-${id}` command="show-modal" testId="uninstall" padding="4px 0" border="none"
-              background-color="transparent" color="ink.muted" flex-shrink=0
-              :hover
-                color="-exact-system-red"
-              text "Uninstall" class=Label color="inherit"
+              DialogButton(dialog=`undo-${id}`, variant="secondary", testId="undo-save")
+                text (undo == "remove" ? "Undo: remove app" : "Undo last save")
+            DialogButton(dialog=`uninstall-${id}`, variant="quiet-danger", testId="uninstall")
+              text "Uninstall"
         Confirm(id=`undo-${id}`, question="Undo the last save?",
           message=(undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays."),
           label="Undo", confirm=undoSave(id), testId="undo")
@@ -90,31 +82,26 @@ component AppPage
           testId="uninstall")
       scroll id=`${id}-screen` flex=1 min-height=0
         if not draft and (guide or needs != "")
-          column padding="20px 24px 4px"
-            column gap=14 max-width="34rem" padding="16px 18px" border-left="3px solid AccentColor"
-              background-color="accent.soft" testId="app-card"
+          column padding="space.lg space.lg space.xs" max-width="measure.note"
+            Callout(tone="accent", testId="app-card")
               if guide
-                column gap=6 testId="app-guide"
+                column gap="space.xs" testId="app-guide"
                   text "Your first app" class=Label color="AccentColor" role="heading" aria-level=2
                   text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
-                    font-size="0.9375rem" line-height=1.45
+                    class=Body
               if needs != ""
-                column gap=10 align-items="flex-start" testId="app-needs"
+                column gap="space.sm" align-items="flex-start" testId="app-needs"
                   text (needs == "github" ? "This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile."
                     : `This app reads with your ${needs} key: add it, and the app fills in.`)
-                    font-size="0.9375rem" line-height=1.45 color="ink.muted"
-                  button press=openSettings(needs == "github" ? "connections" : "secrets") testId="app-needs-settings"
-                    padding="8px 12px" border="1px solid AccentColor" background-color="transparent" color="AccentColor"
-                    font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
-                    :hover
-                      background-color="surface.page"
-                    text (needs == "github" ? "Connect GitHub in Settings →" : "Add it in Settings →")
+                    class=Body color="ink.muted"
+                  Button(press=openSettings(needs == "github" ? "connections" : "secrets"), variant="accent",
+                    disabled=false, testId="app-needs-settings")
+                    text (needs == "github" ? "Connect GitHub in Settings" : "Add it in Settings")
+                    text "→" aria-hidden=true
               if guide
-                button press=dismissGuide testId="app-guide-dismiss" align-self="flex-start" padding="4px 0"
-                  border="none" background-color="transparent" color="ink.muted"
-                  :hover
-                    color="ink.strong"
-                  text "Got it" class=Label color="inherit"
+                row
+                  Button(press=dismissGuide, variant="quiet", disabled=false, testId="app-guide-dismiss")
+                    text "Got it"
         children
 
 // One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
@@ -133,7 +120,7 @@ component AppTab
     button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
       aria-keyshortcuts=chord aria-label=label title=label testId=`${prefix}tab-${name}` appearance="none"
       display=(shown ? "flex" : "none") flex-direction="column" align-items="center" justify-content="center"
-      position="relative" box-sizing="border-box" flex="1 1 0" max-width="7rem" gap=4 min-width=0 padding=0
+      position="relative" box-sizing="border-box" flex="1 1 0" max-width="7rem" gap="space.xs" min-width=0 padding=0
       border="none" border-top=(selected ? "2px solid ink.strong" : "2px solid transparent")
       background-color="transparent" color=(selected ? "ink.strong" : "ink.muted")
       transition="background-color 120ms ease, color 120ms ease"
@@ -141,8 +128,7 @@ component AppTab
         color="ink.strong"
         background-color="surface.soft"
       image symbol width=19 height=19 aria-hidden=true
-      text label font-family="family.mono" font-size="0.625rem" font-weight=500 letter-spacing="0.1em"
-        text-transform="uppercase" aria-hidden=true
+      text label class=Label color="inherit" aria-hidden=true
       if keys and chord != ""
         KeyBadge(chord=chord, at="tab")
 
@@ -164,28 +150,28 @@ component FirstAppWizard
     cancelGithub: action
     copyGithubCode: action
   view
-    column gap=18 testId="first-app" animation=(still ? "none" : "rise 260ms ease-out both")
+    column gap="space.md" testId="first-app" animation=(still ? "none" : "rise 260ms ease-out both")
       WizardTitle(title="Build your first app", note="Say what you want to see. Your imp builds it while you watch.")
-      row gap=14 align-items="center" padding="14px 0" border-top="1px solid line.subtle"
+      row gap="space.ms" align-items="center" padding="space.ms 0" border-top="1px solid line.subtle"
         border-bottom="1px solid line.subtle"
         row width=44 height=44 min-width=44 align-items="center" justify-content="center" border="1px solid line.strong"
           box-sizing="border-box" aria-hidden=true
           image "symbol:icon.github" width=20 height=20
-        column gap=4 flex=1 min-width=0
-          text "GitHub" font-family="family.display" font-size="1.375rem" line-height=1.1
+        column gap="space.xs" flex=1 min-width=0
+          text "GitHub" class=Heading
           text "Imp reads your review requests, your pull requests, what's assigned to you and your notifications. Your app shows what you choose."
-            font-size="0.9375rem" color="ink.muted" line-height=1.4
+            class=Body color="ink.muted"
       if github.status == "on"
-        text (github.login == "" ? "GitHub is connected." : `Connected as @${github.login}.`) font-size="0.9375rem"
+        text (github.login == "" ? "GitHub is connected." : `Connected as @${github.login}.`) class=Body
           testId="first-app-connected"
       else
         GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
           copyCode=copyGithubCode, note="Connect now, or later: your imp builds the app either way.", prefix="first-app-", quiet=true)
-      textarea value=ask input=edit rows=4 aria-label="The app you want" testId="first-app-ask" padding="12px 14px"
-        border="1px solid line.strong" background-color="transparent" outline="none" resize="vertical"
-        font-family="family.text" font-size="1rem" line-height=1.5 color="ink.strong"
+      textarea value=ask input=edit rows=4 aria-label="The app you want" testId="first-app-ask"
+        padding="space.ms space.ms" border="1px solid line.strong" background-color="transparent" outline="none"
+        resize="vertical" class=Lead color="ink.strong"
       if error != ""
-        text error color="-exact-system-red" font-size="0.9375rem" testId="first-app-error"
+        text error class=Body color="ink.danger" testId="first-app-error"
       WizardButton(label=(busy ? "Starting…" : "Build it"), press=build, testId="first-app-build", primary=true,
         disabled=(busy or ask.trim() == ""))
       WizardButton(label="Skip, use Imp's GitHub app", press=skip, testId="first-app-skip", primary=false, disabled=busy)

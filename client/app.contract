@@ -20,7 +20,8 @@ use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 use showNotification, closeNotification, setAppBadge, clearAppBadge, notificationStatus, requestNotificationPermission, notificationclick, NotificationStatus, NotificationEvent from "@exact/notifications"
 use getUserMedia, stopTrack, MediaStream, MediaStreamTrack from "@exact/media-capture"
 use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
-use Label, pulse, Key, rise from "./look.contract"
+use Label, pulse, Key, rise, Body, Code, Control, Display, Heading, Lead, Mono, Title, Initial, Monogram, Page from "./look.contract"
+use Button from "./controls.contract"
 use SecretSettings from "./settings/secrets.contract"
 use MemorySettings from "./settings/memory.contract"
 use NotificationSettings from "./settings/notifications.contract"
@@ -809,16 +810,16 @@ component App
     main navigationKey=`${top(nav).id}` navigate=follow key=keyDown keyup=keyUp notificationclick=openNotice testId="app" width="100%" height="100%"
       display="flex" flex-direction="column" position="relative" viewport-fit="cover" interactive-widget="resizes-content"
       background-color="surface.page"
-      color="ink.strong" font-family="family.text"
+      color="ink.strong" class=Page
       // While the host has not said yet whether Imp is set up, or the home page has not arrived: the mark alone, so
       // neither the onboarding nor the last conversation flashes first.
       if opening
-        column flex=1 align-items="center" justify-content="center" gap=16 role="status" aria-label="Opening Imp"
+        column flex=1 align-items="center" justify-content="center" gap="space.md" role="status" aria-label="Opening Imp"
           testId="opening" animation=(still ? "none" : "rise 400ms ease-out both")
           image "symbol:icon.imp" width=44 height=44 aria-hidden=true
             animation=(still ? "none" : "pulse 1.6s ease-in-out infinite")
-          text aria-hidden=true font-family="family.display" font-size="2.25rem" line-height=1.05
-            text "I" font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.04em"
+          text aria-hidden=true class=Display
+            text "I" class=Initial margin-right="0.04em"
             text "mp"
       else if signedIn and not needsComputer and not needsFirstApp
         // The routes. On a wide window they sit under the top bar, between the sidebar and the chat's column, above the
@@ -829,13 +830,13 @@ component App
               for e in t.stack key=e.id
                 column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : ["routines", "tricks", "directory"].includes(e.name) ? `${e.name}-list` : `${e.name}-screen`)
                   position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
-                  padding-bottom=(wide ? "0px" : "calc(3.5rem + env(safe-area-inset-bottom))")
+                  padding-bottom=(wide ? "0" : "calc(3.5rem + env(safe-area-inset-bottom))")
                   // On a wide window every page's header is the same bar, as tall as the chat column's, its title at
                   // the left: switching pages moves nothing.
-                  header display="flex" justify-content="center" padding=(wide ? "0 24px" : "0 20px")
+                  header display="flex" justify-content="center" padding=(wide ? "0 space.lg" : "0 space.md")
                     border-bottom="1px solid line.subtle" background-color="surface.page"
-                    row width="100%" max-width=(wide ? "none" : "46rem") align-items="center" gap=12
-                      height=(wide ? "3.25rem" : "auto") box-sizing="border-box" padding=(wide ? "0px" : "12px 0 11px")
+                    row width="100%" max-width=(wide ? "none" : "measure.page") align-items="center" gap="space.ms"
+                      height=(wide ? "3.25rem" : "auto") box-sizing="border-box" padding=(wide ? "0" : "space.ms 0 space.ms")
                       if ["chat", "routines", "tricks", "directory"].includes(e.name) and not wide
                         button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
                           aria-keyshortcuts="Control+Meta+S" testId="drawer-toggle" appearance="none" width=32 height=32
@@ -850,9 +851,9 @@ component App
                       // A new release of the Mac app is ready: it waits for the person to restart, never quits Imp.
                       if update.version != ""
                         button press=restartToUpdate disabled=pending(restarting) testId=`update-restart-${e.name}`
-                          aria-label=`Restart Imp to update to ${update.version}` display="flex" align-items="center" gap=8
-                          padding="7px 12px" border="none" background-color="AccentColor" color="ink.on-fill"
-                          font-family="family.mono" font-size="0.6875rem" letter-spacing="0.08em" text-transform="uppercase"
+                          aria-label=`Restart Imp to update to ${update.version}` display="flex" align-items="center" gap="space.sm"
+                          padding="space.sm space.ms" border="none" background-color="AccentColor" color="ink.on-fill"
+                          class=Label
                           white-space="nowrap"
                           :disabled
                             background-color="surface.soft"
@@ -860,7 +861,7 @@ component App
                           image "symbol:icon.refresh" width=12 height=12 aria-hidden=true
                           text (wide ? `Restart for ${update.version}` : "Update")
                       if e.name == "chat" and chat.busy
-                        row gap=8 align-items="center" testId="busy"
+                        row gap="space.sm" align-items="center" testId="busy"
                           row width=6 height=6 background-color="AccentColor" aria-hidden=true
                             animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
                           text "Imp at work" class=Label color="ink.strong"
@@ -895,19 +896,19 @@ component App
                     if chat.messages.length == 0 and not chat.busy and chat.routine == ""
                       // Home with nothing said yet: a greeting, the apps, and what to try.
                       scroll id="home-scroll" flex=1 min-height=0
-                        column max-width="48.5rem" margin="0 auto" padding="28px 20px 28px" gap=28 box-sizing="border-box"
+                        column max-width="48.5rem" margin="0 auto" padding="space.lg space.md space.lg" gap="space.lg" box-sizing="border-box"
                           width="100%" testId="home"
-                          column gap=12
+                          column gap="space.ms"
                             Initialled(word=salutation, size="2.5rem", heading=2)
                             text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
-                              color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+                              color="ink.muted" class=Lead max-width="measure.note"
                           column
-                            row align-items="baseline" justify-content="space-between" padding-bottom=10
+                            row align-items="baseline" justify-content="space-between" padding-bottom="space.sm"
                               border-bottom="1px solid ink.strong"
                               text "Your apps" class=Label color="ink.strong" role="heading" aria-level=3
                               text `No. ${numbered(apps.length + (computer.status == "none" ? 0 : 1))}` class=Label
                             for a in apps key=a.id
-                              button press=pick(a.id) display="flex" align-items="center" gap=14 padding="14px 12px"
+                              button press=pick(a.id) display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId=`app-${a.id}`
                                 transition="background-color 120ms ease"
@@ -916,12 +917,12 @@ component App
                                 row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                                   border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
                                   image a.symbol width=20 height=20
-                                column gap=2 flex=1 min-width=0
-                                  text a.name font-family="family.display" font-size="1.375rem" line-height=1.1
-                                  text a.description font-size="0.9375rem" color="ink.muted" line-clamp=1
+                                column gap="space.xxs" flex=1 min-width=0
+                                  text a.name class=Heading
+                                  text a.description class=Body color="ink.muted" line-clamp=1
                             // The imp's computer, as an app: its screen, to watch the imp work or take over.
                             if computer.status != "none"
-                              button press=pick("computer") display="flex" align-items="center" gap=14 padding="14px 12px"
+                              button press=pick("computer") display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId="app-computer"
                                 transition="background-color 120ms ease"
@@ -930,11 +931,11 @@ component App
                                 row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                                   border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
                                   image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=20 height=20
-                                column gap=2 flex=1 min-width=0
-                                  text "Computer" font-family="family.display" font-size="1.375rem" line-height=1.1
-                                  text `${computer.name}. Watch your imp work, or take over.` font-size="0.9375rem"
+                                column gap="space.xxs" flex=1 min-width=0
+                                  text "Computer" class=Heading
+                                  text `${computer.name}. Watch your imp work, or take over.` class=Body
                                     color="ink.muted" line-clamp=1
-                            button press=startApp display="flex" align-items="center" gap=14 padding="14px 12px"
+                            button press=startApp display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
                               background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                               text-align="start" color="ink.strong" testId="app-new"
                               transition="background-color 120ms ease"
@@ -943,17 +944,17 @@ component App
                               row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                                 border="1px dashed line.strong" box-sizing="border-box" aria-hidden=true color="ink.muted"
                                 image "symbol:icon.add" width=20 height=20
-                              column gap=2 flex=1 min-width=0
-                                text "Build a new app" font-family="family.display" font-size="1.375rem" line-height=1.1
-                                text "Describe it in a sentence. It stays here." font-size="0.9375rem" color="ink.muted"
-                          column gap=10
+                              column gap="space.xxs" flex=1 min-width=0
+                                text "Build a new app" class=Heading
+                                text "Describe it in a sentence. It stays here." class=Body color="ink.muted"
+                          column gap="space.sm"
                             text "Try" class=Label
-                            row flex-wrap="wrap" gap=8
+                            row flex-wrap="wrap" gap="space.sm"
                               // The todos ones only while Todos is installed.
                               for s in (apps.map(a => a.id).includes("todos") ? ["Add todo: Buy flowers", "What's on my todo list?"] : []).concat(["Build me an app that tracks my runs"]) key=s
-                                button press=suggest(s) disabled=pending(sent) padding="8px 12px"
+                                button press=suggest(s) disabled=pending(sent) padding="space.sm space.ms"
                                   background-color="transparent" border="1px solid line.strong" color="ink.strong"
-                                  font-size="0.9375rem" transition="border-color 120ms ease, background-color 120ms ease"
+                                  class=Body transition="border-color 120ms ease, background-color 120ms ease"
                                   testId=`suggest-${s.length}`
                                   :hover
                                     border-color="ink.strong"
@@ -967,22 +968,22 @@ component App
                       model=account.model, models=account.models, chooseModel=chooseModel)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
-                      column max-width="48.5rem" margin="0 auto" padding="20px 20px 32px" gap=24 box-sizing="border-box" width="100%"
+                      column max-width="48.5rem" margin="0 auto" padding="space.md space.md space.xl" gap="space.lg" box-sizing="border-box" width="100%"
                         // Settings' sections, one at a time.
-                        row role="group" aria-label="Settings sections" gap=12 overflow-x="auto"
+                        row role="group" aria-label="Settings sections" gap="space.ms" overflow-x="auto"
                           border-bottom="1px solid line.subtle" testId="settings-sections"
                           for s in ["general", "computer", "memory", "secrets", "connections", "experimental"] key=s
                             button press=openSettings(s) aria-pressed=(settingsPane == s) testId=`settings-pane-${s}`
-                              appearance="none" display="flex" align-items="baseline" padding="10px 0" margin-bottom="-1px" border="none"
+                              appearance="none" display="flex" align-items="baseline" padding="space.sm 0" margin-bottom="-1px" border="none"
                               border-bottom=(settingsPane == s ? "2px solid ink.strong" : "2px solid transparent")
                               background-color="transparent" color=(settingsPane == s ? "ink.strong" : "ink.muted")
-                              font-family="family.mono" font-size="0.6875rem" letter-spacing="0.06em" text-transform="uppercase"
+                              class=Label
                               white-space="nowrap"
                               :hover
                                 color="ink.strong"
                               text capitalized(s)
                               if settingsCount(s, memory, secrets) != ""
-                                text settingsCount(s, memory, secrets) color="ink.faint" margin-left=4
+                                text settingsCount(s, memory, secrets) color="ink.faint" margin-left="space.xs"
                                   testId=`settings-count-${s}`
                         if settingsPane == "computer"
                           ComputerSettings(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
@@ -1006,46 +1007,46 @@ component App
                         else
                           if onKey
                             column
-                              row padding-bottom=10 border-bottom="1px solid ink.strong"
+                              row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
                                 text "API key" class=Label color="ink.strong" role="heading" aria-level=2
-                              column gap=4 padding="16px 0" border-bottom="1px solid line.subtle"
-                                text account.model font-family="family.display" font-size="1.375rem"
-                                  line-height=1.15 overflow-wrap="anywhere" testId="account-model"
-                                text account.baseUrl font-family="family.mono" font-size="0.75rem" color="ink.muted" overflow-wrap="anywhere"
+                              column gap="space.xs" padding="space.md 0" border-bottom="1px solid line.subtle"
+                                text account.model class=Heading
+                                  overflow-wrap="anywhere" testId="account-model"
+                                text account.baseUrl class=Mono color="ink.muted" overflow-wrap="anywhere"
                                   testId="account-base"
                           else
                             column
-                              row padding-bottom=10 border-bottom="1px solid ink.strong"
+                              row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
                                 text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
-                              row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
+                              row gap="space.ms" align-items="center" padding="space.md 0" border-bottom="1px solid line.subtle"
                                 text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
-                                  text-align="center" line-height="2.75rem" font-family="family.script" font-size="1.75rem"
+                                  text-align="center" class=Monogram
                                   border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                                column flex=1 min-width=0 gap=4 align-items="flex-start"
-                                  text (account.email == "" ? "ChatGPT account" : account.email) font-family="family.display"
-                                    font-size="1.375rem" line-height=1.15 overflow-wrap="anywhere" testId="account-email"
+                                column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
+                                  text (account.email == "" ? "ChatGPT account" : account.email) class=Heading
+                                      overflow-wrap="anywhere" testId="account-email"
                                   if account.plan != ""
                                     text capitalized(account.plan) class=Label testId="account-plan"
                           column
-                            row padding-bottom=10 border-bottom="1px solid ink.strong"
+                            row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
                               text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
-                            row role="radiogroup" aria-label="Appearance" padding-top=14 gap=0
+                            row role="radiogroup" aria-label="Appearance" padding-top="space.ms" gap=0
                               for s, i in ["system", "light", "dark"] key=s
                                 button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
-                                  padding="10px 0" border="1px solid line.strong" margin-left=(i == 0 ? "0px" : "-1px")
+                                  padding="space.sm 0" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
                                   background-color=(scheme == s ? "ink.strong" : "transparent")
                                   color=(scheme == s ? "surface.page" : "ink.strong")
-                                  font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                                  class=Control
                                   text capitalized(s)
                           NotificationSettings(alerts=alerts, asking=pending(alertsAsked), allow=allowNotifications)
                           column
                             button press=askSignOut disabled=pending(signedOut) testId="signout" display="flex" align-items="center"
-                              gap=10 padding="14px 0" color="-exact-system-red" background-color="transparent" border="none"
+                              gap="space.sm" padding="space.ms 0" color="ink.danger" background-color="transparent" border="none"
                               border-top="1px solid line.subtle" border-bottom="1px solid line.subtle" text-align="start"
                               :hover
                                 background-color="danger.soft"
                               image "symbol:icon.sign-out" width=16 height=16
-                              text "Sign out" class=Label color="-exact-system-red"
+                              text "Sign out" class=Label color="ink.danger"
                     Confirm(id="confirm-signout", question=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?"),
                       message="Your imp stops until you sign in again. Your chats and apps stay.", label="Sign out",
                       confirm=signOut, testId="signout")
@@ -1074,16 +1075,16 @@ component App
               openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard,
               directory=directoryOn)
             // As tall as the tab bar beside it, so their top lines meet.
-            column height="3.5rem" box-sizing="border-box" justify-content="center" padding="0 10px"
+            column height="3.5rem" box-sizing="border-box" justify-content="center" padding="0 space.sm"
               border-top="1px solid line.subtle"
               button press=pick("settings") aria-pressed=(nav.tab == "settings") aria-keyshortcuts="Meta+,"
-                testId="tab-settings" appearance="none" display="flex" align-items="center" gap=10 padding="8px 10px"
+                testId="tab-settings" appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
                 border="none" text-align="start" color="ink.strong"
                 background-color=(nav.tab == "settings" ? "surface.soft" : "transparent")
                 :hover
                   background-color="surface.soft"
                 image "symbol:icon.settings" width=16 height=16 aria-hidden=true
-                text "Settings" font-size="0.9375rem" flex=1
+                text "Settings" class=Body flex=1
                 if keys
                   text "⌘," class=Key aria-hidden=true testId="keys-Meta+,"
           row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left="15rem" right="24rem" bottom=0
@@ -1109,7 +1110,7 @@ component App
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="24rem" box-sizing="border-box"
             display="flex" flex-direction="column" border-left="1px solid line.subtle" background-color="surface.page"
             aria-label="Chat" testId="chat-panel"
-            row align-items="center" gap=10 padding="0 10px 0 18px" height="3.25rem" box-sizing="border-box"
+            row align-items="center" gap="space.sm" padding="0 space.sm 0 space.md" height="3.25rem" box-sizing="border-box"
               border-bottom="1px solid line.subtle"
               text "Chat" class=Label color="ink.strong" role="heading" aria-level=2
               if chat.busy
@@ -1123,7 +1124,7 @@ component App
                   background-color="surface.soft"
                 image "symbol:icon.expand" width=15 height=15
             if chat.messages.length == 0 and not chat.busy
-              column flex=1 min-height=0 justify-content="flex-end" padding="24px 18px" gap=8 testId="side-empty"
+              column flex=1 min-height=0 justify-content="flex-end" padding="space.lg space.md" gap="space.sm" testId="side-empty"
                 Initialled(word=(sideSubject == "" ? "Ask your imp." : `Ask about ${sideSubject}.`), size="1.75rem", heading=3)
                 text (nav.tab == "computer" ? "Ask your imp to do something on it, and watch it work."
                   : sideSubject != "" ? "Your imp can read it, change it, and build on it while you watch."
@@ -1155,44 +1156,39 @@ component App
         // The masthead above everything on a wide window: the wordmark and the day.
         if wide
           row position="absolute" top=0 left=0 right=0 height="3.25rem" box-sizing="border-box" align-items="center"
-            padding="0 20px" border-bottom="1px solid line.subtle" background-color="surface.page"
+            padding="0 space.md" border-bottom="1px solid line.subtle" background-color="surface.page"
             button press=goHome aria-label="Imp, home" testId="home-logo" appearance="none" display="flex"
-              align-items="center" gap=9 padding="4px 6px" margin-left="-6px" border="none"
+              align-items="center" gap="space.sm" padding="space.xs space.xs" margin-left="-6px" border="none"
               background-color="transparent" color="ink.strong"
               :hover
                 background-color="surface.soft"
               image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-              text aria-hidden=true font-family="family.display" font-size="1.625rem" line-height=1.05
-                text "I" font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.04em"
+              text aria-hidden=true class=Title
+                text "I" class=Initial margin-right="0.04em"
                 text "mp"
             row flex=1
             text formatDate(shown, time.utcOffset, "medium") class=Label
       else
         // Onboarding, a wizard: one question a screen, a model first and then a computer.
         scroll flex=1 min-height=0
-          column min-height="100%" box-sizing="border-box" padding="36px 24px 40px" gap=28 max-width="28rem" margin="0 auto"
+          column min-height="100%" box-sizing="border-box" padding="space.xl space.lg space.xl" gap="space.lg" max-width="measure.form" margin="0 auto"
             justify-content="center" testId="onboarding"
-            row align-items="center" gap=10 padding-bottom=12 border-bottom="1px solid ink.strong"
+            row align-items="center" gap="space.sm" padding-bottom="space.ms" border-bottom="1px solid ink.strong"
               image "symbol:icon.imp" width=32 height=32 aria-hidden=true
               Initialled(word="Imp", size="2rem", heading=1)
               row flex=1
               if not unreachable
                 text (needsFirstApp ? "3 / 3" : signedIn ? "2 / 3" : "1 / 3") class=Label testId="onboarding-step"
             if unreachable
-              column gap=14 testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
+              column gap="space.ms" testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
                 WizardTitle(title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"),
                   note=(hostAddress == "" ? "Its address on your tailnet." : `Nothing answered at ${hostAddress}.`))
-                row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+                row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.ms" border="1px solid line.strong"
                   input value=hostDraft input=editHost submit=connect placeholder="imp.your-tailnet.ts.net"
-                    aria-label="Host address" testId="host-address" flex=1 min-width=0 padding="9px 0" border="none"
-                    background-color="transparent" outline="none" font-family="family.mono" font-size="0.9375rem"
+                    aria-label="Host address" testId="host-address" flex=1 min-width=0 padding="space.sm 0" border="none"
+                    background-color="transparent" outline="none" class=Mono
                     color="ink.strong" autocapitalize="none" autocorrect="off" spellcheck=false
-                  button press=connect disabled=(hostDraft.trim() == "") testId="host-connect-button" padding="10px 14px"
-                    border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
-                    font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
-                    :disabled
-                      background-color="surface.soft"
-                      color="ink.faint"
+                  Button(press=connect, variant="primary", disabled=(hostDraft.trim() == ""), testId="host-connect-button")
                     text "Connect"
             else if needsFirstApp
               FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=pending(appInstalled), error=installError,
@@ -1206,41 +1202,36 @@ component App
                 copyPrompt=copySetupPrompt, choice=computerChoice, toggle=toggleComputerChoice,
                 still=still)
             else
-              column gap=14 animation=(still ? "none" : "rise 260ms ease-out both")
+              column gap="space.ms" animation=(still ? "none" : "rise 260ms ease-out both")
                 image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
                   width="100%" height="auto" aspect-ratio="2 / 1" max-height="13rem" object-fit="cover"
                   border="1px solid line.subtle" box-sizing="border-box"
                 WizardTitle(title="Connect a model", note="Your imp thinks with it.")
                 if account.status == "failed"
-                  text account.error color="-exact-system-red" font-size="0.9375rem" testId="signin-error"
+                  text account.error color="ink.danger" class=Body testId="signin-error"
                 WizardFold(label="Continue with ChatGPT", press=foldChatGPT, testId="signin", primary=(not signingIn),
                   open=signingIn, disabled=(pending(signInStarted) or pending(signInCancelled)))
                   if account.status == "waiting"
-                    column gap=12 testId="signin-waiting"
-                      row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
-                        text account.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
-                          letter-spacing="0.18em" user-select="all" testId="signin-code"
-                        button press=copyCode testId="signin-copy" display="flex" align-items="center" gap=6
-                          padding="9px 12px" border="1px solid line.strong" background-color="transparent"
-                          color="ink.strong" font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em"
-                          text-transform="uppercase"
-                          :hover
-                            background-color="surface.soft"
+                    column gap="space.ms" testId="signin-waiting"
+                      row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.md" border="1px solid line.strong"
+                        text account.code flex=1 class=Code
+                          user-select="all" testId="signin-code"
+                        Button(press=copyCode, variant="secondary", disabled=false, testId="signin-copy")
                           image "symbol:icon.copy" width=13 height=13 aria-hidden=true
                           text "Copy"
                       link href=account.url testId="signin-open" display="flex" align-items="center"
-                        justify-content="center" gap=8 padding="13px 16px" background-color="AccentColor"
-                        color="ink.on-fill" font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em"
+                        justify-content="center" gap="space.sm" padding="space.ms space.md" background-color="AccentColor"
+                        color="ink.on-fill" class=Mono
                         text-transform="uppercase" text-decoration-line="none"
                         text "Open ChatGPT"
                         image "symbol:icon.open" width=14 height=14 aria-hidden=true
-                  row gap=10 align-items="center"
+                  row gap="space.sm" align-items="center"
                     progress aria-label=(account.status == "waiting" ? "Waiting for approval" : "Connecting")
                     text (account.status == "waiting" ? "Waiting for approval…" : "Connecting…") font-style="italic"
                       color="ink.muted"
                 WizardFold(label="Use an API key", press=toggleKeyForm, testId="key-open", primary=false, open=keyForm,
                   disabled=false)
-                  column gap=14 testId="key-form"
+                  column gap="space.ms" testId="key-form"
                     KeyField(label="API address", value=keyBase, edit=editKeyBase, secret=false,
                       placeholder="https://api.openai.com/v1", testId="key-base")
                     KeyField(label="API key", value=keyValue, edit=editKeyValue, secret=true, placeholder="sk-…",
@@ -1248,7 +1239,7 @@ component App
                     KeyField(label="Model", value=keyModel, edit=editKeyModel, secret=false, placeholder="gpt-5",
                       testId="key-model")
                     if apiKeyError != "" and not pending(keyUsed)
-                      text apiKeyError color="-exact-system-red" font-size="0.9375rem" testId="key-error"
+                      text apiKeyError color="ink.danger" class=Body testId="key-error"
                     WizardButton(label=(pending(keyUsed) ? "Checking…" : "Connect"), press=useKey, testId="key-use",
                       primary=true, disabled=(pending(keyUsed) or keyBase.trim() == "" or keyValue.trim() == "" or keyModel.trim() == ""))
 

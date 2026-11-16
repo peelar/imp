@@ -1,7 +1,7 @@
 // Small parts more than one screen of the shell uses: a shortcut's keys on its control, a person's initial, a
 // number in words, and the question asked before what can't be undone.
 
-use Key, Label from "./look.contract"
+use Key, Label, Body, Title, Display, Initial from "./look.contract"
 
 // A chord as the Mac writes it: "Control+Meta+S" is ⌃⌘S.
 fn keysOf(chord: string): string =
@@ -24,10 +24,9 @@ component Initialled
     size: string
     heading: number
   view
-    text role="heading" aria-level=heading font-family="family.display" font-size=size line-height=1.05
-      letter-spacing="-0.01em"
+    text role="heading" aria-level=heading class=Display font-size=size
       // The script capital's swash leans into the next letter: a little room keeps the word readable.
-      text word.slice(0, 1) font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.08em"
+      text word.slice(0, 1) class=Initial margin-right="0.08em"
       text word.slice(1)
 
 fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`
@@ -47,17 +46,17 @@ component Confirm
     dialog id=id aria-label=question width="min(26rem, calc(100vw - 32px))" box-sizing="border-box"
       padding=0 border="1px solid ink.strong" border-radius=0 background-color="surface.page" color="ink.strong"
       box-shadow="none"
-      column gap=8 padding="22px 24px 0"
-        text question font-family="family.display" font-size="1.5rem" line-height=1.15 role="heading" aria-level=2
-        text message font-size="0.9375rem" line-height=1.45 color="ink.muted"
-      row justify-content="flex-end" gap=8 padding="20px 24px 22px"
-        button commandfor=id command="close" testId=`${testId}-cancel` padding="8px 14px" border="1px solid line.strong"
+      column gap="space.sm" padding="space.lg space.lg 0"
+        text question class=Title role="heading" aria-level=2
+        text message class=Body color="ink.muted"
+      row justify-content="flex-end" gap="space.sm" padding="space.md space.lg space.lg"
+        button commandfor=id command="close" testId=`${testId}-cancel` padding="space.sm space.ms" border="1px solid line.strong"
           border-radius=0 background-color="transparent" color="ink.strong"
           :hover
             background-color="surface.soft"
           text "Cancel" class=Label color="inherit"
-        button press=confirm commandfor=id command="close" destructive=true testId=`${testId}-confirm` padding="8px 14px"
-          border="1px solid -exact-system-red" border-radius=0 background-color="-exact-system-red" color="ink.on-fill"
+        button press=confirm commandfor=id command="close" destructive=true testId=`${testId}-confirm` padding="space.sm space.ms"
+          border="1px solid ink.danger" border-radius=0 background-color="ink.danger" color="ink.on-fill"
           :hover
             opacity=0.9
           text label class=Label color="inherit"

@@ -28,6 +28,7 @@ These docs are for the people who run an Imp: how to install it, how its parts f
 
 - [Architecture](architecture.md): the host, the machine, the client, and how a request travels between them
 - [Machines](machines.md): the adapter contract every machine provider implements
+- [The design system](design.md): the shell's tokens, text styles and controls, and the check that keeps screens to them
 - [Apps](apps.md): how an app runs, where its data lives, and how a new version reaches your screen
 - [Routines](routines.md): what the imp does on a schedule
 - [Notifications](notifications.md): what the imp tells you while you are away, and where

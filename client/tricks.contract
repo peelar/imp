@@ -1,6 +1,6 @@
 // Tricks: the browser tasks the imp keeps on its computer, as the Tricks page lists them.
 
-use Label from "./look.contract"
+use Label, Body, Heading, Lead, Mono from "./look.contract"
 use Trick from "./host.contract"
 use numbered from "./parts.contract"
 
@@ -11,19 +11,19 @@ component TrickList
     use: action
   view
     scroll id="tricks-list" flex=1 min-height=0
-      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=18 box-sizing="border-box" width="100%"
+      column max-width="48.5rem" margin="0 auto" padding="space.lg space.md space.xl" gap="space.md" box-sizing="border-box" width="100%"
         testId="tricks"
         text "What your imp learned to do in a browser. It repeats a trick in seconds instead of clicking through the site again. Pick one to ask for it."
-          color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+          color="ink.muted" class=Lead max-width="measure.note"
         column
-          row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+          row align-items="baseline" justify-content="space-between" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
             text "Your tricks" class=Label color="ink.strong" role="heading" aria-level=2
             text `No. ${numbered(tricks.length)}` class=Label
           if tricks.length == 0
             text "None yet. When your imp does something in the browser you may ask for again, it keeps it here."
-              font-size="0.9375rem" font-style="italic" color="ink.muted" padding="14px 0" testId="tricks-empty"
+              class=Body font-style="italic" color="ink.muted" padding="space.ms 0" testId="tricks-empty"
           for k, i in tricks key=k.name
-            button press=use(k.title) testId=`trick-${i}` display="flex" align-items="center" gap=14 padding="14px 0"
+            button press=use(k.title) testId=`trick-${i}` display="flex" align-items="center" gap="space.ms" padding="space.ms 0"
               background-color="transparent" border="none" border-bottom="1px solid line.subtle" text-align="start"
               color="ink.strong" transition="background-color 120ms ease"
               :hover
@@ -31,8 +31,8 @@ component TrickList
               row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                 border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
                 image "symbol:icon.sparkles" width=18 height=18
-              column gap=2 flex=1 min-width=0
-                text k.title font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`trick-title-${i}`
-                text (k.params.length == 0 ? k.site : `${k.site} · asks for the ${k.params.join(" and the ")}`) font-size="0.9375rem"
+              column gap="space.xxs" flex=1 min-width=0
+                text k.title class=Heading testId=`trick-title-${i}`
+                text (k.params.length == 0 ? k.site : `${k.site} · asks for the ${k.params.join(" and the ")}`) class=Body
                   color="ink.muted" line-clamp=1
-              text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+              text "→" class=Mono color="ink.muted" aria-hidden=true padding-right="space.xs"

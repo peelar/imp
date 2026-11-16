@@ -1,0 +1,253 @@
+// The design system's controls (docs/design.md): the button in each of its looks, a link that looks like one, the
+// callout a screen says something in, and an error. Their colours, type and spacing are app.tamber's tokens; a screen
+// passes what the control says and does, never how it looks.
+
+use Label, Control, Body from "./look.contract"
+
+// A variant's colours. `primary` is the screen's one main action, filled in the accent; `secondary` is any other,
+// outlined; `accent` is outlined in the accent, for the action in an accent Callout; `quiet` is a small capitals
+// label with no box, for what sits beside the content (Sync now, Cancel);
+// `danger` fills a confirmed destructive action in red, and `quiet-danger` is a quiet one that turns red when pointed
+// at (Uninstall, Disconnect).
+fn boxed(variant: string): bool = variant == "primary" or variant == "secondary" or variant == "accent" or variant == "danger"
+fn buttonInk(variant: string): string =
+  (variant == "primary" or variant == "danger" ? "ink.on-fill" : variant == "secondary" ? "ink.strong"
+    : variant == "accent" ? "AccentColor" : "ink.muted")
+fn buttonFill(variant: string): string =
+  variant == "primary" ? "AccentColor" : variant == "danger" ? "ink.danger" : "transparent"
+fn buttonLine(variant: string): string =
+  (variant == "primary" or variant == "accent" ? "AccentColor" : variant == "danger" ? "ink.danger" : variant == "secondary" ? "line.strong" : "transparent")
+
+// A button: what it says is its children (a text, an image, a KeyBadge), in the variant's look. It is
+// position="relative", so a KeyBadge sits on its corner. A state's rows are literals (the host applies them itself),
+// so each look is a branch of its own; the rows outside them are the variant's, from the functions above.
+component Button
+  props
+    press: action
+    variant: string
+    disabled: bool
+    testId: string
+  slot
+  view
+    if variant == "primary" or variant == "danger"
+      button press=press disabled=disabled testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          opacity=0.9
+        :disabled
+          color="ink.faint"
+          background-color="surface.soft"
+          border-color="line.subtle"
+        children
+    else if variant == "secondary"
+      button press=press disabled=disabled testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          background-color="surface.soft"
+        :disabled
+          color="ink.faint"
+          border-color="line.subtle"
+        children
+    else if variant == "accent"
+      button press=press disabled=disabled testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          background-color="surface.page"
+        :disabled
+          color="ink.faint"
+          border-color="line.subtle"
+        children
+    else if variant == "quiet-danger"
+      button press=press disabled=disabled testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          color="ink.danger"
+        :disabled
+          color="ink.faint"
+        children
+    else
+      button press=press disabled=disabled testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          color="ink.strong"
+        :disabled
+          color="ink.faint"
+        children
+
+// A button that opens the dialog `dialog` (a Confirm), in a variant's look.
+component DialogButton
+  props
+    dialog: string
+    variant: string
+    testId: string
+  slot
+  view
+    if variant == "primary" or variant == "danger"
+      button commandfor=dialog command="show-modal" testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          opacity=0.9
+        children
+    else if variant == "secondary"
+      button commandfor=dialog command="show-modal" testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          background-color="surface.soft"
+        children
+    else if variant == "accent"
+      button commandfor=dialog command="show-modal" testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          background-color="surface.page"
+        children
+    else if variant == "quiet-danger"
+      button commandfor=dialog command="show-modal" testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          color="ink.danger"
+        children
+    else
+      button commandfor=dialog command="show-modal" testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          color="ink.strong"
+        children
+
+// A link in a button's look, for what opens elsewhere (GitHub's sign-in page, a repository).
+component ButtonLink
+  props
+    href: string
+    variant: string
+    testId: string
+  slot
+  view
+    if variant == "primary" or variant == "danger"
+      link href=href testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          opacity=0.9
+        children
+    else if variant == "secondary"
+      link href=href testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          background-color="surface.soft"
+        children
+    else if variant == "accent"
+      link href=href testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          background-color="surface.page"
+        children
+    else if variant == "quiet-danger"
+      link href=href testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          color="ink.danger"
+        children
+    else
+      link href=href testId=testId
+        position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
+        padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
+        border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
+        background-color=buttonFill(variant) color=buttonInk(variant) text-decoration-line="none"
+        font=(boxed(variant) ? "type.control" : "type.label") letter-spacing=(boxed(variant) ? "0.1em" : "0.12em")
+        text-transform="uppercase"
+        :hover
+          color="ink.strong"
+        children
+
+// Something the screen says beside its content, in a tone: `accent` introduces or asks (the first app's card),
+// `danger` says what went wrong, `neutral` notes. A tint with a rule down its left edge, never a box across the page.
+component Callout
+  props
+    tone: string
+    testId: string
+  slot
+  view
+    column gap="space.ms" padding="space.ms space.md" testId=testId
+      border-left-width="3px" border-left-style="solid"
+      border-left-color=(tone == "accent" ? "AccentColor" : tone == "danger" ? "ink.danger" : "line.strong")
+      background-color=(tone == "accent" ? "accent.soft" : tone == "danger" ? "danger.soft" : "surface.soft")
+      children
+
+// What went wrong, in a danger callout with the alert symbol.
+component ErrorNote
+  props
+    message: string
+    testId: string
+  view
+    Callout(tone="danger", testId="")
+      row gap="space.sm" align-items="flex-start"
+        image "symbol:icon.alert" color="ink.danger" width=16 height=16 aria-hidden=true
+        text message class=Body flex=1 min-width=0 overflow-wrap="anywhere" testId=testId

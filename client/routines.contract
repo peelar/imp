@@ -1,6 +1,7 @@
 // Routines: the routines' page, and the bar above a routine's conversation that runs, pauses and deletes it.
 
-use Label from "./look.contract"
+use Label, Body, Heading, Lead, Mono, Small, Subheading from "./look.contract"
+use Button from "./controls.contract"
 use Routine from "./host.contract"
 use numbered, KeyBadge from "./parts.contract"
 
@@ -17,24 +18,24 @@ component RoutineList
     ask: action
   view
     scroll id="routines-list" flex=1 min-height=0
-      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=18 box-sizing="border-box" width="100%"
+      column max-width="48.5rem" margin="0 auto" padding="space.lg space.md space.xl" gap="space.md" box-sizing="border-box" width="100%"
         testId="routines"
         text "What your imp does on a schedule, such as a morning summary or a weekly check. Open one to see its runs, run it now, pause or delete it."
-          color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+          color="ink.muted" class=Lead max-width="measure.note"
         row
-          button press=ask testId="routine-new" display="flex" align-items="center" gap=7 padding="7px 10px"
+          button press=ask testId="routine-new" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
             border="1px solid ink.strong" background-color="ink.strong" color="surface.page"
             image "symbol:icon.add" width=12 height=12 aria-hidden=true
             text "Ask for a routine" class=Label color="inherit"
         column
-          row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+          row align-items="baseline" justify-content="space-between" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
             text "Your routines" class=Label color="ink.strong" role="heading" aria-level=2
             text `No. ${numbered(routines.length)}` class=Label
           if routines.length == 0
             text "None yet. Ask your imp to do something on a schedule, and it keeps it here."
-              font-size="0.9375rem" font-style="italic" color="ink.muted" padding="14px 0" testId="routines-empty"
+              class=Body font-style="italic" color="ink.muted" padding="space.ms 0" testId="routines-empty"
           for r, i in routines key=r.id
-            button press=open(r.id) testId=`routine-${i}` display="flex" align-items="center" gap=14 padding="14px 0"
+            button press=open(r.id) testId=`routine-${i}` display="flex" align-items="center" gap="space.ms" padding="space.ms 0"
               background-color="transparent" border="none" border-bottom="1px solid line.subtle" text-align="start"
               color="ink.strong" transition="background-color 120ms ease"
               :hover
@@ -42,16 +43,16 @@ component RoutineList
               row width=44 height=44 min-width=44 align-items="center" justify-content="center"
                 border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
                 image "symbol:icon.repeat" width=18 height=18
-              column gap=2 flex=1 min-width=0
-                text r.name font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`routine-name-${i}`
-                text (r.paused ? "Paused" : r.when) font-size="0.9375rem" color="ink.muted" line-clamp=1
+              column gap="space.xxs" flex=1 min-width=0
+                text r.name class=Heading testId=`routine-name-${i}`
+                text (r.paused ? "Paused" : r.when) class=Body color="ink.muted" line-clamp=1
               if r.running
                 row width=7 height=7 min-width=7 background-color="AccentColor" aria-label="Running"
                   testId=`routine-running-${i}`
               else if r.unread
                 row width=7 height=7 min-width=7 background-color="ink.strong" aria-label="New run"
                   testId=`routine-unread-${i}`
-              text "→" font-family="family.mono" color="ink.muted" aria-hidden=true padding-right=4
+              text "→" class=Mono color="ink.muted" aria-hidden=true padding-right="space.xs"
 
 // Above an open routine's conversation: when it runs, what it does, how its last run went, and the person's controls.
 component RoutineBar
@@ -63,32 +64,29 @@ component RoutineBar
     remove: action
     keys: bool
   view
-    row justify-content="center" padding="0 20px" border-bottom="1px solid line.subtle" testId="routine-bar"
-      column width="100%" max-width="46rem" gap=8 padding="14px 0"
-        row align-items="baseline" gap=10 flex-wrap="wrap"
+    row justify-content="center" padding="0 space.md" border-bottom="1px solid line.subtle" testId="routine-bar"
+      column width="100%" max-width="measure.page" gap="space.sm" padding="space.ms 0"
+        row align-items="baseline" gap="space.sm" flex-wrap="wrap"
           text "Routine" class=Label color="ink.strong"
-          text routine.when font-family="family.display" font-size="1.25rem" line-height=1.15 testId="routine-when"
+          text routine.when class=Subheading testId="routine-when"
           row flex=1
           text routineStatus(routine) class=Label testId="routine-status"
-        text routine.instruction font-size="0.9375rem" color="ink.muted" line-height=1.45 testId="routine-instruction"
-        row align-items="center" gap=8 flex-wrap="wrap"
-          text routineLast(routine) font-size="0.875rem" color=(routine.failed ? "-exact-system-red" : "ink.muted")
+        text routine.instruction class=Body color="ink.muted" testId="routine-instruction"
+        row align-items="center" gap="space.sm" flex-wrap="wrap"
+          text routineLast(routine) class=Small color=(routine.failed ? "ink.danger" : "ink.muted")
             flex=1 min-width="10rem" testId="routine-last"
-          row gap=8
+          row gap="space.sm"
             button press=run(routine.id) disabled=(busy or routine.running or routine.asked) aria-keyshortcuts="Meta+R"
-              testId="routine-run" display="flex" align-items="center" gap=7 padding="7px 10px"
+              testId="routine-run" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
               border="1px solid ink.strong" background-color="ink.strong" color="surface.page" position="relative"
               image "symbol:icon.play" width=12 height=12 aria-hidden=true
               text "Run now" class=Label color="inherit"
               if keys
                 KeyBadge(chord="Meta+R", at="end")
-            button press=pause(routine.id, not routine.paused) disabled=busy testId="routine-pause" padding="7px 10px"
-              border="1px solid line.strong" background-color="transparent" color="ink.strong"
-              :hover
-                background-color="surface.soft"
-              text (routine.paused ? "Resume" : "Pause") class=Label color="inherit"
-            button press=remove disabled=busy testId="routine-delete" padding="7px 10px" border="1px solid line.strong"
-              background-color="transparent" color="-exact-system-red"
+            Button(press=pause(routine.id, not routine.paused), variant="secondary", disabled=busy, testId="routine-pause")
+              text (routine.paused ? "Resume" : "Pause")
+            button press=remove disabled=busy testId="routine-delete" padding="space.sm space.sm" border="1px solid line.strong"
+              background-color="transparent" color="ink.danger"
               :hover
                 background-color="danger.soft"
               text "Delete" class=Label color="inherit"

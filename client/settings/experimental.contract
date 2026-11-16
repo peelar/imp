@@ -1,6 +1,6 @@
 // Settings' Experimental: the feature flags, each with a switch that takes effect when Imp restarts.
 
-use Label from "../look.contract"
+use Label, Body, Lead, Small from "../look.contract"
 use Flag from "../host.contract"
 
 // The feature flags: what lands for some hosts before every host, each with a switch. A flag is decided as the host
@@ -11,16 +11,16 @@ component ExperimentalSettings
     choose: action
   view
     column testId="experimental"
-      row padding-bottom=10 border-bottom="1px solid ink.strong"
+      row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
         text "Feature flags" class=Label color="ink.strong" role="heading" aria-level=2
       text "Changes apply after Imp restarts."
-        font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
+        class=Body color="ink.muted" padding-top="space.ms"
       for f, i in flags key=f.key
-        row align-items="center" gap=14 padding="14px 0" border-bottom="1px solid line.subtle"
-          column flex=1 min-width=0 gap=2
-            text f.label font-size="1rem" testId=`flag-label-${i}`
-            text f.description font-size="0.875rem" color="ink.muted" line-height=1.4
+        row align-items="center" gap="space.ms" padding="space.ms 0" border-bottom="1px solid line.subtle"
+          column flex=1 min-width=0 gap="space.xxs"
+            text f.label class=Lead testId=`flag-label-${i}`
+            text f.description class=Small color="ink.muted" 
             if f.next != f.on
               text (f.next ? "On after Imp restarts" : "Off after Imp restarts") class=Label color="AccentColor"
-                padding-top=4 testId=`flag-pending-${i}`
+                padding-top="space.xs" testId=`flag-pending-${i}`
           input type="checkbox" switch checked=f.next change=choose(f.key) aria-label=f.label testId=`flag-${f.key}`

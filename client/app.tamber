@@ -2,6 +2,10 @@ tamber imp
 
 // Catalogue: white paper, black ink, one cobalt action, square corners, engraved art in greyscale. Headlines are
 // Instrument Serif with a Pinyon Script capital, prose is Instrument Sans, labels and numbers are IBM Plex Mono.
+//
+// The shell's design system starts here (docs/design.md): its colours, its type scale, its spacing and its widths.
+// The shell's screens name these tokens, through the text styles in look.contract and the controls in
+// controls.contract, and never write a colour, a font or a size of their own (`pnpm check` refuses one).
 
 theme
   AccentColor = light-dark(#2341d6, #5b74f2)
@@ -19,9 +23,41 @@ theme
   surface.soft = light-dark(#f3f3f1, #1b1b1a)
   line.subtle = light-dark(#e4e4e1, #262625)
   line.strong = light-dark(#c9c9c5, #3d3d3a)
-  danger.soft = light-dark(#fdeeee, #3a1d20)
   // A note in the accent's colour, such as the card above an app: a tint, quieter than a fill.
   accent.soft = light-dark(#eef1fd, #171c38)
+  // What went wrong or can't be undone, and what is working: the platform's red and green, by their meaning.
+  ink.danger = -exact-system-red
+  danger.soft = light-dark(#fdeeee, #3a1d20)
+  ink.success = -exact-system-green
+
+  // Type: one token a role. The text styles in look.contract apply them, with the spacing and case each role takes.
+  type.display.xl = 400 2.25rem/1.05 family.display
+  type.display.lg = 400 1.75rem/1.15 family.display
+  type.display.md = 400 1.375rem/1.15 family.display
+  type.display.sm = 400 1.25rem/1.2 family.display
+  type.body.lg = 400 1.0625rem/1.5 family.text
+  type.body = 400 0.9375rem/1.45 family.text
+  type.body.sm = 400 0.8125rem/1.45 family.text
+  type.label = 500 0.6875rem/1.4 family.mono
+  type.control = 500 0.75rem/1.2 family.mono
+  type.control.lg = 500 0.8125rem/1.2 family.mono
+  type.mono = 400 0.8125rem/1.45 family.mono
+  type.code = 500 1.5rem/1.2 family.mono
+
+  // Space: the gaps and paddings, on a 4px grid. Fixed on every platform, so the Mac app keeps the catalogue's air.
+  space.xxs = 2px
+  space.xs = 4px
+  space.sm = 8px
+  space.ms = 12px
+  space.md = 16px
+  space.lg = 24px
+  space.xl = 32px
+  space.xxl = 48px
+
+  // Widths: how wide a column of reading runs, so lines stay short enough to read.
+  measure.form = 28rem
+  measure.note = 34rem
+  measure.page = 46rem
 
   family.display = "Instrument Serif", "Iowan Old Style", Georgia, serif
   family.text = "Instrument Sans", ui-sans-serif, system-ui, sans-serif

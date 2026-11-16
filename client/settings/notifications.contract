@@ -1,6 +1,6 @@
 // Settings' Notifications: whether this Imp may show the person a notification while they are away.
 
-use Label from "../look.contract"
+use Label, Body, Control from "../look.contract"
 use NotificationStatus from "@exact/notifications"
 
 // Where the apps' code is kept besides the host: every version in the host's history, and a private GitHub repository
@@ -14,22 +14,22 @@ component NotificationSettings
     allow: action
   view
     column testId="notifications"
-      row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+      row align-items="baseline" justify-content="space-between" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
         text "Notifications" class=Label color="ink.strong" role="heading" aria-level=2
         if alerts.available
           text (alerts.state == "granted" ? "On" : "Off") class=Label testId="notifications-state"
       text "Routine findings, key requests and finished replies, while Imp is open here."
-        font-size="0.9375rem" color="ink.muted" line-height=1.45 padding-top=14
+        class=Body color="ink.muted" padding-top="space.ms"
       if not alerts.available
-        text "This browser can't show notifications." font-style="italic" color="ink.muted" padding-top=12
+        text "This browser can't show notifications." font-style="italic" color="ink.muted" padding-top="space.ms"
           testId="notifications-unavailable"
       else if alerts.state == "denied"
         text "Notifications are blocked for Imp. Allow them in your browser's settings for this site, or in System Settings for the app."
-          font-style="italic" color="ink.muted" padding-top=12 testId="notifications-denied"
+          font-style="italic" color="ink.muted" padding-top="space.ms" testId="notifications-denied"
       else if alerts.state != "granted"
         button press=allow disabled=asking testId="notifications-allow" align-self="flex-start"
-          margin-top=16 padding="10px 14px" border="none" background-color="AccentColor" color="ink.on-fill"
-          font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+          margin-top="space.md" padding="space.sm space.ms" border="none" background-color="AccentColor" color="ink.on-fill"
+          class=Control    
           :disabled
             background-color="surface.soft"
             color="ink.faint"

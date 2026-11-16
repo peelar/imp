@@ -1,7 +1,8 @@
 // Settings' Connections: the accounts the host signs in to, and what each one turns on. GitHub first: connecting
 // signs in with a device code, and below it the person turns on Backup, which pushes their apps' code to it.
 
-use Label from "../look.contract"
+use Label, Body, Code, Control, ControlLarge, Heading, Mono, Subheading from "../look.contract"
+use Button, ButtonLink, ErrorNote from "../controls.contract"
 use Connection, Backup from "../host.contract"
 use Step from "../onboarding.contract"
 
@@ -18,76 +19,54 @@ component ConnectionsSettings
     turnOff: action
   view
     column testId="connections"
-      row padding-bottom=10 border-bottom="1px solid ink.strong"
+      row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
         text "GitHub" class=Label color="ink.strong" role="heading" aria-level=2
       if github.status == "on"
-        row gap=14 align-items="center" padding="16px 0" border-bottom="1px solid line.subtle"
-          column flex=1 min-width=0 gap=4 align-items="flex-start"
-            text (github.login == "" ? "Connected" : `@${github.login}`) font-family="family.display" font-size="1.375rem"
-              line-height=1.15 overflow-wrap="anywhere" testId="github-login"
-            text "Your apps, your imp and Backup reach GitHub as you." font-size="0.9375rem" color="ink.muted"
-          button press=disconnect disabled=busy testId="github-disconnect" padding="10px 0" border="none"
-            background-color="transparent" color="ink.muted"
-            :hover
-              color="-exact-system-red"
-            text "Disconnect" class=Label color="inherit"
+        row gap="space.ms" align-items="center" padding="space.md 0" border-bottom="1px solid line.subtle"
+          column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
+            text (github.login == "" ? "Connected" : `@${github.login}`) class=Heading
+              overflow-wrap="anywhere" testId="github-login"
+            text "Your apps, your imp and Backup reach GitHub as you." class=Body color="ink.muted"
+          Button(press=disconnect, variant="quiet-danger", disabled=busy, testId="github-disconnect")
+            text "Disconnect"
       else
-        column padding="16px 0" border-bottom="1px solid line.subtle"
+        column padding="space.md 0" border-bottom="1px solid line.subtle"
           GithubSignIn(github=github, busy=busy, connect=connect, cancel=cancel, copyCode=copyCode,
             note="Sign in once, and your apps, your imp and Backup reach GitHub as you.", prefix="", quiet=false)
       if github.error != ""
-        row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
-          border-left="2px solid -exact-system-red"
-          image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
-          text github.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="github-error"
+        ErrorNote(message=github.error, testId="github-error")
       // Backup: what the connection turns on. Every version stays on the host either way.
-      column testId="backup" padding="16px 0" gap=12 border-bottom="1px solid line.subtle"
-        row gap=14 align-items="baseline"
-          text "Backup" font-family="family.display" font-size="1.25rem" flex=1
+      column testId="backup" padding="space.md 0" gap="space.ms" border-bottom="1px solid line.subtle"
+        row gap="space.ms" align-items="baseline"
+          text "Backup" class=Subheading flex=1
           text `${backup.versions} ${backup.versions == 1 ? "version" : "versions"} kept` class=Label testId="backup-versions"
         text (not backup.git ? "Needs git on your host. Install it, then restart Imp."
           : github.status != "on" ? "Your host keeps every version of your apps' code. Connect GitHub to keep a private copy there too."
           : "Your host keeps every version of your apps' code. Push a private copy to your imp-apps repository on GitHub.")
-          font-size="0.9375rem" color="ink.muted" line-height=1.45
+          class=Body color="ink.muted"
         if backup.status == "on"
-          row gap=14 align-items="center"
-            column flex=1 min-width=0 gap=4 align-items="flex-start"
-              text backup.repo font-family="family.mono" font-size="0.875rem" overflow-wrap="anywhere" testId="backup-repo"
-              row gap=8 align-items="center"
-                row width=6 height=6 aria-hidden=true background-color=(backup.synced ? "-exact-system-green" : "ink.faint")
+          row gap="space.ms" align-items="center"
+            column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
+              text backup.repo class=Mono overflow-wrap="anywhere" testId="backup-repo"
+              row gap="space.sm" align-items="center"
+                row width=6 height=6 aria-hidden=true background-color=(backup.synced ? "ink.success" : "ink.faint")
                 text (backup.synced ? "Up to date" : "Not backed up yet") class=Label testId="backup-state"
-            link href=`https://github.com/${backup.repo}` testId="backup-open-repo" display="flex" align-items="center"
-              gap=8 padding="8px 12px" border="1px solid line.strong" color="ink.strong" font-family="family.mono"
-              font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase" text-decoration-line="none"
-              :hover
-                background-color="surface.soft"
+            ButtonLink(href=`https://github.com/${backup.repo}`, variant="secondary", testId="backup-open-repo")
               text "Open"
               text "↗" aria-hidden=true
-          button press=turnOff disabled=busy testId="backup-turn-off" align-self="flex-start" padding="4px 0"
-            border="none" background-color="transparent" color="ink.muted"
-            :hover
-              color="-exact-system-red"
-            text "Turn off" class=Label color="inherit"
+          row
+            Button(press=turnOff, variant="quiet-danger", disabled=busy, testId="backup-turn-off")
+              text "Turn off"
         else if backup.status == "starting"
-          row gap=10 align-items="center" testId="backup-starting"
+          row gap="space.sm" align-items="center" testId="backup-starting"
             progress aria-label="Loading"
             text "Finding your imp-apps repository…" font-style="italic" color="ink.muted"
         else
-          button press=turnOn disabled=(not backup.git or github.status != "on" or busy) testId="backup-turn-on"
-            align-self="flex-start" padding="10px 14px" border="1px solid line.strong" background-color="transparent"
-            color="ink.strong" font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em"
-            text-transform="uppercase"
-            :hover
-              background-color="surface.soft"
-            :disabled
-              border-color="line.subtle"
-              color="ink.faint"
-            text "Turn on backup"
+          row
+            Button(press=turnOn, variant="secondary", disabled=(not backup.git or github.status != "on" or busy), testId="backup-turn-on")
+              text "Turn on backup"
         if backup.error != ""
-          row gap=8 align-items="flex-start" padding="10px 14px" background-color="danger.soft"
-            border-left="2px solid -exact-system-red"
-            image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
-            text backup.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="backup-error"
+          ErrorNote(message=backup.error, testId="backup-error")
 
 // Connecting GitHub, until it is on: the button, then GitHub's code to enter on its sign-in page. Settings shows it,
 // and so do the onboarding's first app and an app's page while the app waits for GitHub.
@@ -105,46 +84,40 @@ component GithubSignIn
     quiet: bool
   view
     if github.status == "waiting"
-      column gap=10 testId=`${prefix}github-waiting`
+      column gap="space.sm" testId=`${prefix}github-waiting`
         Step(number="01", title="Open GitHub's sign-in page")
         link href=github.url testId=`${prefix}github-open` display="flex" align-items="center" justify-content="center"
-          gap=8 padding="13px 16px" border=(quiet ? "1px solid line.strong" : "1px solid AccentColor")
+          gap="space.sm" padding="space.ms space.md" border=(quiet ? "1px solid line.strong" : "1px solid AccentColor")
           background-color=(quiet ? "transparent" : "AccentColor") color=(quiet ? "ink.strong" : "ink.on-fill")
-          font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
+          class=ControlLarge
           text-decoration-line="none"
           text "Open GitHub"
           image "symbol:icon.open" width=14 height=14 aria-hidden=true
         Step(number="02", title="Enter this code")
-        row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
-          text github.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
-            letter-spacing="0.18em" user-select="all" testId=`${prefix}github-code`
-          button press=copyCode testId=`${prefix}github-copy` display="flex" align-items="center" gap=6
-            padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
-            font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
-            :hover
-              background-color="surface.soft"
+        row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.md" border="1px solid line.strong"
+          text github.code flex=1 class=Code
+            user-select="all" testId=`${prefix}github-code`
+          Button(press=copyCode, variant="secondary", disabled=false, testId=`${prefix}github-copy`)
             image "symbol:icon.copy" width=13 height=13 aria-hidden=true
             text "Copy"
-        row gap=10 align-items="center" padding-top=2
+        row gap="space.sm" align-items="center" padding-top="space.xxs"
           progress aria-label="Waiting for approval"
           text "Waiting for you to approve…" font-style="italic" color="ink.muted"
-        button press=cancel testId=`${prefix}github-cancel` align-self="flex-start" padding="4px 0" border="none"
-          background-color="transparent" color="ink.muted"
-          :hover
-            color="ink.strong"
-          text "Cancel" class=Label color="inherit"
+        row
+          Button(press=cancel, variant="quiet", disabled=false, testId=`${prefix}github-cancel`)
+            text "Cancel"
     else if github.status == "starting"
-      row gap=10 align-items="center" testId=`${prefix}github-starting`
+      row gap="space.sm" align-items="center" testId=`${prefix}github-starting`
         progress aria-label="Loading"
         text "Asking GitHub for a code…" font-style="italic" color="ink.muted"
     else
-      column gap=14 align-items="flex-start"
+      column gap="space.ms" align-items="flex-start"
         if note != ""
-          text note font-size="0.9375rem" color="ink.muted" line-height=1.45
-        button press=connect disabled=busy testId=`${prefix}github-connect` padding="10px 14px"
+          text note class=Body color="ink.muted"
+        button press=connect disabled=busy testId=`${prefix}github-connect` padding="space.sm space.ms"
           border=(quiet ? "1px solid line.strong" : "1px solid AccentColor")
           background-color=(quiet ? "transparent" : "AccentColor") color=(quiet ? "ink.strong" : "ink.on-fill")
-          font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+          class=Control
           :hover
             opacity=0.9
           :disabled

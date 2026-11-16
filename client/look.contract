@@ -1,20 +1,79 @@
-// The catalogue's styles and motion, which every screen of the shell shares. Colours and type are app.tamber's.
+// The design system's text styles and motion, which every screen of the shell shares (docs/design.md). Each style is
+// one role of type: its token in app.tamber, with the spacing and case the role takes. A screen sets a text's role
+// with `class=`, and its colour with a colour token; it writes no font, size or line height of its own.
 
-// The catalogue's small capitals: mono, upper case, spaced.
+// The catalogue's headlines, in the display serif: a page's welcome, a screen's title, a section or card's name, and a
+// row's name.
+style Display
+  font = "type.display.xl"
+  letter-spacing = "-0.01em"
+
+style Title
+  font = "type.display.lg"
+
+style Heading
+  font = "type.display.md"
+
+style Subheading
+  font = "type.display.sm"
+
+// The drop capital in the script, inside a Display or Title word (parts.contract's Initialled), sized by its word.
+style Initial
+  font-family = "family.script"
+  font-size = "1.18em"
+  line-height = 0.8
+
+// A person's initial in the script, in a square as tall as a row (Settings' account).
+style Monogram
+  font-family = "family.script"
+  font-size = "1.75rem"
+  line-height = "2.75rem"
+
+// The page's own text, which every text inherits until its style says otherwise.
+style Page
+  font-family = "family.text"
+
+// Prose: a message in the chat, a paragraph, and the smaller line under a row or beside a control.
+style Lead
+  font = "type.body.lg"
+
+style Body
+  font = "type.body"
+
+style Small
+  font = "type.body.sm"
+
+// The catalogue's small capitals: mono, upper case, spaced. A section's name, a count, a quiet control.
 style Label
-  font-family = "family.mono"
-  font-size = "0.6875rem"
-  font-weight = 500
+  font = "type.label"
   letter-spacing = "0.12em"
   text-transform = "uppercase"
   color = "ink.muted"
 
+// A boxed control's words: a button, a link that acts as one, a field that holds a command.
+style Control
+  font = "type.control"
+  letter-spacing = "0.1em"
+  text-transform = "uppercase"
+
+// The onboarding's full-width answers.
+style ControlLarge
+  font = "type.control.lg"
+  letter-spacing = "0.1em"
+  text-transform = "uppercase"
+
+// What a machine reads or writes: an address, a key's name, a repository, a path.
+style Mono
+  font = "type.mono"
+
+// A code to type somewhere else, such as a sign-in's device code.
+style Code
+  font = "type.code"
+  letter-spacing = "0.18em"
+
 // A shortcut's keys, as a keycap: the labels' mono in a hairline box.
 style Key
-  font-family = "family.mono"
-  font-size = "0.6875rem"
-  font-weight = 500
-  line-height = 1.4
+  font = "type.label"
   white-space = "nowrap"
   color = "ink.muted"
   padding = "0 5px"
