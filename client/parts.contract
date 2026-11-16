@@ -1,0 +1,33 @@
+// Small parts more than one screen of the shell uses: a shortcut's keys on its control, a person's initial, and a
+// number in words.
+
+use Key from "./look.contract"
+
+// A chord as the Mac writes it: "Control+Meta+S" is ⌃⌘S.
+fn keysOf(chord: string): string =
+  chord.replaceAll("Control+", "⌃").replaceAll("Alt+", "⌥").replaceAll("Shift+", "⇧").replaceAll("Meta+", "⌘")
+
+// A shortcut's keys on its control (which is position="relative"), shown while ⌘ is held: over its top corner at the
+// "end" or the "start", or for a "tab" along a narrow window's bottom edge, inside it beside the symbol at its centre.
+component KeyBadge
+  props
+    chord: string
+    at: string
+  view
+    text keysOf(chord) class=Key position="absolute" top=(at == "tab" ? "6px" : "-8px")
+      left=(at == "tab" ? "calc(50% + 16px)" : at == "start" ? "-8px" : "auto") right=(at == "end" ? "-8px" : "auto")
+      z-index=2 pointer-events="none" aria-hidden=true testId=`keys-${chord}`
+
+component Initialled
+  props
+    word: string
+    size: string
+    heading: number
+  view
+    text role="heading" aria-level=heading font-family="family.display" font-size=size line-height=1.05
+      letter-spacing="-0.01em"
+      // The script capital's swash leans into the next letter: a little room keeps the word readable.
+      text word.slice(0, 1) font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.08em"
+      text word.slice(1)
+
+fn numbered(n: number): string = n < 10 ? `0${n}` : `${n}`

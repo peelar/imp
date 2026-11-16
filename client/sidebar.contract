@@ -1,0 +1,111 @@
+// The sidebar: its places (Chat, the apps, the computer, Routines, Tricks, App directory), New chat and the
+// conversations.
+
+use Label, Key from "./look.contract"
+use ChatSummary, Routine from "./host.contract"
+
+// A place in the sidebar the chat tab opens: its symbol, its name, a mark in `mark`'s colour ("" for none) and how
+// many it holds, when any.
+component PlaceEntry
+  props
+    id: string
+    label: string
+    symbol: string
+    count: number
+    mark: string
+    selected: bool
+    press: action
+  view
+    button press=press aria-pressed=selected testId=`${id}-entry` appearance="none" display="flex" align-items="center"
+      gap=10 padding="8px 10px" border="none" text-align="start" color="ink.strong"
+      background-color=(selected ? "surface.soft" : "transparent")
+      :hover
+        background-color="surface.soft"
+      image symbol width=15 height=15 aria-hidden=true
+      text label font-size="0.9375rem" flex=1
+      if mark != ""
+        row width=7 height=7 min-width=7 background-color=mark aria-hidden=true testId=`${id}-mark`
+      if count > 0
+        text `${count}` class=Label testId=`${id}-count`
+
+// One conversation in the sidebar, by its first message.
+component ChatEntry
+  props
+    prefix: string
+    index: number
+    id: string
+    title: string
+    selected: bool
+    show: action
+  view
+    button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
+      padding="8px 10px" border="none" text-align="start" color="ink.strong" min-width=0
+      background-color=(selected ? "surface.soft" : "transparent")
+      :hover
+        background-color="surface.soft"
+      text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+// The left sidebar: a new chat on a line of its own, the imp's pages (home, routines, tricks, the app directory), then the three latest conversations and, folded under them, the rest.
+component Sidebar
+  props
+    prefix: string
+    conversations: ChatSummary[]
+    current: string
+    // The open tab, and whether it is the home page.
+    tab: string
+    atHome: bool
+    home: action
+    tricks: number
+    routines: Routine[]
+    olderOpen: bool
+    newChat: action
+    show: action
+    openRoutines: action
+    openTricks: action
+    openDirectory: action
+    toggleOlder: action
+    keyboard: bool
+    // Whether the app directory's feature flag is on.
+    directory: bool
+  // A routine at work shows cobalt on the Routines entry, else one with a run the person has not read shows ink.
+  derive routineMark = routines.filter(r => r.running).length > 0 ? "AccentColor" : routines.filter(r => r.unread).length > 0 ? "ink.strong" : ""
+  view
+    column flex=1 min-height=0 testId=`${prefix}sidebar`
+      column padding="14px 10px 8px"
+        // Beside the chat on a wide window ⌘N is this button's; on a narrow one, the page header's (under the drawer).
+        button press=newChat aria-keyshortcuts=(prefix == "" ? "Meta+N" : "") testId=`${prefix}chat-new`
+          appearance="none" display="flex" align-items="center" gap=8 padding="7px 10px"
+          border="1px solid line.strong" background-color="transparent" color="ink.strong" text-align="start"
+          :hover
+            background-color="surface.soft"
+          image "symbol:icon.compose" width=13 height=13 aria-hidden=true
+          text "New chat" class=Label color="inherit" flex=1
+          if keyboard
+            text "⌘N" class=Key border-color="line.subtle" testId=`${prefix}chat-new-keys` aria-hidden=true
+      column gap=2 padding="4px 10px 12px" border-bottom="1px solid line.subtle"
+        PlaceEntry(id=`${prefix}home`, label="Home", symbol="symbol:icon.home", count=0, mark="", selected=atHome,
+          press=home)
+        PlaceEntry(id=`${prefix}routines`, label="Routines", symbol="symbol:icon.repeat", count=routines.length,
+          mark=routineMark, selected=(tab == "routines"), press=openRoutines)
+        PlaceEntry(id=`${prefix}tricks`, label="Tricks", symbol="symbol:icon.sparkles", count=tricks, mark="",
+          selected=(tab == "tricks"), press=openTricks)
+        if directory
+          PlaceEntry(id=`${prefix}directory`, label="App directory", symbol="symbol:icon.layers", count=0, mark="",
+            selected=(tab == "directory"), press=openDirectory)
+      scroll flex=1 min-height=0
+        if conversations.length > 0
+          column gap=2 padding="14px 10px 20px"
+            text "Recent" class=Label padding="0 10px 6px"
+            for c, i in conversations.slice(0, 3) key=c.id
+              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), show=show)
+            if conversations.length > 3
+              button press=toggleOlder aria-expanded=olderOpen testId=`${prefix}conversations-older` appearance="none"
+                display="flex" align-items="center" gap=8 padding="9px 10px" margin-top=4 border="none"
+                background-color="transparent" color="ink.muted" text-align="start"
+                :hover
+                  color="ink.strong"
+                text (olderOpen ? "−" : "+") font-family="family.mono" width=12 aria-hidden=true
+                text (olderOpen ? "Hide older" : `Older (${conversations.length - 3})`) class=Label color="inherit"
+              if olderOpen
+                for c, i in conversations.slice(3) key=c.id
+                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), show=show)

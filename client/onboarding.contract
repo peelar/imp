@@ -1,0 +1,91 @@
+// The onboarding's parts: its numbered steps, its titles and buttons, the folds that hide a step's detail, and the
+// fields of the API key form. The steps themselves are the root's (app.contract), and the computer's (computer.contract).
+
+use Label from "./look.contract"
+
+// A wizard screen's question, and one short line under it.
+component WizardTitle
+  props
+    title: string
+    note: string
+  view
+    column gap=4
+      text title font-family="family.display" font-size="1.75rem" line-height=1.15 role="heading" aria-level=2
+      text note color="ink.muted" font-size="0.9375rem"
+
+// A wizard's full-width button: the step's answer when `primary`, another way when not.
+component WizardButton
+  props
+    label: string
+    press: action
+    testId: string
+    primary: bool
+    disabled: bool
+  view
+    button press=press disabled=disabled testId=testId display="flex" align-items="center"
+      justify-content="space-between" gap=10 padding="14px 18px" font-family="family.mono" font-size="0.8125rem"
+      font-weight=500 letter-spacing="0.1em" text-transform="uppercase"
+      border=(primary ? "1px solid AccentColor" : "1px solid line.strong")
+      background-color=(primary ? "AccentColor" : "transparent") color=(primary ? "ink.on-fill" : "ink.strong")
+      :hover
+        opacity=0.9
+      :disabled
+        background-color="surface.soft"
+        border-color="line.subtle"
+        color="ink.faint"
+      text label
+      text "→" aria-hidden=true
+
+// A wizard's button that opens what it holds beneath it, in place, rather than on a screen of its own.
+component WizardFold
+  props
+    label: string
+    press: action
+    testId: string
+    primary: bool
+    open: bool
+    disabled: bool
+  slot
+  view
+    column
+      button press=press disabled=disabled aria-expanded=open testId=testId display="flex" align-items="center"
+        justify-content="space-between" gap=10 padding="14px 18px" font-family="family.mono" font-size="0.8125rem"
+        font-weight=500 letter-spacing="0.1em" text-transform="uppercase"
+        border=(primary ? "1px solid AccentColor" : "1px solid line.strong")
+        background-color=(primary ? "AccentColor" : "transparent") color=(primary ? "ink.on-fill" : "ink.strong")
+        :hover
+          opacity=0.9
+        :disabled
+          color="ink.faint"
+        text label
+        text (open ? "↓" : "→") aria-hidden=true
+      if open
+        column gap=14 padding="16px 18px" border="1px solid line.strong" border-top="none"
+          children
+
+// One field of the onboarding's API key form, labelled above its input.
+component KeyField
+  props
+    label: string
+    value: string
+    edit: action
+    secret: bool
+    placeholder: string
+    testId: string
+  view
+    column gap=4
+      text label class=Label
+      input type=(secret ? "password" : "text") value=value input=edit placeholder=placeholder aria-label=label
+        testId=testId padding="9px 12px" border="1px solid line.strong" background-color="transparent" outline="none"
+        font-family="family.mono" font-size="0.875rem" color="ink.strong" autocapitalize="none" autocorrect="off"
+        spellcheck=false
+
+// A numbered step of the onboarding.
+component Step
+  props
+    number: string
+    title: string
+  view
+    row gap=12 align-items="baseline"
+      text number class=Label
+      text title font-family="family.display" font-size="1.25rem"

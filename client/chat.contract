@@ -1,0 +1,135 @@
+// The chat: a conversation's transcript, and the composer that writes to it (with dictation). The chat's data and its
+// actions are the root's (app.contract), which Contract keeps there.
+
+use Label, rise, pulse from "./look.contract"
+use ChatMessage from "./host.contract"
+use KeyBadge from "./parts.contract"
+
+// Dictated words added to the end of a draft, a space between them.
+fn withSpoken(draft: string, spoken: string): string =
+  spoken.trim() == "" ? draft : draft == "" or draft.endsWith(" ") or draft.endsWith("\n") ? `${draft}${spoken.trim()}` : `${draft} ${spoken.trim()}`
+
+// The conversation's rows. The chat tab shows it full width; the panel beside an app shows it `compact`.
+component Transcript
+  props
+    prefix: string
+    compact: bool
+    messages: ChatMessage[]
+    lastId: string
+    still: bool
+  view
+    // Its top edge fades, so a row scrolling under the page's title leaves it gently instead of cut in half.
+    list id=`${prefix}transcript` appearance="none" virtualized=true scroll-start="end" scrollFollowEnd=true flex=1
+      min-height=0 mask-image="linear-gradient(to bottom, transparent 0px, black 20px)" testId=`${prefix}transcript`
+      for m in messages key=m.id
+        row justify-content="center" padding=(compact ? "0 18px" : "0 20px")
+          column width="100%" max-width="46rem"
+            animation=(still or m.id != lastId ? "none" : "rise 220ms ease-out both")
+            if m.role == "user"
+              row justify-content="flex-end" padding=(compact ? "16px 0 6px" : "20px 0 8px")
+                text m.text padding="10px 14px" max-width="85%" overflow-wrap="break-word"
+                  white-space="pre-wrap" background-color="surface.soft" font-size=(compact ? "0.9375rem" : "1rem") line-height=1.5
+                  testId=`${prefix}message-${m.id}`
+            else if m.role == "activity"
+              column gap=2 padding="5px 0" testId=`${prefix}message-${m.id}`
+                row gap=10 align-items="center" color=(m.failed ? "-exact-system-red" : "ink.muted")
+                  image m.icon width=13 height=13 aria-hidden=true
+                  text m.title class=Label color=(m.failed ? "-exact-system-red" : "ink.strong") white-space="nowrap"
+                  if m.detail != ""
+                    text m.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" flex=1 min-width=0
+                      white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                // A step that failed says why under its title.
+                if m.failed and m.text != ""
+                  text m.text font-size="0.8125rem" color="ink.muted" line-height=1.4 padding-left=23 line-clamp=2
+                    overflow-wrap="anywhere" testId=`${prefix}message-why-${m.id}`
+            else if m.role == "thinking"
+              row gap=6 align-items="center" padding="14px 0" aria-label="Your imp is working"
+                testId=`${prefix}thinking`
+                row width=6 height=6 background-color="ink.faint" aria-hidden=true
+                  animation=(still ? "none" : "pulse 1.1s ease-in-out 0ms infinite")
+                row width=6 height=6 background-color="ink.faint" aria-hidden=true
+                  animation=(still ? "none" : "pulse 1.1s ease-in-out 160ms infinite")
+                row width=6 height=6 background-color="ink.faint" aria-hidden=true
+                  animation=(still ? "none" : "pulse 1.1s ease-in-out 320ms infinite")
+            else if m.role == "error"
+              row gap=10 align-items="flex-start" padding="10px 14px" margin="8px 0"
+                background-color="danger.soft" border-left="2px solid -exact-system-red" testId=`${prefix}message-${m.id}`
+                image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
+                text m.text font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="break-word"
+            else
+              text m.text markup="markdown" padding="10px 0 14px" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.6
+                overflow-wrap="break-word" testId=`${prefix}message-${m.id}`
+
+// The square field the person writes in, with Send (or Stop while the assistant works and the field is empty), and
+// a microphone that dictates into it where the browser can. While it listens, the words it has not settled on show
+// above the field.
+component Composer
+  props
+    prefix: string
+    placeholder: string
+    compact: bool
+    draft: string
+    busy: bool
+    sending: bool
+    stopping: bool
+    error: string
+    edit: action
+    post: action
+    stop: action
+    canDictate: bool
+    dictating: bool
+    heard: string
+    dictate: action
+    keys: bool
+  derive said = withSpoken(draft, heard).trim()
+  // Enter sends, as a chat's composer does; Shift+Enter breaks the line, and the Enter that picks an input method's
+  // candidate stays the input method's.
+  action compose(k: string, e: KeyboardEvent)
+    if k == "Enter" and not e.shiftKey and not e.isComposing
+      preventDefault()
+      if said != "" and not sending
+        post(prefix)
+  view
+    row justify-content="center" padding=(compact ? "10px 14px 14px" : "10px 16px 14px")
+      column width="100%" max-width="46rem" gap=8
+        if error != ""
+          text error color="-exact-system-red" font-size="0.8125rem" testId=`${prefix}send-error`
+        if dictating
+          row gap=8 align-items="baseline" testId=`${prefix}dictation`
+            row width=6 height=6 min-width=6 background-color="-exact-system-red" aria-hidden=true
+            text (heard == "" ? "Listening…" : heard) font-style="italic" color="ink.muted" flex=1 min-width=0
+              font-size=(compact ? "0.9375rem" : "1rem") overflow-wrap="break-word" testId=`${prefix}dictation-heard`
+        row align-items="flex-end" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+          background-color="surface.page" position="relative"
+          if keys
+            KeyBadge(chord="Meta+L", at="start")
+          textarea id=`${prefix}composer` value=draft input=edit key=compose rows=1 field-sizing="content" max-height=180
+            placeholder=placeholder aria-label="Message" testId=`${prefix}composer` flex=1 min-width=0
+            padding="9px 0" border="none" background-color="transparent" outline="none" resize="none"
+            font-family="family.text" font-size=(compact ? "1rem" : "1.0625rem") line-height=1.5 color="ink.strong"
+          if canDictate or dictating
+            button press=dictate retainFocus=true aria-pressed=dictating
+              aria-label=(dictating ? "Stop dictating" : "Dictate") testId=`${prefix}dictate` width=38 height=38
+              min-width=38 padding=0 border="none" display="flex" align-items="center" justify-content="center"
+              background-color=(dictating ? "danger.soft" : "transparent")
+              color=(dictating ? "-exact-system-red" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
+              image "symbol:icon.microphone" width=16 height=16
+          if busy and said == ""
+            button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
+              width=38 height=38 min-width=38 padding=0 border="none" background-color="ink.strong"
+              color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
+              image "symbol:icon.stop" width=13 height=13
+              if keys
+                KeyBadge(chord="Meta+.", at="end")
+          else
+            button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
+              testId=`${prefix}send` width=38 height=38 min-width=38 padding=0 border="none"
+              background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
+              justify-content="center" transition="background-color 120ms ease"
+              :disabled
+                background-color="surface.soft"
+                color="ink.faint"
+              image "symbol:icon.send" width=16 height=16
+        if not compact
+          text "Asks before anything it can't undo" class=Label color="ink.faint" text-align="center"
+            font-size="0.625rem"

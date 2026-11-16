@@ -1,0 +1,117 @@
+// The app directory: the apps there are to install, from the directory or from a GitHub link, and the installed
+// ones to open.
+
+use Label from "./look.contract"
+use AppTile from "./host.contract"
+use numbered from "./parts.contract"
+
+// An app in the directory, kept in a GitHub repository (`repo`, its link). `symbol` is its icon.
+shape DirectoryApp
+  id: string
+  name: string
+  description: string
+  repo: string
+  symbol: string
+
+// The directory's apps. Mock entries for now, except Todos, which this repository ships: the rest name repositories
+// that do not exist yet, so the imp cannot install them.
+fn directory(): DirectoryApp[] = [
+  DirectoryApp(id="todos", name="Todos", description="A list of things to do. Your imp can read and change it.",
+    repo="https://github.com/peelar/imp/tree/main/client/apps/todos", symbol="symbol:icon.todos"),
+  DirectoryApp(id="habits", name="Habits", description="A streak for each habit, ticked off once a day.",
+    repo="https://github.com/imp-apps/habits", symbol="symbol:icon.star"),
+  DirectoryApp(id="reading", name="Reading list", description="Books and articles to read, with a note on each one you finish.",
+    repo="https://github.com/imp-apps/reading", symbol="symbol:icon.book"),
+  DirectoryApp(id="runs", name="Runs", description="Distance and pace for every run, and how the month adds up.",
+    repo="https://github.com/marta/imp-runs", symbol="symbol:icon.chart"),
+  DirectoryApp(id="places", name="Places", description="Places to go, each pinned with who told you about it.",
+    repo="https://github.com/imp-apps/places", symbol="symbol:icon.pin"),
+  DirectoryApp(id="people", name="People", description="Who you met, where, and what to ask them next time.",
+    repo="https://github.com/kuba/imp-people", symbol="symbol:icon.people"),
+  DirectoryApp(id="journal", name="Journal", description="A line a day. Your imp can write it for you from your chats.",
+    repo="https://github.com/imp-apps/journal", symbol="symbol:icon.pencil")]
+
+// A link to a GitHub repository, such as github.com/owner/app, as its path ("owner/app"), or "" for any other text.
+fn repoPath(link: string): string =
+  link.includes(" ") ? "" : link.startsWith("https://github.com/") ? link.slice(19) : link.startsWith("github.com/") ? link.slice(11) : ""
+
+fn repoLink(link: string): string = repoPath(link).split("/").filter(p => p != "").length >= 2 ? `https://github.com/${repoPath(link)}` : ""
+
+// The app directory: a link to any app on GitHub, and apps others built, each installed by the imp as a preview to try
+// before keeping it. An app already installed opens instead.
+component AppDirectory
+  props
+    entries: DirectoryApp[]
+    // The apps installed now: one of them opens instead, and shows its own cover.
+    installed: AppTile[]
+    sending: bool
+    install: action
+    open: action
+  state link = ""
+  derive repo = repoLink(link.trim())
+  action editLink(v: string)
+    link = v
+  action installLink
+    if repo != "" and not sending
+      install(repo)
+      link = ""
+  view
+    scroll id="directory-list" flex=1 min-height=0
+      column max-width="48.5rem" margin="0 auto" padding="28px 20px 32px" gap=28 box-sizing="border-box" width="100%"
+        testId="directory"
+        text "Apps other people built for their imps. Pick one, or paste a link to one on GitHub: your imp brings it in as a preview, and you keep it if you like it."
+          color="ink.muted" font-size="1.0625rem" line-height=1.5 max-width="34rem"
+        column gap=12
+          row padding-bottom=10 border-bottom="1px solid ink.strong"
+            text "From a link" class=Label color="ink.strong" role="heading" aria-level=2
+          row align-items="center" gap=8 padding="5px 5px 5px 14px" border="1px solid line.strong"
+            input value=link input=editLink submit=installLink placeholder="github.com/owner/app" aria-label="Link to an app on GitHub"
+              testId="directory-link" flex=1 min-width=0 padding="9px 0" border="none" background-color="transparent"
+              outline="none" font-family="family.mono" font-size="0.9375rem" color="ink.strong" autocapitalize="none"
+              autocorrect="off" spellcheck=false
+            button press=installLink disabled=(repo == "" or sending) testId="directory-link-install" padding="10px 14px"
+              border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono"
+              font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+              :disabled
+                background-color="surface.soft"
+                color="ink.faint"
+              text "Install"
+          if link.trim() != "" and repo == ""
+            text "That isn't a link to a GitHub repository. It looks like github.com/owner/app." font-size="0.875rem"
+              color="-exact-system-red" testId="directory-link-error"
+        column
+          row align-items="baseline" justify-content="space-between" padding-bottom=10 border-bottom="1px solid ink.strong"
+            text "In the directory" class=Label color="ink.strong" role="heading" aria-level=2
+            text `No. ${numbered(entries.length)}` class=Label
+          for a in entries key=a.id
+            row align-items="center" gap=14 padding="14px 0" border-bottom="1px solid line.subtle" testId=`directory-${a.id}`
+              match first(installed.filter(x => x.id == a.id and x.cover != ""))
+                case some(x)
+                  image x.cover alt="" width=44 height=44 min-width=44 object-fit="cover"
+                    border="1px solid line.subtle" box-sizing="border-box"
+                case none
+                  row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+                    border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+                    image a.symbol width=18 height=18
+              column gap=2 flex=1 min-width=0
+                text a.name font-family="family.display" font-size="1.375rem" line-height=1.1 testId=`directory-name-${a.id}`
+                text a.description font-size="0.9375rem" color="ink.muted" line-height=1.4
+                text `${repoPath(a.repo)}` font-family="family.mono" font-size="0.75rem" color="ink.faint"
+                  white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+              if installed.map(x => x.id).includes(a.id)
+                button press=open(a.id) aria-label=`Open ${a.name}` testId=`directory-open-${a.id}` padding="8px 12px"
+                  border="1px solid line.strong" background-color="transparent" color="ink.strong" font-family="family.mono"
+                  font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                  :hover
+                    background-color="surface.soft"
+                  text "Open"
+              else
+                button press=install(a.repo) disabled=sending aria-label=`Install ${a.name}` testId=`directory-install-${a.id}`
+                  padding="8px 12px" border="1px solid AccentColor" background-color="transparent" color="AccentColor"
+                  font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+                  :hover
+                    background-color="Highlight"
+                  :disabled
+                    border-color="line.subtle"
+                    color="ink.faint"
+                  text "Install"

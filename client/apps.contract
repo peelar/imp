@@ -1,0 +1,99 @@
+// An installed app in the shell: its tab, and its page around the app's own screen (apps/<id>/app.contract), with
+// the bar that says what it reads and offers Save, Discard and Undo for a draft.
+
+use Label from "./look.contract"
+use KeyBadge from "./parts.contract"
+
+// A word set in the display serif with its first letter in the script, the catalogue's drop capital.
+// An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
+// preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
+// Otherwise it says how the app's sync went, with Sync now, and after a save offers to undo it.
+component AppPage
+  props
+    id: string
+    draft: bool
+    undo: string
+    reads: string
+    sync: string
+    save: action
+    discard: action
+    undoSave: action
+    syncNow: action
+    keys: bool
+  slot
+  view
+    column flex=1 min-height=0
+      if draft
+        row testId="preview-bar" align-items="center" gap=12 padding="10px 20px" background-color="fill.preview"
+          color="ink.on-fill" flex-wrap="wrap"
+          text "Preview" class=Label color="ink.on-fill"
+          column flex=1 min-width="12rem" gap=2
+            text "A new version, on a copy of your data. Nothing you do here is kept." font-size="0.9375rem"
+            if reads != ""
+              text reads font-size="0.875rem" opacity=0.85 testId="preview-reads"
+          button press=discard(id) testId="preview-discard" padding="7px 12px" border="1px solid ink.on-fill"
+            background-color="transparent" color="ink.on-fill"
+            text "Discard" class=Label color="inherit"
+          button press=save(id) aria-keyshortcuts="Meta+S" testId="preview-save" padding="7px 12px"
+            border="1px solid ink.on-fill" background-color="ink.on-fill" color="fill.preview" position="relative"
+            text "Save" class=Label color="inherit"
+            if keys
+              KeyBadge(chord="Meta+S", at="end")
+      else if undo != "" or sync != ""
+        // Under the page's header, in line with its title.
+        row padding="8px 24px" border-bottom="1px solid line.subtle"
+          row width="100%" align-items="center" gap=12
+            if sync != ""
+              row flex=1 min-width=0 align-items="center" gap=10 testId="sync-bar"
+                text sync font-size="0.8125rem" color=(sync.startsWith("Sync failing") ? "-exact-system-red" : "ink.muted")
+                  min-width=0 overflow-wrap="anywhere" testId="sync-status"
+                button press=syncNow(id) disabled=(sync == "Syncing…") testId="sync-now" padding="4px 0" border="none"
+                  background-color="transparent" color="ink.muted" flex-shrink=0
+                  :hover
+                    color="ink.strong"
+                  :disabled
+                    color="ink.faint"
+                  text "Sync now" class=Label color="inherit"
+            else
+              row flex=1
+            if undo != ""
+              button commandfor=`undo-${id}` command="show-modal" testId="undo-save" padding="6px 10px"
+                border="1px solid line.strong" background-color="transparent" color="ink.strong" flex-shrink=0
+                text (undo == "remove" ? "Undo: remove app" : "Undo last save") class=Label color="inherit"
+        dialog id=`undo-${id}` role="alertdialog" aria-label="Undo the last save?"
+          text (undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays.")
+          button commandfor=`undo-${id}` command="close" testId="undo-cancel"
+            text "Cancel"
+          button press=undoSave(id) commandfor=`undo-${id}` command="close" destructive=true testId="undo-confirm"
+            text "Undo"
+      scroll id=`${id}-screen` flex=1 min-height=0
+        children
+
+// One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
+component AppTab
+  props
+    prefix: string
+    name: string
+    label: string
+    symbol: string
+    chord: string
+    selected: bool
+    shown: bool
+    keys: bool
+    press: action
+  view
+    button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
+      aria-keyshortcuts=chord aria-label=label title=label testId=`${prefix}tab-${name}` appearance="none"
+      display=(shown ? "flex" : "none") flex-direction="column" align-items="center" justify-content="center"
+      position="relative" box-sizing="border-box" flex="1 1 0" max-width="7rem" gap=4 min-width=0 padding=0
+      border="none" border-top=(selected ? "2px solid ink.strong" : "2px solid transparent")
+      background-color="transparent" color=(selected ? "ink.strong" : "ink.muted")
+      transition="background-color 120ms ease, color 120ms ease"
+      :hover
+        color="ink.strong"
+        background-color="surface.soft"
+      image symbol width=19 height=19 aria-hidden=true
+      text label font-family="family.mono" font-size="0.625rem" font-weight=500 letter-spacing="0.1em"
+        text-transform="uppercase" aria-hidden=true
+      if keys and chord != ""
+        KeyBadge(chord=chord, at="tab")
