@@ -5,7 +5,9 @@
 //   E2B_API_KEY   an E2B key for Imp cloud, for a checkout; an installed host takes it in Settings instead
 //   MACHINE       "local" fixes the agent's computer to a directory on this one (development only: no isolation);
 //                 otherwise the owner picks it in Settings
-//   MODEL         the ChatGPT model (default gpt-6.1-sol)
+//   MODEL         the ChatGPT model, used alone (default: gpt-6.1-sol, then gpt-6-sol, then gpt-6-luna, the first
+//                 one ChatGPT lets the account use)
+//   FLAGS         a Vercel Flags SDK key (optional); otherwise flags come from DATA_DIR/flags.json and their defaults
 //   OWNER_LOGIN   the one Tailscale login allowed in (default: everyone on the tailnet)
 //   IMP_HOME      set by scripts/install-host.sh: the installed host, which updates itself (update/update.ts)
 //   IMP_AUTO_UPDATE  "0" keeps an installed host at its release
@@ -44,12 +46,18 @@ const models = createModels({
 
 models.setProvider(openaiCodexProvider());
 
+// ChatGPT serves only the models an account's plan covers, so without MODEL the host moves down these until one answers.
+const [model = "gpt-6.1-sol", ...fallbacks] = process.env.MODEL
+  ? [process.env.MODEL]
+  : ["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"];
+
 const version = runningVersion(root);
 const repo = process.env.IMP_REPO ?? "peelar/imp";
 
 const host = await startHost({
   models,
-  model: { provider: CHATGPT, modelId: process.env.MODEL ?? "gpt-6.1-sol" },
+  model: { provider: CHATGPT, modelId: model },
+  fallbacks,
   machines,
   dataDir,
   appsDir: path.join(root, "client", "apps"),

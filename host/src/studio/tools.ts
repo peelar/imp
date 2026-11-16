@@ -25,6 +25,7 @@ const text = (value: string) => ({
 /** Writes an app's current code (its draft, else its live version, else a starter) into the agent's workspace. */
 async function appCode(options: StudioToolsOptions, id: string) {
   requireAppId(id);
+  options.gateway.requireOn(id);
 
   const draft = options.gateway.draft(id);
   const live = options.gateway.live(id);

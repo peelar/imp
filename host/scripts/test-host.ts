@@ -5,12 +5,14 @@
 // "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for a login: <site>", "sign in: <login>",
 // "run: <command>" and "save routine: <name> | <cron> | <instruction>" make it call the memory's, the studio's, the
 // secrets', the shell's and the routines' tools the same way, and "reply: <words>" makes it answer those words. Its
+// The model is "faux-1", with "faux-2" to fall back on: "refuse: <model>" (or "all") makes that model refuse as
+// ChatGPT refuses one the account's plan does not cover, and "which model?" answers the one that took it. Its
 // agent-browser knows two tricks. TEST_DATA_DIR names
 // the host's data directory, for a test that starts the host again on it.
 //
 // Beside it, on TEST_API_PORT (default 8799), a server that speaks OpenAI's Chat Completions API, for the API key
 // sign-in: it takes the key "test-key" and the model "fake-model", and answers every message "Hello from the API."
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -117,7 +119,28 @@ function recalled(context: Parameters<FauxResponseFactory>[0]) {
     : "Nothing yet.";
 }
 
-const respond: FauxResponseFactory = (context) => {
+/**
+ * "refuse: <model>" (or "all") is refused as ChatGPT refuses a model the account's plan does not cover; "which model?"
+ * answers the model that took it.
+ */
+function modelChoice(text: string, model: string) {
+  const [, refused] = /refuse: ([a-z0-9-]+)/.exec(text) ?? [];
+
+  if (refused === model || refused === "all") {
+    return fauxAssistantMessage([], {
+      stopReason: "error",
+      errorMessage: `Codex error: The '${model}' model is not supported when using Codex with a ChatGPT account.`,
+    });
+  }
+
+  return refused || text.includes("which model")
+    ? fauxAssistantMessage(`Answered on ${model}.`)
+    : undefined;
+}
+
+// The model that is asked comes last, after the request's options and the provider's state.
+const respond: FauxResponseFactory = (context, ...rest) => {
+  const { 2: model } = rest;
   // A prompt section that changed since the last turn (the memory's, say) arrives as a system message after the
   // message it answers to, so the turn's last word is the last message that is not one.
   const last = context.messages.findLast(({ role }) => role !== "system");
@@ -152,6 +175,12 @@ const respond: FauxResponseFactory = (context) => {
     );
   }
 
+  const choice = modelChoice(text, model.id);
+
+  if (choice) {
+    return choice;
+  }
+
   const call = toolCall(text);
 
   if (call) {
@@ -175,7 +204,7 @@ const respond: FauxResponseFactory = (context) => {
 
 const faux = fauxProvider({
   provider: CHATGPT,
-  models: [{ id: "faux-1" }],
+  models: [{ id: "faux-1" }, { id: "faux-2" }],
   tokensPerSecond: 200,
 });
 
@@ -330,9 +359,17 @@ writeFileSync(
 
 process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
 
+// The tests reach every feature, so the test host turns the GitHub app's flag on, unless a test chose for itself.
+const flags = path.join(dataDir, "flags.json");
+
+if (!existsSync(flags)) {
+  writeFileSync(flags, JSON.stringify({ "github-app": true }));
+}
+
 await startHost({
   models,
   model: { provider: CHATGPT, modelId: "faux-1" },
+  fallbacks: ["faux-2"],
   machines: (secret) =>
     localProvider({ secret, dir: path.join(dataDir, "machines") }),
   dataDir,

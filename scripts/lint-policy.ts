@@ -134,6 +134,13 @@ const crossings = [
     says: "uses notices/, which routines/ may not",
   },
   {
+    crosses: "a context reading a flag instead of being handed what it changes",
+    files: [
+      ["apps/apps.ts", 'import { decideFlags } from "../flags/flags.ts";'],
+    ],
+    says: "uses flags/, which apps/ may not",
+  },
+  {
     crosses: "a context using the files that put the host together",
     files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
     says: "a context never uses the files that put the host together",
@@ -152,6 +159,11 @@ const crossings = [
     crosses: "a package kept to one file",
     files: [["computer/computer.ts", 'import { Sandbox } from "e2b";']],
     says: "imports e2b, which only computer/e2b.ts may",
+  },
+  {
+    crosses: "a feature flag decided outside flags/flags.ts",
+    files: [["apps/apps.ts", 'import { flag } from "flags/next";']],
+    says: "imports flags/next, which only flags/flags.ts may",
   },
 ] as const;
 

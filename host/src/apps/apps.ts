@@ -51,6 +51,11 @@ export type { Manifest, Operation } from "./protocol.ts";
 export type GatewayOptions = {
   /** The live apps to start with. */
   readonly apps: readonly AppInfo[];
+  /**
+   * The ids of apps a feature flag keeps off: no version of them runs, so the shell, the agent, the studio and a sync
+   * never reach them.
+   */
+  readonly off?: ReadonlySet<string> | undefined;
   readonly dataDir: string;
   readonly topics: Topics;
   readonly registry: Registry;
@@ -107,8 +112,10 @@ export function appGateway(options: GatewayOptions) {
       console.log(message);
     });
 
+  const { apps, requireOn, allowed } = flagGate(options.off);
+
   const machine = appMachine({
-    slots: options.apps.map((app) => [app.id, app] as const),
+    slots: apps(options.apps).map((app) => [app.id, app] as const),
     machine: options.machine,
     data,
     topics,
@@ -142,19 +149,7 @@ export function appGateway(options: GatewayOptions) {
     log,
   });
 
-  options.registry.install(
-    appTools({
-      apps: () => saved(slots),
-      operations: async (id) => (await machine.loaded(id)).manifest.operations,
-      run: async ({ app, name, args, draft }) =>
-        await run(machine, {
-          slot: draft ? draftSlot(app) : app,
-          name,
-          args,
-          agent: true,
-        }),
-    })
-  );
+  options.registry.install(agentTools(machine));
 
   /** Stops whatever runs in `slot`. Its data stays. */
   const uninstall = (slot: string) => {
@@ -171,7 +166,8 @@ export function appGateway(options: GatewayOptions) {
     machine,
     data,
     scratchDir: path.join(options.dataDir, "apps"),
-    install: async (slot, app) => (await machine.install(slot, app)).manifest,
+    install: async (slot, app) =>
+      (await machine.install(slot, allowed(app))).manifest,
     uninstall,
   });
 
@@ -180,6 +176,7 @@ export function appGateway(options: GatewayOptions) {
     apps: () => shown(slots),
     /** Each app's live version and draft, which only the studio moves (versions.ts). */
     ...versions,
+    requireOn,
     /** The app and the operation name of a shell source such as `todosSetDone`, if an app owns it. */
     route: (source: string) => route(slots, source),
     fromShell: async (call: ShellCall) => {
@@ -216,6 +213,44 @@ export function appGateway(options: GatewayOptions) {
       sync.stop();
       machine.disconnect();
       data.closeAll();
+    },
+  };
+}
+
+/** The two tools the agent finds and runs the saved apps' operations with (tools.ts). */
+const agentTools = (machine: AppMachine) =>
+  appTools({
+    apps: () => saved(machine.slots()),
+    operations: async (id) => (await machine.loaded(id)).manifest.operations,
+    run: async ({ app, name, args, draft }) =>
+      await run(machine, {
+        slot: draft ? draftSlot(app) : app,
+        name,
+        args,
+        agent: true,
+      }),
+  });
+
+/**
+ * The apps a feature flag keeps off (GatewayOptions.off): the rest of a list, a check that throws for one, and the
+ * same check on every version the studio tries, previews, saves or restores, as it is installed.
+ */
+function flagGate(off: ReadonlySet<string> = new Set()) {
+  const requireOn = (id: string) => {
+    if (off.has(id)) {
+      throw new Error(
+        `The ${id} app is behind a feature flag that is off on this host, so it does not run here.`
+      );
+    }
+  };
+
+  return {
+    apps: (all: readonly AppInfo[]) => all.filter(({ id }) => !off.has(id)),
+    requireOn,
+    allowed: (app: AppInfo) => {
+      requireOn(app.id);
+
+      return app;
     },
   };
 }

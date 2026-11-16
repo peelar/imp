@@ -27,6 +27,7 @@ import {
 import { serveHttp } from "./http.ts";
 import { openRoutines, routinesExtension } from "./routines/routines.ts";
 import { openTricks } from "./tricks/tricks.ts";
+import { decideFlags } from "./flags/flags.ts";
 import { Topics } from "./kernel/live.ts";
 import type { Machine, MachineProvider } from "./machine/machine.ts";
 import {
@@ -52,6 +53,8 @@ export type HostOptions = {
   readonly models: MutableModels;
   /** The agent's model after a ChatGPT sign-in, on the ChatGPT provider. An API key names its own. */
   readonly model: { readonly provider: string; readonly modelId: string };
+  /** The ChatGPT models to fall back on, best first, when ChatGPT refuses `model` (account/fallback.ts). */
+  readonly fallbacks?: readonly string[] | undefined;
   /**
    * A fixed machine for development and tests, such as the local adapter. Absent: the owner picks the agent's computer
    * in Settings (Imp cloud, or a computer of theirs on the tailnet).
@@ -82,6 +85,12 @@ export type HostOptions = {
   /** The GitHub CLI the backup signs in and creates its repository with (backup/backup.ts). Default: gh on PATH. */
   readonly gh?: string | undefined;
 };
+
+/** The ChatGPT models the agent may run on, best first. */
+const chatgptModels = ({ model, fallbacks = [] }: HostOptions) => [
+  model.modelId,
+  ...fallbacks,
+];
 
 const named = (model: ModelRef) => `${model.provider}/${model.modelId}`;
 
@@ -334,6 +343,19 @@ async function openAgent(
   return { harness, chats, routines, tricks, notices };
 }
 
+/** The apps Imp ships behind a feature flag that is off on this host, by id: the gateway keeps them off. */
+async function appsOff(dataDir: string) {
+  const flags = await decideFlags({
+    dataDir,
+    sdkKey: process.env.FLAGS,
+    log: (message) => {
+      console.log(message);
+    },
+  });
+
+  return new Set(flags.has("github-app") ? [] : ["github"]);
+}
+
 /** The agent's machine, for something that is about to use it. */
 const machineInUse = (computer: Computer) => async () => {
   const running = await computer.machine();
@@ -385,6 +407,7 @@ export async function startHost(options: HostOptions) {
 
   const gateway = appGateway({
     apps: stored.live,
+    off: await appsOff(dataDir),
     dataDir,
     topics,
     registry,
@@ -401,7 +424,7 @@ export async function startHost(options: HostOptions) {
     liveChanged: backup.record,
   });
 
-  const account = modelAccount(options.models, topics, options.model);
+  const account = modelAccount(options.models, topics, chatgptModels(options));
 
   const { harness, chats, routines, tricks, notices } = await openAgent(parts, {
     gateway,

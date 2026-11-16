@@ -18,6 +18,7 @@ export const CONTEXTS = new Map<string, readonly string[]>([
   ["machine", []],
   ["account", []],
   ["update", []],
+  ["flags", []],
   ["tricks", []],
   ["chats", []],
   ["routines", ["chats"]],
@@ -36,6 +37,10 @@ export const PACKAGES = new Map<string, readonly string[]>([
   ["e2b", ["computer/e2b.ts"]],
   // Only apps/data.ts opens an app's data; the model's sign-ins are the host's one other database.
   ["node:sqlite", ["apps/data.ts", "account/credentials.ts"]],
+  // Only flags/flags.ts decides a feature flag, so the owner's flags.json is always the first word on it.
+  ["flags", ["flags/flags.ts"]],
+  ["flags/next", ["flags/flags.ts"]],
+  ["@flags-sdk/vercel", ["flags/flags.ts"]],
 ]);
 
 const SHARED = "kernel";

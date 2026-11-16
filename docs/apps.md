@@ -79,7 +79,7 @@ An app in `client/apps/` whose `app.json` says `"server": "imp"` keeps Imp's ser
 
 ### GitHub
 
-The GitHub app (`client/apps/github`) is the first app Imp ships this way. Its sync reads, with your key named `github`, the pull requests waiting for your review, your own open pull requests, the issues and pull requests assigned to you, and your unread notifications, and merges them into one item per issue or pull request. It watches `api.github.com/notifications`, so a new notification brings a sync within a minute or so.
+The GitHub app (`client/apps/github`) is the first app Imp ships this way. It is behind the `github-app` [feature flag](configuration.md#feature-flags), which is off unless you turn it on. While it is off, the host runs none of it: there is no tab, no sync, and the imp can neither use it nor make an app in its place. Its data stays on the host for when you turn it on. Its sync reads, with your key named `github`, the pull requests waiting for your review, your own open pull requests, the issues and pull requests assigned to you, and your unread notifications, and merges them into one item per issue or pull request. It watches `api.github.com/notifications`, so a new notification brings a sync within a minute or so.
 
 - **Notifications need a classic token** with the `notifications` scope (or `repo`): GitHub gives them to nothing else. With another key, the app shows the rest and says so.
 - **Done and Snooze are the app's own.** They change nothing on GitHub, and a sync keeps them. A done item comes back when it changes on GitHub again, and a snoozed one when its snooze ends.

@@ -50,8 +50,9 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `account/` | The model account: the ChatGPT sign-in or an API key, and their credentials |  |
 | `tricks/` | The browser tasks the imp keeps on its computer |  |
 | `update/` | The host's updates to the latest release |  |
+| `flags/` | The feature flags: each one's default, and deciding them from the owner's `flags.json` or Vercel Flags |  |
 
-`npm run check` enforces this map (`scripts/boundaries.ts`). It refuses three things: an import of another part's inner file, a use of a part the table doesn't list, and an import of the top files from inside a part. It also keeps two packages to one place each: `e2b` to the E2B adapter, and `node:sqlite` to the apps' data and the credentials. A part that needs another one, or a new part, changes the table there and here in the same commit.
+`npm run check` enforces this map (`scripts/boundaries.ts`). It refuses three things: an import of another part's inner file, a use of a part the table doesn't list, and an import of the top files from inside a part. It also keeps packages to one place each: `e2b` to the E2B adapter, `node:sqlite` to the apps' data and the credentials, and the Flags SDK (`flags`, `@flags-sdk/vercel`) to `flags/flags.ts`, which decides every [feature flag](configuration.md#feature-flags). A part never reads a flag itself: `host.ts` hands it what the flag changes for it, as it hands the app gateway the apps a flag keeps off. A part that needs another one, or a new part, changes the table there and here in the same commit.
 
 The agent and the client reach each part the same way. A part installs its tools and prompt section on the agent's registry, usually from its `tools.ts`, and `shell-api.ts` gives its reads and changes the client's names. A part tells the open views about a change by its topic (`kernel/live.ts`), never by calling the views.
 

@@ -13,6 +13,7 @@ import {
   signOutOfKey,
   storedApiKey,
 } from "./api-key.ts";
+import { chatgptChoice } from "./fallback.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { openCredentialStore } from "./credentials.ts";
@@ -81,15 +82,20 @@ const tokenClaims = compile(
   )
 );
 
-/** `chatgptModel` is the model a ChatGPT sign-in runs on; an API key names its own. */
+/**
+ * `chatgptModels` are the models a ChatGPT sign-in runs on, best first: it moves down them as ChatGPT refuses one
+ * (fallback.ts). An API key names its own model.
+ */
 export function modelAccount(
   models: MutableModels,
   topics: Topics,
-  chatgptModel: ModelRef
+  chatgptModels: readonly string[]
 ) {
   let state: Account = { ...SIGNED_OUT, status: "checking" };
 
   let attempt: AbortController | undefined;
+
+  const chatgpt = chooseChatgptModel(models, topics, chatgptModels);
 
   const set = (next: Partial<Account>) => {
     state = { ...state, ...next };
@@ -135,7 +141,7 @@ export function modelAccount(
 
       return state.kind === "apiKey"
         ? { provider: API, modelId: state.model }
-        : chatgptModel;
+        : { provider: CHATGPT, modelId: chatgpt.current() };
     },
     /** Whether the agent can run: a model account is stored. */
     async usable() {
@@ -263,6 +269,30 @@ function failure(cause: unknown): string {
   const code = "code" in why ? String(why.code) : "";
 
   return `The host could not reach ChatGPT: ${why.message || code || why.name}`;
+}
+
+/**
+ * Puts the ChatGPT provider, which whoever starts the host sets (server.ts, scripts/test-host.ts), in `models` again
+ * with its fallback over `ids` (fallback.ts), and answers which of them the agent runs on.
+ */
+function chooseChatgptModel(
+  models: MutableModels,
+  topics: Topics,
+  ids: readonly string[]
+) {
+  const provider = models.getProvider(CHATGPT);
+
+  if (!provider) {
+    throw new Error(`The ${CHATGPT} provider is not set`);
+  }
+
+  const chatgpt = chatgptChoice(provider, ids, () => {
+    topics.changed(TOPIC);
+  });
+
+  models.setProvider(chatgpt.provider);
+
+  return chatgpt;
 }
 
 /** Whether a ChatGPT credential is stored. A store that cannot be read counts as none: the person signs in again. */
