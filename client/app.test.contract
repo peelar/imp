@@ -1,4 +1,5 @@
 // The tests share one host (scripts/test-host.ts), so they run in order: the first signs in, the rest are signed in.
+// Each opens Imp again, so each starts on a new chat.
 
 test "onboarding signs in with ChatGPT through a device code"
   clock data
@@ -58,9 +59,9 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   clock until state todosReadList.2.title == "Call the vet" within 10000
   clock until state chat.busy == false within 10000
   expect text "todo-3" == "Call the vet"
-  clock until state chat.messages.3.text == "Add todo: Call the vet" within 1000
-  expect state chat.messages.4.title == "Todos · Add"
-  expect state chat.messages.4.detail == "Call the vet"
+  clock until state chat.messages.0.text == "Add todo: Call the vet" within 1000
+  expect state chat.messages.1.title == "Todos · Add"
+  expect state chat.messages.1.detail == "Call the vet"
   tap "chat-expand"
   expect tree missing "chat-panel"
   expect tree has "chat-column"
@@ -110,7 +111,7 @@ test "what the imp is asked to remember shows in Settings, reaches its prompt, a
   clock until state chat.busy == false within 10000
   type "composer" "What do you know about me?"
   tap "send"
-  clock until state chat.messages.10.text == "I know: Lives in Kraków" within 10000
+  clock until state chat.messages.4.text == "I know: Lives in Kraków" within 10000
   tap "tab-settings"
   tap "settings-pane-memory"
   expect text "memory-title-0" == "You"
@@ -154,7 +155,7 @@ test "a key added in Settings reaches the imp's commands as a stand-in, never as
   type "composer" "Please run: printenv GITHUB_TOKEN"
   tap "send"
   clock until state chat.busy == false within 30000
-  clock until state chat.messages.15.text == "I see imp-secret-github." within 10000
+  clock until state chat.messages.2.text == "I see imp-secret-github." within 10000
 
 test "the imp asks for a key it lacks, and the owner adds it from the request"
   clock until state account.status == "signedIn" within 5000
@@ -241,31 +242,33 @@ test "the sidebar starts new chats, folds all but the latest three, and lists th
   size 1280x800
   clock until state account.status == "signedIn" within 5000
   expect tree has "sidebar"
-  expect text "conversation-0" == "Please add todo: Book train to Kraków"
+  // Imp opens on the home page, not on the conversation the last test left open.
+  expect tree has "home"
+  expect text "conversation-0" == "Please ask for a login: github.com"
   expect text "tricks-count" == "2"
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
   expect tree has "home"
   type "composer" "First new chat"
   tap "send"
-  clock until state chat.conversations.length == 2 within 5000
+  clock until state chat.conversations.0.title == "First new chat" within 5000
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
   type "composer" "Second new chat"
   tap "send"
-  clock until state chat.conversations.length == 3 within 5000
+  clock until state chat.conversations.0.title == "Second new chat" within 5000
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
   type "composer" "Third new chat"
   tap "send"
-  clock until state chat.conversations.length == 4 within 5000
+  clock until state chat.conversations.0.title == "Third new chat" within 5000
   expect text "conversation-0" == "Third new chat"
   expect text "conversation-2" == "First new chat"
   expect tree missing "conversation-3"
   tap "conversations-older"
-  expect text "conversation-3" == "Please add todo: Book train to Kraków"
+  expect text "conversation-3" == "Please ask for a login: github.com"
   tap "conversation-3"
-  clock until state chat.messages.0.text == "Please add todo: Book train to Kraków" within 5000
+  clock until state chat.messages.0.text == "Please ask for a login: github.com" within 5000
   tap "tricks-entry"
   expect tree has "tricks"
   expect text "trick-title-0" == "Search Hacker News"
@@ -278,6 +281,39 @@ test "the sidebar starts new chats, folds all but the latest three, and lists th
   expect state nav.tab == "chat"
   clock until state chat.messages.length == 0 within 5000
   expect tree has "home"
+
+test "pointing at a chat in the sidebar shows Archive, which folds the chat under Archived until it is restored"
+  size 1280x800
+  clock until state account.status == "signedIn" within 5000
+  expect text "conversation-0" == "Third new chat"
+  expect tree missing "conversation-archive-0"
+  tap "conversation-row-0" hover
+  tap "conversation-archive-0"
+  clock until state chat.conversations.0.title == "Second new chat" within 5000
+  expect text "conversation-0" == "Second new chat"
+  expect tree has "home"
+  // The open chat, archived, gives way to the home page.
+  tap "conversation-0"
+  clock until state chat.messages.0.text == "Second new chat" within 5000
+  tap "conversation-row-0" hover
+  tap "conversation-archive-0"
+  clock until state chat.conversations.0.title == "First new chat" within 5000
+  clock until state chat.messages.length == 0 within 5000
+  expect tree has "home"
+  // Archived folds both at the sidebar's foot; one opens to be read, and Restore puts it back under Recent.
+  expect text "conversations-archived" == "+Archived (2)"
+  expect tree missing "archived-conversation-0"
+  tap "conversations-archived"
+  expect text "archived-conversation-0" == "Third new chat"
+  expect text "archived-conversation-1" == "Second new chat"
+  tap "archived-conversation-0"
+  clock until state chat.messages.0.text == "Third new chat" within 5000
+  tap "archived-conversation-row-0" hover
+  tap "archived-conversation-restore-0"
+  clock until state chat.conversations.0.title == "Third new chat" within 5000
+  expect text "conversation-0" == "Third new chat"
+  expect text "conversations-archived" == "−Archived (1)"
+  expect state chat.messages.0.text == "Third new chat"
 
 test "on a narrow window the conversations and tricks open as a drawer"
   size 390x844

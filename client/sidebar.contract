@@ -28,7 +28,9 @@ component PlaceEntry
       if count > 0
         text `${count}` class=Label testId=`${id}-count`
 
-// One conversation in the sidebar, by its first message.
+// One conversation in the sidebar, by its first message. Pointing at it shows its one action, Archive under Recent and
+// Restore under Archived, over the end of its title, so the title does not move; a touch screen, where nothing is
+// pointed at, always shows it.
 component ChatEntry
   props
     prefix: string
@@ -36,16 +38,31 @@ component ChatEntry
     id: string
     title: string
     selected: bool
+    touch: bool
     show: action
+    // "Archive" or "Restore", and what it does.
+    verb: string
+    act: action
+  state hovered = false
+  action hover(on: bool)
+    hovered = on
   view
-    button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
-      padding="8px 10px" border="none" text-align="start" color="ink.strong" min-width=0
-      background-color=(selected ? "surface.soft" : "transparent")
-      :hover
-        background-color="surface.soft"
-      text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+    row hover=hover position="relative" align-items="center" min-width=0 testId=`${prefix}conversation-row-${index}`
+      background-color=(selected or hovered ? "surface.soft" : "transparent")
+      button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
+        flex=1 padding="8px 10px" border="none" text-align="start" color="ink.strong" min-width=0
+        background-color="transparent"
+        text title font-size="0.9375rem" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      if hovered or touch
+        button press=act(id) aria-label=`${verb} ${title}` title=verb testId=`${prefix}conversation-${verb.toLowerCase()}-${index}`
+          appearance="none" position="absolute" top=0 bottom=0 right=0 display="flex" align-items="center"
+          justify-content="center" padding="0 10px" border="none" background-color="surface.soft" color="ink.muted"
+          :hover
+            color="ink.strong"
+          image (verb == "Archive" ? "symbol:icon.archive" : "symbol:icon.restore") width=14 height=14 aria-hidden=true
 
-// The left sidebar: a new chat on a line of its own, the imp's pages (home, routines, tricks, the app directory), then the three latest conversations and, folded under them, the rest.
+// The left sidebar: a new chat on a line of its own, the imp's pages (home, routines, tricks, the app directory), then the
+// three latest conversations and, folded under them, the rest, and pinned at its foot the archived ones, folded too.
 component Sidebar
   props
     prefix: string
@@ -60,6 +77,14 @@ component Sidebar
     olderOpen: bool
     newChat: action
     show: action
+    archive: action
+    // The chats the person archived, folded under Archived below the rest, and what brings one back.
+    archived: ChatSummary[]
+    archivedOpen: bool
+    toggleArchived: action
+    restore: action
+    // A touch screen, where Archive cannot wait to be pointed at.
+    touch: bool
     openRoutines: action
     openTricks: action
     openDirectory: action
@@ -97,7 +122,7 @@ component Sidebar
           column gap=2 padding="14px 10px 20px"
             text "Recent" class=Label padding="0 10px 6px"
             for c, i in conversations.slice(0, 3) key=c.id
-              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), show=show)
+              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
             if conversations.length > 3
               button press=toggleOlder aria-expanded=olderOpen testId=`${prefix}conversations-older` appearance="none"
                 display="flex" align-items="center" gap=8 padding="9px 10px" margin-top=4 border="none"
@@ -108,4 +133,22 @@ component Sidebar
                 text (olderOpen ? "Hide older" : `Older (${conversations.length - 3})`) class=Label color="inherit"
               if olderOpen
                 for c, i in conversations.slice(3) key=c.id
-                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), show=show)
+                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
+      // Archived chats, pinned to the bottom edge of the conversations and folded until opened: a chat
+      // opened here can be read and written in, and Restore puts it back under Recent. Open, the list scrolls on its own
+      // past a third of the window, so Recent keeps its room.
+      if archived.length > 0
+        column padding="6px 10px 8px" testId=`${prefix}archived`
+          button press=toggleArchived aria-expanded=archivedOpen testId=`${prefix}conversations-archived`
+            appearance="none" display="flex" align-items="center" gap=8 padding="9px 10px" border="none"
+            background-color="transparent" color="ink.muted" text-align="start"
+            :hover
+              color="ink.strong"
+            text (archivedOpen ? "−" : "+") font-family="family.mono" width=12 aria-hidden=true
+            text `Archived (${archived.length})` class=Label color="inherit"
+          if archivedOpen
+            scroll max-height="33vh"
+              column gap=2 padding-bottom=4
+                for c, i in archived key=c.id
+                  ChatEntry(prefix=`${prefix}archived-`, index=i, id=c.id, title=c.title,
+                    selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Restore", act=restore)

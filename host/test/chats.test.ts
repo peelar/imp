@@ -25,6 +25,7 @@ type Chats = {
   readonly current: Json | undefined;
   readonly messages: Row[];
   readonly list: Row[];
+  readonly archived: Row[];
 };
 
 /** The open conversation and the sidebar's list, once the imp is idle and `accept` takes them. */
@@ -37,6 +38,7 @@ const chatsWhen =
             current: answer.current,
             messages: rows(answer.messages),
             list: rows(answer.conversations),
+            archived: rows(answer.archived),
           }
         : undefined;
 
@@ -180,6 +182,76 @@ test("New chat opens an empty conversation, which the sidebar lists once somethi
   assert.deepEqual(shown.messages, start.messages);
   assert.deepEqual(
     await call("chatShow", ["999"]),
+    refused("That conversation is gone.")
+  );
+});
+
+test("Archive moves a chat to Archived, archiving the open one opens a new chat, and Restore brings one back", async () => {
+  const start = await until(
+    "chat",
+    chatsWhen(() => true)
+  );
+
+  const other = start.list.find((c) => c.id !== start.current);
+
+  assert.ok(other && isText(other.id));
+
+  // A chat that is not open leaves the list; the open one stays open.
+  assert.deepEqual(await call("chatArchive", [other.id]), done);
+
+  const without = await until(
+    "chat",
+    chatsWhen((c) => !c.list.some((l) => l.id === other.id))
+  );
+
+  assert.equal(without.current, start.current);
+  assert.deepEqual(without.messages, start.messages);
+  assert.deepEqual(without.archived, [other]);
+
+  // The open chat gives way to an empty one.
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.deepEqual(await call("chatSend", ["Archive me while open", ""]), done);
+
+  const open = await until(
+    "chat",
+    chatsWhen((c) => c.list[0]?.title === "Archive me while open")
+  );
+
+  assert.deepEqual(await call("chatArchive", [open.current ?? ""]), done);
+
+  const replaced = await until(
+    "chat",
+    chatsWhen((c) => c.current !== open.current)
+  );
+
+  assert.deepEqual(replaced.messages, []);
+  assert.deepEqual(titles(replaced), titles(without));
+  // The latest written in first.
+  assert.deepEqual(
+    replaced.archived.map((c) => c.title),
+    ["Archive me while open", other.title]
+  );
+  assert.deepEqual(
+    await call("chatArchive", ["999"]),
+    refused("That conversation is gone.")
+  );
+
+  // Restore puts it back in the list, where its last message places it, and the open chat stays open.
+  assert.deepEqual(await call("chatRestore", [other.id]), done);
+
+  const restored = await until(
+    "chat",
+    chatsWhen((c) => c.list.some((l) => l.id === other.id))
+  );
+
+  assert.deepEqual(titles(restored), titles(start));
+  assert.equal(restored.current, replaced.current);
+  assert.deepEqual(
+    restored.archived.map((c) => c.title),
+    ["Archive me while open"]
+  );
+  assert.deepEqual(
+    await call("chatRestore", ["999"]),
     refused("That conversation is gone.")
   );
 });

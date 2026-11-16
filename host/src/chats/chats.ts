@@ -1,6 +1,7 @@
 // The person's conversations with the imp. The host keeps their list, the one open in the shell, and each one's title
 // (its first message) in `conversations.json` in its data directory; a host from before there were several adopts its
-// one conversation, the harness's root. A new chat stays out of the sidebar until something is said in it. Each
+// one conversation, the harness's root. A new chat stays out of the sidebar until something is said in it, and an
+// archived one leaves it but is kept. Each
 // routine's conversation is kept here too, named by the routine, so it can be shown, written in and counted as busy
 // like any other, but the sidebar lists it under Routines (routines/routines.ts), not under Recent. chat.ts draws one
 // conversation; this module decides which.
@@ -47,12 +48,16 @@ export { chatCalls, chatSource } from "./shell.ts";
 
 type Id = Conversation["id"];
 
-/** A conversation in the sidebar: what it is about, when it was last written in, and whether a routine runs in it. */
+/**
+ * A conversation in the sidebar: what it is about, when it was last written in, whether a routine runs in it, and
+ * whether the person archived it, which keeps it but takes it out of the sidebar.
+ */
 type Stored = {
   readonly id: Id;
   title: string;
   updated: number;
   routine?: boolean;
+  archived?: boolean;
 };
 
 type Index = { current: Id; list: Stored[] };
@@ -64,7 +69,13 @@ const stored = compile(
       current: int(),
       list: arr(
         obj(
-          { id: int(), title: str(), updated: num(), routine: opt(bool()) },
+          {
+            id: int(),
+            title: str(),
+            updated: num(),
+            routine: opt(bool()),
+            archived: opt(bool()),
+          },
           { open: true }
         )
       ),
@@ -269,8 +280,82 @@ function routineConversations({ options, index, save, conversation }: Shared) {
   };
 }
 
-export async function openChats(options: ChatsOptions) {
+/** What the sidebar does with the person's chats: show one, open a new one, archive one and restore it. */
+function sidebarChats({ options, index, save, conversation }: Shared) {
   const { harness, topics, context, agent } = options;
+
+  /** A chat the person started, not a routine's, by its id. */
+  const chat = (id: string) => {
+    const found = index.list.find((c) => String(c.id) === id && !c.routine);
+
+    if (!found) {
+      throw new Error("That conversation is gone.");
+    }
+
+    return found;
+  };
+
+  const showing = (id: Id) => {
+    index.current = id;
+    save();
+    topics.changed(TOPIC);
+  };
+
+  /** Opens a new chat: one with nothing said in it yet, made only when there is none. */
+  async function fresh() {
+    let blank = index.list.find((c) => c.title === "");
+
+    if (!blank) {
+      const made = await harness.createConversation(
+        { ownership: { kind: "ownerless" }, agent: agent() },
+        context
+      );
+
+      blank = { id: made.id, title: "", updated: Date.now() };
+      index.list.push(blank);
+    }
+
+    await conversation(blank.id);
+    showing(blank.id);
+  }
+
+  return {
+    /** Shows another conversation. */
+    async show(id: string) {
+      const shown = index.list.find((c) => String(c.id) === id);
+
+      if (!shown) {
+        throw new Error("That conversation is gone.");
+      }
+
+      await conversation(shown.id);
+      showing(shown.id);
+    },
+    /** Takes a chat out of the sidebar, keeping it; the open one gives way to a new chat. */
+    async archive(id: string) {
+      const archived = chat(id);
+
+      archived.archived = true;
+      save();
+
+      if (archived.id === index.current) {
+        await fresh();
+      } else {
+        topics.changed(TOPIC);
+      }
+    },
+    /** Puts an archived chat back in the sidebar, where it was by when it was last written in. */
+    restore(id: string) {
+      chat(id).archived = false;
+      save();
+      topics.changed(TOPIC);
+    },
+    fresh,
+  };
+}
+
+export async function openChats(options: ChatsOptions) {
+  const { harness, context, agent } = options;
   const file = path.join(options.dataDir, "conversations.json");
   const conversations = watched(options);
   const conversation = conversations.get;
@@ -293,12 +378,6 @@ export async function openChats(options: ChatsOptions) {
   // The open conversation is watched from the start; the others from when they are opened.
   await conversation(index.current);
 
-  const showing = (id: Id) => {
-    index.current = id;
-    save();
-    topics.changed(TOPIC);
-  };
-
   return {
     /** The open conversation, and every one with something said in it, the latest written in first. */
     async state() {
@@ -311,17 +390,23 @@ export async function openChats(options: ChatsOptions) {
 
       const open = index.list.find((c) => c.id === index.current);
 
-      const conversations = index.list
-        .filter((c) => c.title !== "" && !c.routine)
-        .toSorted((a, b) => b.updated - a.updated)
-        .map(({ id, title }) => ({ id: String(id), title }));
+      const listed = (archived: boolean) =>
+        index.list
+          .filter(
+            (c) =>
+              c.title !== "" && !c.routine && (c.archived === true) === archived
+          )
+          .toSorted((a, b) => b.updated - a.updated)
+          .map(({ id, title }) => ({ id: String(id), title }));
 
       return {
         ...shown,
         current: String(index.current),
         // The routine whose conversation is open, by name; "" for a chat.
         routine: open?.routine ? open.title : "",
-        conversations,
+        conversations: listed(false),
+        // The chats the person archived, which the sidebar folds under Archived.
+        archived: listed(true),
       };
     },
     /** The open conversation's id. */
@@ -368,34 +453,7 @@ export async function openChats(options: ChatsOptions) {
     async stop() {
       await (await conversation(index.current)).abort(context);
     },
-    /** Shows another conversation. */
-    async show(id: string) {
-      const shown = index.list.find((c) => String(c.id) === id);
-
-      if (!shown) {
-        throw new Error("That conversation is gone.");
-      }
-
-      await conversation(shown.id);
-      showing(shown.id);
-    },
-    /** Opens a new chat: one with nothing said in it yet, made only when there is none. */
-    async fresh() {
-      let blank = index.list.find((c) => c.title === "");
-
-      if (!blank) {
-        const made = await harness.createConversation(
-          { ownership: { kind: "ownerless" }, agent: agent() },
-          context
-        );
-
-        blank = { id: made.id, title: "", updated: Date.now() };
-        index.list.push(blank);
-      }
-
-      await conversation(blank.id);
-      showing(blank.id);
-    },
+    ...sidebarChats({ options, index, save, conversation }),
     ...routineConversations({ options, index, save, conversation }),
     /** The model or machine changed: every conversation in use runs with it from its next start. */
     configure: conversations.configure,

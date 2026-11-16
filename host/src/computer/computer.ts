@@ -95,24 +95,62 @@ type Switching = {
 
 const FIXED = "This host runs on a fixed development machine.";
 
-/** How long a look for a container engine stands before the next state Settings shows looks again. */
-const CONTAINER_CHECK_MS = 30_000;
+/** How long a look at the tailnet and for a container engine stands before the next state Settings shows looks again. */
+const LOOK_MS = 30_000;
 
-/** The host's look for a container engine, kept a while: Settings' state is read on every change. */
-function containerCheck() {
-  let last: { at: number; found: Promise<ContainerRuntime> } | undefined;
+/**
+ * The tailnet's devices and a container engine on the host's machine, looked for in the background. Settings' state
+ * rides on the account stream, which the whole shell waits for when it opens, so it shows what the last look found
+ * and never waits on `tailscale status` or `docker info`; a look that finishes tells the shell.
+ */
+function surroundings(own: OwnComputers, changed: () => void) {
+  let at = 0;
+  let looking: Promise<void> | undefined;
+
+  let container: ContainerRuntime = {
+    ok: false,
+    problem: "Looking for Docker, OrbStack or Podman…",
+  };
+
+  // Neither read rejects: each says what went wrong in what it found.
+  async function lookNow() {
+    const [, found] = await Promise.all([own.refresh(), containerRuntime()]);
+
+    container = found;
+    at = Date.now();
+    looking = undefined;
+    changed();
+  }
+
+  /** Starts a look unless one is under way or the last still stands. */
+  function look() {
+    if (!looking && Date.now() - at >= LOOK_MS) {
+      looking = lookNow();
+      looking.catch((cause: unknown) => {
+        looking = undefined;
+        console.error(`computer: looking around failed: ${String(cause)}`);
+      });
+    }
+  }
 
   return {
-    async found() {
-      if (!last || Date.now() - last.at > CONTAINER_CHECK_MS) {
-        last = { at: Date.now(), found: containerRuntime() };
-      }
-
-      return await last.found;
+    look,
+    /** What the last look found of a container engine. */
+    container: () => container,
+    /** Settings asked to look again: the next look starts now, whatever the last one found. */
+    again() {
+      at = 0;
+      look();
     },
-    /** The next look asks the engine again. */
-    forget() {
-      last = undefined;
+    /** A container engine as it answers now, for a switch to one. */
+    async fresh() {
+      // A look under way may have started before the engine did.
+      await looking;
+      at = 0;
+      look();
+      await looking;
+
+      return container;
     },
   };
 }
@@ -262,7 +300,11 @@ export function openComputer(options: ComputerOptions) {
     });
 
   const machines = machineRunner(plan(choice.get()), changed);
-  const engine = containerCheck();
+  // A development host's machine is fixed, so it has nothing to look for. The first look starts with the host, so
+  // Settings rarely shows one under way.
+  const around = fixed ? undefined : surroundings(own, changed);
+
+  around?.look();
 
   async function switchTo(next: Choice) {
     choice.set(next);
@@ -303,17 +345,16 @@ export function openComputer(options: ComputerOptions) {
   }
 
   return {
-    /** The state Settings shows, with the tailnet's devices read again. */
+    /** The state Settings shows, with what the last look found; one that no longer stands starts again. */
     async load(): Promise<ComputerState> {
-      if (!fixed) {
-        await own.refresh();
-      }
+      around?.look();
 
       const picked = choice.get();
 
-      const found: ContainerRuntime = fixed
-        ? { ok: false, problem: "" }
-        : await engine.found();
+      const found: ContainerRuntime = around?.container() ?? {
+        ok: false,
+        problem: "",
+      };
 
       return {
         kind: fixed ? "dev" : (picked?.kind ?? "none"),
@@ -344,10 +385,9 @@ export function openComputer(options: ComputerOptions) {
     onSwitch: (listener: (workspace: string) => Promise<void> | void) => {
       listeners.add(listener);
     },
-    /** Settings asked for the tailnet's devices, and the container engine, again. */
+    /** Settings asked for the tailnet's devices, and the container engine, again: the look shows itself when done. */
     refresh: () => {
-      engine.forget();
-      changed();
+      around?.again();
 
       return ok;
     },
@@ -359,11 +399,11 @@ export function openComputer(options: ComputerOptions) {
     useCloud: async (size: string) => await useCloud(switching, size),
     setCloudKey: async (key: string) => await setCloudKey(switching, key),
     useOwn: async (dnsName: string) => await useOwn(switching, dnsName),
-    useContainer: async () => {
-      engine.forget();
-
-      return await useContainer(switching, await engine.found());
-    },
+    useContainer: async () =>
+      await useContainer(
+        switching,
+        (await around?.fresh()) ?? { ok: false, problem: FIXED }
+      ),
     close: machines.close,
   };
 }

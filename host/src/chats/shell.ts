@@ -1,5 +1,5 @@
-// The person's side of the conversations: send a message, stop the imp, start a new chat, open another one. The
-// chat itself streams on its own source (chats.ts, `state`).
+// The person's side of the conversations: send a message, stop the imp, start a new chat, open, archive or restore
+// another one. The chat itself streams on its own source (chats.ts, `state`).
 import {
   type Calls,
   type LiveSource,
@@ -64,6 +64,30 @@ export function chatCalls(
         await chats.fresh();
 
         return ok;
+      },
+    ],
+    [
+      "chatArchive",
+      async (args) => {
+        try {
+          await chats.archive(text(args, 0));
+
+          return ok;
+        } catch (error) {
+          return refused(why(error));
+        }
+      },
+    ],
+    [
+      "chatRestore",
+      (args) => {
+        try {
+          chats.restore(text(args, 0));
+
+          return ok;
+        } catch (error) {
+          return refused(why(error));
+        }
       },
     ],
     [

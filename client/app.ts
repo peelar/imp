@@ -70,6 +70,8 @@ const mutations: Record<Exclude<MutationSource, 'updateRestart'>, true> = {
   chatStop: true,
   chatNew: true,
   chatShow: true,
+  chatArchive: true,
+  chatRestore: true,
   routinesOpen: true,
   routinesRun: true,
   routinesPause: true,

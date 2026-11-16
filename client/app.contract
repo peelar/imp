@@ -131,6 +131,8 @@ component App
   state now = 0
   // The sidebar's conversations past the latest three are folded until this opens them.
   state olderOpen = false
+  // Archived chats are folded at the sidebar's foot until this opens them.
+  state archivedOpen = false
   // On a narrow window the sidebar is a drawer over the chat.
   state drawer = false
   // The host's address in the Mac app ("" on the web, where the page's origin is the host). The Mac installer fills it
@@ -162,6 +164,9 @@ component App
   // The newest notice this page has taken in, by its `at`; -1 before the first. A page tells only what comes after:
   // opening Imp does not tell again what happened before.
   state noticedAt = -1
+  // Imp opens on the home page, a new chat, not on the conversation last open (the host keeps that one open). The chat
+  // stream opens once the host has moved to it, so the last conversation never shows first.
+  state landed = false
   resource page = exactPage() as shape Page
   resource speech = speechRecognitionStatus() as shape SpeechRecognitionStatus else empty()
   resource heard = speechRecognitionState(recognition=recognitionId) when recognitionId != "" as shape SpeechRecognitionState else empty()
@@ -170,7 +175,7 @@ component App
   resource alerts = notificationStatus() as shape NotificationStatus
   resource host = hostOrigin(hostAddress) as shape Host else empty()
   resource account = account() when host.origin != "" as shape Account else empty()
-  resource chat = chat() when signedIn as shape ChatState else empty()
+  resource chat = chat() when signedIn and landed as shape ChatState else empty()
   resource apps = apps() when signedIn as shape AppTile[] else empty()
   resource build = build() when signedIn as shape Build else empty()
   resource update = updateReady() as shape Update else empty()
@@ -184,6 +189,8 @@ component App
   mutation sent as shape Reply then toEnd
   mutation stopped as shape Reply
   mutation chatChanged as shape Reply
+  mutation openedHome as shape Reply then land
+  mutation chatArchived as shape Reply queue
   mutation routineOpened as shape Reply
   mutation routineRan as shape Reply
   mutation routinePaused as shape Reply
@@ -268,6 +275,9 @@ component App
   derive stale = build.id != "" and build.id != builtVersion()
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
+  // Imp is opening: the host has not said whether it is set up yet, or it is and the chat has not arrived.
+  derive opening = (not unreachable and (account.status == "" or account.status == "checking"
+    or (signedIn and not needsComputer and chat.current == "")))
   derive computer = account.computer
   derive memory = account.memory
   derive tricks = account.tricks
@@ -317,6 +327,12 @@ component App
     change(showWaiting)
   task leaveOffTab when offTab
     after(1, toChat)
+  // Opening Imp asks the host for a new chat beside the account stream, not after it. A host that refuses still lets
+  // the chat open, on the conversation it has.
+  task openHome when host.origin != "" key=host.origin
+    change(startHome)
+  task homeRefused when failed(openedHome) key=true
+    change(land)
 
   action applyScheme
     setScheme(scheme)
@@ -385,6 +401,11 @@ component App
     nav = select(nav, "settings")
   action toChat
     nav = select(nav, "chat")
+  action startHome
+    if not pending(openedHome)
+      send openedHome = chatNew()
+  action land
+    landed = true
   action follow(url: string)
     nav = go(nav, url)
   // Step 1's two ways in are folds, and one is open at a time: opening ChatGPT's starts its sign-in, folding it
@@ -522,6 +543,11 @@ component App
     draft = ""
     send chatChanged = chatNew()
     focus("composer")
+  // Archive, beside a chat in the sidebar: the host takes it out of the list, and moves an open one to a new chat.
+  action archiveChat(id: string)
+    send chatArchived = chatArchive(id)
+  action restoreChat(id: string)
+    send chatArchived = chatRestore(id)
   action showChat(id: string)
     drawer = false
     nav = select(nav, "chat")
@@ -604,6 +630,8 @@ component App
       unsent = ""
   action toggleOlder
     olderOpen = not olderOpen
+  action toggleArchived
+    archivedOpen = not archivedOpen
   action toggleDrawer
     drawer = not drawer
   action toEnd
@@ -716,7 +744,17 @@ component App
       display="flex" flex-direction="column" position="relative" viewport-fit="cover" interactive-widget="resizes-content"
       background-color="surface.page"
       color="ink.strong" font-family="family.text"
-      if signedIn and not needsComputer
+      // While the host has not said yet whether Imp is set up, or the home page has not arrived: the mark alone, so
+      // neither the onboarding nor the last conversation flashes first.
+      if opening
+        column flex=1 align-items="center" justify-content="center" gap=16 role="status" aria-label="Opening Imp"
+          testId="opening" animation=(still ? "none" : "rise 400ms ease-out both")
+          image "symbol:icon.imp" width=44 height=44 aria-hidden=true
+            animation=(still ? "none" : "pulse 1.6s ease-in-out infinite")
+          text aria-hidden=true font-family="family.display" font-size="2.25rem" line-height=1.05
+            text "I" font-family="family.script" font-size="1.18em" line-height=0.8 margin-right="0.04em"
+            text "mp"
+      else if signedIn and not needsComputer
         // The routes. On a wide window they sit under the top bar, between the sidebar and the chat's column, above the
         // tab bar.
         column position="absolute" left=(wide ? "15rem" : "0px") bottom=(wide ? "3.5rem" : "0px") top=(wide ? "3.25rem" : "0px") right=(wide ? "24rem" : "0px")
@@ -968,7 +1006,8 @@ component App
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
             aria-label="Conversations, routines and settings"
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome, tricks=tricks.length,
-              routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, openRoutines=openRoutines,
+              routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, archive=archiveChat, touch=(media.pointer == "coarse"),
+                archived=chat.archived, archivedOpen=archivedOpen, toggleArchived=toggleArchived, restore=restoreChat, openRoutines=openRoutines,
               openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard,
               directory=directoryOn)
             // As tall as the tab bar beside it, so their top lines meet.
@@ -1043,7 +1082,8 @@ component App
               padding-top="env(safe-area-inset-top)" background-color="surface.page" border-right="1px solid line.strong"
               aria-label="Conversations, routines and tricks"
               Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome,
-                tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat,
+                tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, archive=archiveChat, touch=(media.pointer == "coarse"),
+                archived=chat.archived, archivedOpen=archivedOpen, toggleArchived=toggleArchived, restore=restoreChat,
                 openRoutines=openRoutines, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder,
                 keyboard=keyboard, directory=directoryOn)
             button press=toggleDrawer aria-label="Close" aria-keyshortcuts="Escape" testId="drawer-close" appearance="none"
@@ -1097,10 +1137,6 @@ component App
                 useContainer=useContainer, setCloudKey=setCloudKey, useOwn=useOwn,
                 copyPrompt=copySetupPrompt, choice=computerChoice, toggle=toggleComputerChoice,
                 still=still)
-            else if account.status == "checking" or account.status == ""
-              row gap=10 align-items="center" padding="24px 0" testId="signin-starting"
-                progress aria-label="Loading"
-                text "Connecting…" font-style="italic" color="ink.muted"
             else
               column gap=14 animation=(still ? "none" : "rise 260ms ease-out both")
                 image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"

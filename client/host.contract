@@ -66,6 +66,8 @@ shape ChatState
   current: string
   routine: string
   conversations: ChatSummary[]
+  // The chats the person archived, the latest written in first.
+  archived: ChatSummary[]
 
 // An installed app. `cover` is its engraving in the client's assets ("" for none), `symbol` its fallback icon.
 // `draft` is true while the app shows a preview of a new version; `undo` says what undoing its last save does: ""
