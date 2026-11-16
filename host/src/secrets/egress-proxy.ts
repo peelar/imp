@@ -1,5 +1,5 @@
 // mitmproxy on the host's loopback: the part of the egress proxy that ends TLS with Imp's own CA, and whose addon
-// (egress/inject.py) puts a secret on a request and takes it out of the response. The host starts it the first time
+// (inject.py) puts a secret on a request and takes it out of the response. The host starts it the first time
 // a command needs it, keeps its rules and its vault token on disk for the addon, and records the uses it prints.
 //
 //   DATA_DIR/egress/ca/        mitmproxy's CA (its private key never leaves the host)
@@ -27,7 +27,7 @@ import {
 import { tool } from "./programs.ts";
 import type { Vault } from "./vault.ts";
 
-const ADDON = path.join(import.meta.dirname, "..", "..", "egress", "inject.py");
+const ADDON = path.join(import.meta.dirname, "inject.py");
 const TOKEN_ROTATE_MS = 30 * 60_000;
 const USE_MARK = "IMP-USE ";
 

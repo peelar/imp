@@ -7,7 +7,7 @@ The imp builds apps for you when you ask. You can also write one yourself, or ch
   - `server.ts`: its data and operations, run in a worker on the agent's computer
   - `app.contract`: its screen, in Exact's Contract language
 
-`host/studio/GUIDE.md` is the guide the imp itself reads, and the most complete reference. This page walks through the same ideas with the Todos app.
+`host/src/studio/guide/GUIDE.md` is the guide the imp itself reads, and the most complete reference. This page walks through the same ideas with the Todos app.
 
 ## app.json
 

@@ -12,7 +12,7 @@ import {
   readAppFiles,
 } from "../apps/apps.ts";
 
-const STUDIO_FILES = path.join(import.meta.dirname, "..", "..", "studio");
+const STUDIO_FILES = path.join(import.meta.dirname, "guide");
 const SDK = path.join(import.meta.dirname, "..", "..", "..", "sdk", "app.ts");
 
 /** Exact's guides the agent reads to write a screen. */

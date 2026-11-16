@@ -406,7 +406,7 @@ const it = existsSync(path.join(exact, "scripts", "app-cli.mjs"))
   : test.skip;
 
 const starter = readFileSync(
-  path.join(repo, "host", "studio", "starter", "server.ts"),
+  path.join(repo, "host", "src", "studio", "guide", "starter", "server.ts"),
   "utf-8"
 );
 

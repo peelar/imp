@@ -3,7 +3,7 @@
 // requests for a secret's hosts to the host, over a stream socket the host opens to it (the machine cannot reach the
 // host, but the host reaches every machine); the host passes each stream to mitmproxy on its loopback
 // (egress-proxy.ts). mitmproxy ends TLS with Imp's own CA, which agentd adds to the machine's CA bundle, and its addon
-// (egress/inject.py) puts the secret on the request and takes it out of the response. The host records each use.
+// (inject.py) puts the secret on the request and takes it out of the response. The host records each use.
 //
 // agentd's proxy takes a request only with the proxy password, which the host puts in the commands' proxy variables
 // and sends the proxy as a hash. The app workers run in agentd's process and get neither, so app code cannot ride on the

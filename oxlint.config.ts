@@ -14,7 +14,7 @@ export default defineConfig({
     // Written by host/scripts/shell.ts between its markers, and run by Exact, not by Node.
     "client/app.ts",
     // The agent's template: it imports the SDK from where the agent's workspace keeps it, not from this repository.
-    "host/studio/starter/**",
+    "host/src/studio/guide/starter/**",
   ],
   jsPlugins: [
     ...antiSlop.jsPlugins,

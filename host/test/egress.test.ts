@@ -1,4 +1,4 @@
-// The egress proxy's addon (egress/inject.py), in the real mitmproxy the host downloads: it puts a secret on a request
+// The egress proxy's addon (host/src/secrets/inject.py), in the real mitmproxy the host downloads: it puts a secret on a request
 // and keeps the value out of what comes back, however the response is sent. The vault is a stand-in on a unix socket,
 // and the service a local server that echoes the header the addon set; plain HTTP, so no CA is needed. An app's
 // request, which the host sends itself (src/secrets/app-fetch.ts), goes the same way over HTTPS, to a service with a
@@ -136,7 +136,7 @@ before(async () => {
       "--set",
       "ssl_insecure=true",
       "-s",
-      path.join(repo, "host", "egress", "inject.py"),
+      path.join(repo, "host", "src", "secrets", "inject.py"),
     ],
     {
       env: {

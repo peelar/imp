@@ -2,7 +2,7 @@
 
 Rules and conventions you can't read from the code. For how things work, read the code.
 
-- A secret's value lives only in the vault. The only code that reads it back is mitmproxy's addon (`host/egress/inject.py`) and `signIn` in `host/src/secrets/logins.ts`. Never log it, show it, or send it to the agent's machine. The machine gets stand-ins for API keys, and a login is typed straight into its own site's page.
+- A secret's value lives only in the vault. The only code that reads it back is mitmproxy's addon (`host/src/secrets/inject.py`) and `signIn` in `host/src/secrets/logins.ts`. Never log it, show it, or send it to the agent's machine. The machine gets stand-ins for API keys, and a login is typed straight into its own site's page.
 - An app's data never leaves the host. Only `apps/data.ts` opens an app's SQLite file.
 - `host/src` has one folder per bounded context, and the folders are the architecture (`docs/architecture.md` draws the map). From outside a context, import only its entry, `<context>/<context>.ts`, and export from there what others need. A context may use only the contexts `scripts/boundaries.ts` lists for it, and `npm run check` refuses the rest. Put new code in the context that owns the behavior. When it needs another context, or a new context, change the map in `scripts/boundaries.ts` and `docs/architecture.md` in the same commit, and say why in its message. Never work around the check with a re-export that hides who depends on whom.
 - If you change `scripts/boundaries.ts`, add a crossing to `scripts/lint-policy.ts` that shows the check refuses it.

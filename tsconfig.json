@@ -24,5 +24,7 @@
     "client/apps/*/server.ts",
     "scripts/*.ts",
     "*.config.ts"
-  ]
+  ],
+  // The agent's template: it imports the SDK from where the agent's workspace keeps it, not from this repository.
+  "exclude": ["host/src/studio/guide/starter"]
 }
