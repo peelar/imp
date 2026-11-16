@@ -81,6 +81,22 @@ test "a todo added in the Todos app is listed and counted"
   expect text "todos-left" == "1 todo left"
   expect text "todo-draft" == ""
 
+// A frozen page (a background tab, or one in the back/forward cache) holds no stream to the host, or the next page
+// opened in the tab waits for one of the browser's six connections; it opens them again when it resumes.
+test "a frozen page lets go of the host's streams, and catches up when it resumes"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-todos"
+  clock until state todosReadList.length == 0 within 5000
+  prefer frozen true
+  request POST "/api/call/todosAdd" ["Added while frozen"]
+  clock +1000 real
+  expect state todosReadList.length == 0
+  prefer frozen false
+  clock until state todosReadList.0.title == "Added while frozen" within 5000
+
 test "the assistant adds a todo that the open Todos app shows at once"
   request POST "/api/call/accountSignIn" []
   request POST "/api/call/appsInstall" ["github"]

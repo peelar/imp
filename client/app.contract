@@ -69,6 +69,7 @@ shape Media
 
 shape Page
   hasFocus: bool
+  frozen: bool
 
 shape Time
   epochAtZero: number
@@ -186,10 +187,14 @@ component App
   resource time = exactTime() as shape Time
   resource alerts = notificationStatus() as shape NotificationStatus
   resource host = hostOrigin(hostAddress) as shape Host else empty()
-  resource account = account() when host.origin != "" as shape Account else empty()
-  resource chat = chat() when signedIn and landed as shape ChatState else empty()
-  resource apps = apps() when signedIn as shape AppTile[] else empty()
-  resource build = build() when signedIn as shape Build else empty()
+  // Every stream to the host closes while the browser has frozen the page (`page.frozen`: a background tab, or a page
+  // put in the back/forward cache), and opens again when it resumes. A frozen page with its streams open holds the
+  // browser's connections to the host, so the page opened after it, another of the shell's routes, waits on the
+  // splash for one.
+  resource account = account() when host.origin != "" and not page.frozen as shape Account else empty()
+  resource chat = chat() when signedIn and landed and not page.frozen as shape ChatState else empty()
+  resource apps = apps() when signedIn and not page.frozen as shape AppTile[] else empty()
+  resource build = build() when signedIn and not page.frozen as shape Build else empty()
   resource update = updateReady() as shape Update else empty()
   // Restart asks the updater to put the ready release in place and open it, then quits.
   mutation restarting as shape Reply then quitForUpdate
@@ -725,7 +730,7 @@ component App
     if guide == id
       guide = ""
   // <apps:members>
-  resource githubReadInbox = githubInbox() when signedIn and nav.tab == "github" as shape GithubInbox else empty()
+  resource githubReadInbox = githubInbox() when signedIn and nav.tab == "github" and not page.frozen as shape GithubInbox else empty()
   derive githubReadInboxLost = match failure(githubReadInbox) { case some(f) => true, case none => false }
   mutation githubWroteDone as shape Reply queue
   action githubDoDone(arg1: string)
@@ -736,7 +741,7 @@ component App
   mutation githubWroteRestore as shape Reply queue
   action githubDoRestore(arg1: string)
     send githubWroteRestore = githubRestore(arg1)
-  resource todosReadList = todosList() when signedIn and nav.tab == "todos" as shape TodosTodo[] else empty()
+  resource todosReadList = todosList() when signedIn and nav.tab == "todos" and not page.frozen as shape TodosTodo[] else empty()
   derive todosReadListLost = match failure(todosReadList) { case some(f) => true, case none => false }
   mutation todosWroteAdd as shape Reply queue
   action todosDoAdd(arg1: string)

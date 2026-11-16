@@ -183,7 +183,7 @@ function wireRead(
     ok: true,
     wiring: {
       members: [
-        `  resource ${resource} = ${id}${pascal(operation.name)}() when signedIn and nav.tab == "${id}" as shape ${type} else empty()`,
+        `  resource ${resource} = ${id}${pascal(operation.name)}() when signedIn and nav.tab == "${id}" and not page.frozen as shape ${type} else empty()`,
         `  derive ${resource}Lost = match failure(${resource}) { case some(f) => true, case none => false }`,
       ],
       refresh: [`    if ${resource}Lost`, `      refresh ${resource}`],
