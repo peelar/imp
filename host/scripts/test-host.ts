@@ -24,7 +24,7 @@ import {
   type FauxResponseFactory,
 } from "@earendil-works/pi-ai/providers/faux";
 import { startHost } from "../src/host.ts";
-import { localProvider } from "../src/computer/local.ts";
+import { localProvider } from "../src/machine/local.ts";
 import { CHATGPT, openCredentialStore } from "../src/account/account.ts";
 
 type Content =

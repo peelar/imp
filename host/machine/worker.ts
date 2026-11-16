@@ -1,7 +1,7 @@
 // One app's server code, in a worker of its own. The module's default export is the app (see sdk/app.ts); its
 // database and its owner's keys are on the host, so every `app.db` and `app.fetch` call goes to the host and back.
 //
-// The host strips this file's types and installs it on the machine as worker.mjs (src/computer/runtime.ts), where it
+// The host strips this file's types and installs it on the machine as worker.mjs (src/machine/runtime.ts), where it
 // runs with no packages: import only types and Node's own modules.
 import { parentPort, workerData } from "node:worker_threads";
 import type {

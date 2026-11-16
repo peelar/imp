@@ -45,8 +45,8 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `notifications/` | What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished | `chats`, `routines`, `secrets`, `live` |
 | `memory/` | The memory contract and the knowledge graph behind it | `chats` |
 | `secrets/` | The vault, the egress proxy and typing logins into Chrome | `machine`, `live`, `datadir`, `processes` |
-| `computer/` | The owner's choice of computer, every machine provider, the runtime the host installs, and the screen | `machine`, `live`, `datadir`, `processes` |
-| `machine/` | The machine adapter contract that every provider meets |  |
+| `computer/` | The owner's choice of computer, switching to another, their own computers on the tailnet, and the screen | `machine`, `live`, `datadir` |
+| `machine/` | The machine adapter contract, every provider's adapter, and the runtime the host installs on every machine | `processes` |
 | `backup/` | Every saved version of the apps' code, in git and on GitHub | `apps`, `live`, `datadir` |
 | `account/` | The model account: the ChatGPT sign-in or an API key, and their credentials | `live` |
 | `tricks/` | The browser tasks the imp keeps on its computer, and how it uses the web | `live` |

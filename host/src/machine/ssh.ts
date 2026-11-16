@@ -15,7 +15,7 @@ import type {
   Machine,
   MachineProvider,
   MachineSpec,
-} from "../machine/machine.ts";
+} from "./machine.ts";
 import {
   AGENTD_PORT,
   agentdEndpoints,

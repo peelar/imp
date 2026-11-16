@@ -3,7 +3,7 @@
 // its profile (agentd.ts). Chrome writes the port and path of its DevTools endpoint, on the machine's loopback, to
 // DevToolsActivePort in that profile; this bridges one host connection to that browser target.
 //
-// The host strips this file's types and installs it beside agentd.mjs (src/computer/runtime.ts). Import only types,
+// The host strips this file's types and installs it beside agentd.mjs (src/machine/runtime.ts). Import only types,
 // Node's own modules and ws.
 import { readFile } from "node:fs/promises";
 import path from "node:path";

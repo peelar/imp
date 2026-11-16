@@ -13,7 +13,7 @@
 //           new version replaces the old worker and terminating it frees everything. One host connection at a time;
 //           workers keep running when it drops, and the host loads every app again when it reconnects.
 //
-// The host strips this file's types and installs it on the machine as agentd.mjs (src/computer/runtime.ts), beside
+// The host strips this file's types and installs it on the machine as agentd.mjs (src/machine/runtime.ts), beside
 // worker.mjs, egress.mjs, chrome.mjs and the ws package. Import only types, Node's own modules and ws.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -97,7 +97,7 @@ server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => {
     if (url.pathname === "/pi-env") {
       // SAFETY: only the host holds the token, and its bridge client sends the daemon's arguments as a JSON array
-      // of strings (src/computer/bridge-client.ts).
+      // of strings (src/machine/bridge-client.ts).
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- JSON.parse is typed `any`.
       const args = JSON.parse(url.searchParams.get("args") ?? "[]") as string[];
 

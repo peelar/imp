@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { createRequire, stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { packagedDaemon } from "@earendil-works/pi-env";
-import type { ImageSpec, MachineSize } from "../machine/machine.ts";
+import type { ImageSpec, MachineSize } from "./machine.ts";
 
 const here = import.meta.dirname;
 const require = createRequire(import.meta.url);

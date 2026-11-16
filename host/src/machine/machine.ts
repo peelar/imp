@@ -1,5 +1,7 @@
-// The machine adapter contract. Every provider (E2B, a computer you bring over SSH, and local for development)
-// implements it, and nothing else in the host knows which provider runs the agent's computer.
+// The machine adapter contract, and every provider's adapter: a container on the host's machine (container.ts), an E2B
+// sandbox (e2b.ts), a computer you bring over SSH (ssh.ts), and a directory for development (local.ts). runtime.ts is
+// what the host installs on every machine, whatever the provider. Only computer/machines.ts picks a provider, from the
+// owner's choice; every other part of the host uses the Machine below and never knows which provider runs it.
 //
 // What every adapter guarantees:
 // 1. `ensure()` is idempotent per key, resumes a suspended machine, and returns it set up by this host's setup script
@@ -12,6 +14,19 @@
 // 5. The owner's secrets stay on the host too: the machine's commands get stand-ins, and their HTTPS requests to a
 //    secret's hosts go through `egress()` to the host, which puts the secret on them (secrets/egress.ts). A login's password
 //    comes to the machine only typed into a page of the login's site, by the host through `chrome()` (secrets/chrome.ts).
+
+// What computer/ picks a provider with, and what server.ts starts a development host on.
+export { containerProvider, findContainerRuntime } from "./container.ts";
+
+export type { ContainerRuntime } from "./container.ts";
+
+export { e2bKeyProblem, e2bProvider } from "./e2b.ts";
+
+export { localProvider } from "./local.ts";
+
+export { machineImage } from "./runtime.ts";
+
+export { probeSsh, sshProvider } from "./ssh.ts";
 
 export type MachineProvider = {
   readonly name: string;

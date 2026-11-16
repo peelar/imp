@@ -6,7 +6,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, test } from "node:test";
-import { probeSsh } from "../src/computer/ssh.ts";
+import { probeSsh } from "../src/machine/ssh.ts";
 
 const bin = mkdtempSync(path.join(tmpdir(), "imp-fake-ssh-"));
 const calls = path.join(bin, "calls");

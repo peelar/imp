@@ -23,7 +23,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { openCredentialStore, CHATGPT } from "./account/account.ts";
 import { startHost } from "./host.ts";
-import { localProvider } from "./computer/computer.ts";
+import { localProvider } from "./machine/machine.ts";
 import { runningVersion, startUpdater } from "./update/update.ts";
 
 const root = path.join(import.meta.dirname, "..", "..");

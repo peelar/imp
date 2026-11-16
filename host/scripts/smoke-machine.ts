@@ -19,11 +19,11 @@ import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type RawData, WebSocket } from "ws";
 import { Topics } from "../src/live/live.ts";
 import type { MachineProvider } from "../src/machine/machine.ts";
-import { containerProvider } from "../src/computer/container.ts";
-import { e2bProvider } from "../src/computer/e2b.ts";
-import { localProvider } from "../src/computer/local.ts";
-import { machineImage } from "../src/computer/runtime.ts";
-import { sshProvider } from "../src/computer/ssh.ts";
+import { containerProvider } from "../src/machine/container.ts";
+import { e2bProvider } from "../src/machine/e2b.ts";
+import { localProvider } from "../src/machine/local.ts";
+import { machineImage } from "../src/machine/runtime.ts";
+import { sshProvider } from "../src/machine/ssh.ts";
 import {
   type FromAgentd,
   fromAgentdCheck,

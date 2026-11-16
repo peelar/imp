@@ -9,7 +9,7 @@ import type {
   MachineEgress,
   MachineProvider,
   MachineSpec,
-} from "../machine/machine.ts";
+} from "./machine.ts";
 import {
   agentdEndpoints,
   agentdEnv,

@@ -3,22 +3,25 @@
 import { Connection } from "@earendil-works/pi-env";
 import { type Choice, DEFAULT_SIZE, sizeOf } from "./choice.ts";
 import type { OwnComputers } from "./own.ts";
-import type {
-  Machine,
-  MachineProvider,
-  MachineSize,
+import {
+  containerProvider,
+  e2bKeyProblem,
+  e2bProvider,
+  findContainerRuntime,
+  type Machine,
+  machineImage,
+  type MachineProvider,
+  type MachineSize,
+  probeSsh,
+  sshProvider,
 } from "../machine/machine.ts";
-import { containerProvider, findContainerRuntime } from "./container.ts";
-import { e2bKeyProblem, e2bProvider } from "./e2b.ts";
-import { machineImage } from "./runtime.ts";
-import { probeSsh, sshProvider } from "./ssh.ts";
 
 const MACHINE_KEY = "owner:local";
 
 /** The container CLI on this machine whose engine answers, or why there is none. */
 export const containerRuntime = findContainerRuntime;
 
-export type { ContainerRuntime } from "./container.ts";
+export type { ContainerRuntime } from "../machine/machine.ts";
 
 /** Why Imp cloud does not take an API key; "" when it does. */
 export const cloudKeyProblem = e2bKeyProblem;

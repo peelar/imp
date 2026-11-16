@@ -10,7 +10,7 @@ Rules and conventions you can't read from the code. For how things work, read th
 - Name a context the person can see by the name the app shows for it, in the sidebar, in Settings or in `docs/`: `tricks/`, `routines/`, `secrets/`. Name one they never see by what it does. A file or function that maps directly to something in the app uses the app's word too.
 - Code in `host/machine/` runs on the agent's machine with its types stripped. It may use the `ws` package and nothing else, and import only types from `host/src`, from a context's entry. `npm run check` refuses the rest.
 - Only `host/src/server.ts` reads settings from the environment. Every other part is handed what it needs through `HostOptions`, and `npm run check` refuses a `process.env.<NAME>` anywhere else.
-- Only `computer/machines.ts` knows about specific machine providers. Everything else goes through the `Machine` interface in `machine/machine.ts`.
+- Each machine provider is an adapter in `machine/`, and only `computer/machines.ts` picks one, from the owner's choice. Everything else goes through the `Machine` interface in `machine/machine.ts`.
 - The shell keeps at most five live streams open. Browsers allow six connections per server, and a sixth makes every other request hang. Put new shell state on a stream that already exists, as `account` carries the computer, memory, secrets and backup. An app's stream is open only while its tab is.
 - Every program the host starts registers with `killOnExit` (`processes/processes.ts`), so it stops when the host stops.
 - Read JSON files in the data directory with `readKept` (`datadir/datadir.ts`). A damaged file must never stop the host.

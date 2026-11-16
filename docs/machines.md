@@ -4,10 +4,10 @@ Every provider of the agent's computer implements one interface, `MachineProvide
 
 | Adapter | File | The computer is |
 | --- | --- | --- |
-| Container | `host/src/computer/container.ts` | A Docker or Podman container on the host's machine. |
-| E2B | `host/src/computer/e2b.ts` | One E2B sandbox, found by its key and size. |
-| SSH | `host/src/computer/ssh.ts` | A Linux computer you bring, reached with the system `ssh`. |
-| Local | `host/src/computer/local.ts` | A directory on the host. Development and tests only. |
+| Container | `host/src/machine/container.ts` | A Docker or Podman container on the host's machine. |
+| E2B | `host/src/machine/e2b.ts` | One E2B sandbox, found by its key and size. |
+| SSH | `host/src/machine/ssh.ts` | A Linux computer you bring, reached with the system `ssh`. |
+| Local | `host/src/machine/local.ts` | A directory on the host. Development and tests only. |
 
 ## The four guarantees
 
@@ -49,7 +49,7 @@ An `Endpoint` is a URL and the headers it needs.
 
 ## Setup and the runtime
 
-`host/src/computer/runtime.ts` is the provider-independent part. The setup script records its digest on the machine once it succeeds, so an adapter runs it only on a machine whose recorded digest differs. The runtime files (agentd and the app worker) carry a digest too: a host with newer files restarts an older agentd.
+`host/src/machine/runtime.ts` is the provider-independent part. The setup script records its digest on the machine once it succeeds, so an adapter runs it only on a machine whose recorded digest differs. The runtime files (agentd and the app worker) carry a digest too: a host with newer files restarts an older agentd.
 
 Each adapter does the same four things in its own way: run the setup, copy the runtime files, start agentd, and check its health.
 
@@ -69,4 +69,4 @@ MACHINE=ssh MACHINE_SSH=imp@homelab node scripts/smoke-machine.ts
 MACHINE=local node scripts/smoke-machine.ts
 ```
 
-Nothing else in the host needs to change. `host/src/computer/machines.ts` is the one file that names the providers, and where Settings picks one.
+Put the adapter in `host/src/machine/` beside the others, and export it from `machine.ts`. Nothing else in the host needs to change but `host/src/computer/machines.ts`, the one file that picks a provider, from what the owner chose in Settings.

@@ -33,8 +33,6 @@ import type { MachineProvider } from "../machine/machine.ts";
 import { COMPUTER_USER, setupPrompt, type TailnetDevice } from "./tailnet.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
-export { localProvider } from "./local.ts";
-
 export { screenSockets, serveScreenPage } from "./screen.ts";
 
 export type { ScreenSockets } from "./screen.ts";

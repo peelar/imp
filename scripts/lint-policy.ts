@@ -169,7 +169,7 @@ const crossings = [
   {
     crosses: "a package kept to one file",
     files: [["computer/computer.ts", 'import { Sandbox } from "e2b";']],
-    says: "imports e2b, which only computer/e2b.ts may",
+    says: "imports e2b, which only machine/e2b.ts may",
   },
   {
     crosses: "a setting read from the environment outside server.ts",

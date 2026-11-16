@@ -1,5 +1,5 @@
 // The egress proxy: how the agent uses the owner's secrets without holding them. Commands on the machine get a
-// stand-in and send their HTTPS requests to agentd's proxy there (computer/runtime.ts, egressEnv). agentd sends the
+// stand-in and send their HTTPS requests to agentd's proxy there (machine/runtime.ts, egressEnv). agentd sends the
 // requests for a secret's hosts to the host, over a stream socket the host opens to it (the machine cannot reach the
 // host, but the host reaches every machine); the host passes each stream to mitmproxy on its loopback
 // (egress-proxy.ts). mitmproxy ends TLS with Imp's own CA, which agentd adds to the machine's CA bundle, and its addon

@@ -9,7 +9,7 @@
 // commands it starts in their proxy variables. The proxy keeps only the password's hash, which the host sends on the
 // control socket, so app code in agentd's workers, which does not get those variables, cannot use the proxy.
 //
-// The host strips this file's types and installs it beside agentd.mjs (src/computer/runtime.ts). Import only types,
+// The host strips this file's types and installs it beside agentd.mjs (src/machine/runtime.ts). Import only types,
 // Node's own modules and ws.
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,7 +21,7 @@ import type { FromEgress, ToEgress } from "../src/secrets/secrets.ts";
 export type EgressProxyOptions = {
   /** Where the proxy listens, on the machine's loopback. */
   readonly port: number;
-  /** Where the CA certificate and the bundle with it are kept (see egressEnv in src/computer/runtime.ts). */
+  /** Where the CA certificate and the bundle with it are kept (see egressEnv in src/machine/runtime.ts). */
   readonly dir: string;
 };
 

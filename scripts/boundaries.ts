@@ -80,15 +80,15 @@ export const CONTEXTS = new Map<string, Context>([
   [
     "computer",
     {
-      owns: "The owner's choice of computer, every machine provider, the runtime the host installs, and the screen",
-      uses: ["machine", "live", "datadir", "processes"],
+      owns: "The owner's choice of computer, switching to another, their own computers on the tailnet, and the screen",
+      uses: ["machine", "live", "datadir"],
     },
   ],
   [
     "machine",
     {
-      owns: "The machine adapter contract that every provider meets",
-      uses: [],
+      owns: "The machine adapter contract, every provider's adapter, and the runtime the host installs on every machine",
+      uses: ["processes"],
     },
   ],
   [
@@ -152,7 +152,7 @@ export const CONTEXTS = new Map<string, Context>([
 /** Packages only some files may import, by the rule in AGENTS.md that keeps each one there. */
 export const PACKAGES = new Map<string, readonly string[]>([
   // Only the E2B adapter talks to E2B: nothing else knows which provider runs the agent's computer.
-  ["e2b", ["computer/e2b.ts"]],
+  ["e2b", ["machine/e2b.ts"]],
   // Only apps/data.ts opens an app's data; the model's sign-ins are the host's one other database.
   ["node:sqlite", ["apps/data.ts", "account/credentials.ts"]],
   // Only flags/flags.ts decides a feature flag, so the owner's flags.json is always the first word on it.
