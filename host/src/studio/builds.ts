@@ -102,7 +102,7 @@ export function shellBuilds(options: ShellBuildsOptions) {
 
   /** Builds the shell with these apps; answers the build's id, or throws what the compiler said. */
   async function build(apps: readonly ShellApp[]): Promise<string> {
-    options.toolchain.require();
+    await options.toolchain.ready();
 
     const id = `b${Date.now().toString(36)}`;
     const started = Date.now();

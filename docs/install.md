@@ -60,7 +60,7 @@ This puts Imp in `~/Applications`, already connected to that host. `curl -fsSL h
 - `~/Applications/Imp.app`: the Mac app, on macOS, and in `~/Library/Application Support/Imp/` its updater
 - `~/.bun/` and `~/.rustup/` with `~/.cargo/`: Bun and the Rust toolchains Exact builds with, when they were not there already
 
-The host installs Exact and those toolchains itself the first time it starts, and again when an update pins a newer Exact. That takes a few minutes and about 6 GB of disk, and needs `git`, `curl` and a C compiler (on macOS, the Xcode Command Line Tools: `xcode-select --install`). Until it finishes, the imp can write an app but not preview it. `scripts/setup.sh exact` in the release is what runs, and the host's log says how it went.
+The host installs Exact and those toolchains itself the first time it starts, and again when an update pins a newer Exact. That takes a few minutes and about 6 GB of disk, and needs `git`, `curl` and a C compiler (on macOS, the Xcode Command Line Tools: `xcode-select --install`). Until it finishes, the imp can write an app, and its first preview waits for the install to finish. `scripts/setup.sh exact` in the release is what runs, and the host's log says how it went.
 
 Run the installer again at any time. It updates the host and restarts it.
 

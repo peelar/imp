@@ -1,7 +1,8 @@
 // What the shell builds with: Exact at the commit client/exact-rev pins, with Bun and the Rust toolchains its web build
 // reads. A checkout's developer installs them with scripts/setup.sh. An installed host installs them itself with the
 // same script's `exact` part, from its release, and again when an update moves the pin. The pin it last installed is
-// kept in DATA_DIR/exact-ready, so a setup cut short is run again.
+// kept in DATA_DIR/exact-ready, so a setup cut short is run again. A build waits for
+// the install, and one that failed runs again at the next build.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -43,7 +44,6 @@ export function exactToolchain(options: ToolchainOptions) {
   const marker = path.join(options.dataDir, "exact-ready");
 
   let installing: Promise<void> | undefined;
-  let failure: string | undefined;
 
   /** The commit the release pins. */
   const pinned = () => {
@@ -87,7 +87,6 @@ export function exactToolchain(options: ToolchainOptions) {
       child.stderr.on("data", printed);
 
       const failed = (why: string) => {
-        failure = why;
         log(`studio: installing Exact failed: ${why}`);
         reject(new Error(why));
       };
@@ -103,7 +102,6 @@ export function exactToolchain(options: ToolchainOptions) {
         }
 
         writeFileSync(marker, rev);
-        failure = undefined;
         log(
           `studio: installed Exact in ${Math.round((Date.now() - started) / 1000)} s`
         );
@@ -117,33 +115,21 @@ export function exactToolchain(options: ToolchainOptions) {
   }
 
   return {
-    /** Resolves once Exact is installed at the pin, installing it first on a host that installs its own. */
+    /**
+     * Resolves once Exact is installed at the pin, installing it first on a host that installs its own. A build waits
+     * here rather than failing, so the imp's preview finishes instead of asking it to guess when to try again.
+     */
     async ready() {
       if (options.setup && (installing || !installed())) {
-        await install(options.setup);
+        try {
+          await install(options.setup);
+        } catch (error) {
+          throw new Error(
+            `Imp could not install the tools it builds apps with. Preview again to retry. It said:\n${error instanceof Error ? error.message : String(error)}`,
+            { cause: error }
+          );
+        }
       }
-    },
-    /**
-     * Throws, on a host that installs its own Exact, while Exact is not installed at the pin, and starts installing it,
-     * so a build fails at once with what to do instead of waiting minutes.
-     */
-    require() {
-      const { setup } = options;
-
-      if (!setup || (!installing && installed())) {
-        return;
-      }
-
-      const before = failure;
-
-      // Whoever waits on it hears the failure; this only starts it.
-      install(setup).catch(() => null);
-
-      throw new Error(
-        before
-          ? `Imp could not install the tools it builds apps with, and is trying again. Preview again in a few minutes. Last time it said:\n${before}`
-          : "Imp is installing the tools it builds apps with, once, which takes a few minutes. Preview again when it is done."
-      );
     },
   };
 }
