@@ -804,7 +804,7 @@ component App
                               text "Your apps" class=Label color="ink.strong" role="heading" aria-level=3
                               text `No. ${numbered(apps.length + (computer.status == "none" ? 0 : 1))}` class=Label
                             for a in apps key=a.id
-                              button press=pick(a.id) display="flex" align-items="center" gap=14 padding="14px 0"
+                              button press=pick(a.id) display="flex" align-items="center" gap=14 padding="14px 12px"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId=`app-${a.id}`
                                 transition="background-color 120ms ease"
@@ -818,7 +818,7 @@ component App
                                   text a.description font-size="0.9375rem" color="ink.muted" line-clamp=1
                             // The imp's computer, as an app: its screen, to watch the imp work or take over.
                             if computer.status != "none"
-                              button press=pick("computer") display="flex" align-items="center" gap=14 padding="14px 0"
+                              button press=pick("computer") display="flex" align-items="center" gap=14 padding="14px 12px"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId="app-computer"
                                 transition="background-color 120ms ease"
@@ -831,7 +831,7 @@ component App
                                   text "Computer" font-family="family.display" font-size="1.375rem" line-height=1.1
                                   text `${computer.name}. Watch your imp work, or take over.` font-size="0.9375rem"
                                     color="ink.muted" line-clamp=1
-                            button press=startApp display="flex" align-items="center" gap=14 padding="14px 0"
+                            button press=startApp display="flex" align-items="center" gap=14 padding="14px 12px"
                               background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                               text-align="start" color="ink.strong" testId="app-new"
                               transition="background-color 120ms ease"
