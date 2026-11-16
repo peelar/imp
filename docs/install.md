@@ -25,6 +25,14 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
    Imp is open on this Mac and in your browser. Sign in to either to set up your imp.
    ```
 
+   To try `main` before it is released, install the `unreleased` prerelease, which every push to `main` rebuilds:
+
+   ```sh
+   curl -fsSL https://github.com/peelar/imp/releases/download/unreleased/install-host.sh | IMP_VERSION=unreleased sh
+   ```
+
+   That host never updates itself; run the command again for a newer build, or the first command to go back to the latest release. `IMP_VERSION=v0.14.2` installs that release instead.
+
 2. **Sign in with ChatGPT**
 
    The host shows a code and a link. Approve it on any device. This is ChatGPT's device code flow, so it works from your phone too. Your ChatGPT plan is the model the agent runs on.

@@ -84,7 +84,9 @@ const host = await startHost({
 // Only an installed release updates itself: a checkout is the developer's to move.
 const home = process.env.IMP_HOME;
 
-if (home && version !== "dev" && process.env.IMP_AUTO_UPDATE !== "0") {
+// Only a release updates itself: a build of main (`main-<commit>`, scripts/install-host.sh) stays until installed again,
+// since the latest release is older than it.
+if (home && /^v\d/.test(version) && process.env.IMP_AUTO_UPDATE !== "0") {
   startUpdater({
     home,
     repo,

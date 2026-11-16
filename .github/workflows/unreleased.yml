@@ -1,0 +1,71 @@
+# Every push to main builds the host and web client of that commit and publishes it as the `unreleased` prerelease,
+# replacing the one before, so main can be installed before it is released (scripts/install-host.sh):
+#
+#   curl -fsSL https://github.com/peelar/imp/releases/download/unreleased/install-host.sh | IMP_VERSION=unreleased sh
+#
+# It builds only the host's part, not the Mac app. A prerelease is never the latest release, so installed hosts and
+# Mac apps never update to it, and its build of main (VERSION main-<commit>) never updates itself.
+name: Unreleased
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Only the newest commit's build is wanted.
+concurrency:
+  group: unreleased
+  cancel-in-progress: true
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # The release workflow's host cache, so a build here and there warm each other.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.rustup/toolchains
+            ~/.cache/exact
+          key: exact-host-${{ runner.os }}-${{ hashFiles('client/exact-rev') }}
+      - name: Set up Exact
+        run: |
+          rev=$(cat client/exact-rev)
+          git init -q "$RUNNER_TEMP/exact"
+          cd "$RUNNER_TEMP/exact"
+          git fetch -q --depth 1 https://github.com/expo/exact "$rev"
+          git checkout -q FETCH_HEAD
+          bun scripts/exact.mjs setup
+          echo "EXACT=$RUNNER_TEMP/exact" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - name: Build
+        run: |
+          version="main-$(git rev-parse --short=7 HEAD)"
+          scripts/package.sh host "$version" out
+          mv "out/imp-host-$version.tar.gz" out/imp-host-unreleased.tar.gz
+      # The release, its assets and its tag move to this commit; the release stays up while its assets are replaced.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -f unreleased
+          git push -f origin refs/tags/unreleased
+          notes="The host and web client of main at $GITHUB_SHA, not yet released. Install it with: curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/unreleased/install-host.sh | IMP_VERSION=unreleased sh"
+          if gh release view unreleased > /dev/null 2>&1; then
+            gh release edit unreleased --prerelease --latest=false --notes "$notes"
+            gh release upload unreleased out/* --clobber
+          else
+            gh release create unreleased out/* --prerelease --latest=false --title "Unreleased (main)" --notes "$notes"
+          fi

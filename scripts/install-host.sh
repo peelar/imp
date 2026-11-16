@@ -3,6 +3,11 @@
 #
 #   curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
 #
+# IMP_VERSION installs another release: a tag such as v0.14.2, or `unreleased`, the build of main's newest commit
+# (.github/workflows/unreleased.yml). Run the same command again for a newer one; such a host never updates itself:
+#
+#   curl -fsSL https://github.com/peelar/imp/releases/download/unreleased/install-host.sh | IMP_VERSION=unreleased sh
+#
 # Everything lives in IMP_HOME (default ~/.imp): releases/<tag> holds each unpacked release, `current` links the one
 # that runs, data/ is the host's data and `env` holds the few settings the app does not have. It serves the host on
 # your tailnet with `tailscale serve`, and opens it: on macOS it installs the Mac app (scripts/install-mac.sh) and opens
@@ -22,23 +27,35 @@ NODE=$(command -v node) || fail "needs Node 24 or newer on PATH (https://nodejs.
 major=$("$NODE" -p 'process.versions.node.split(".")[0]')
 [ "$major" -ge 24 ] || fail "needs Node 24 or newer; $NODE is $("$NODE" --version)"
 
-# GitHub sends /releases/latest on to the latest release's tag page; that address names the tag.
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
-tag=${tag##*/}
-case "$tag" in v[0-9]*) ;; *) fail "$REPO has no release yet" ;; esac
+tag=${IMP_VERSION:-}
+if [ -z "$tag" ]; then
+	# GitHub sends /releases/latest on to the latest release's tag page; that address names the tag.
+	tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
+	tag=${tag##*/}
+	case "$tag" in v[0-9]*) ;; *) fail "$REPO has no release yet" ;; esac
+fi
 
+# A release is kept under the version its VERSION file names: its tag, or main-<commit> for `unreleased`, whose
+# version is known only once it is downloaded.
 mkdir -p "$IMP_HOME/releases" "$IMP_HOME/data"
-if [ ! -d "$IMP_HOME/releases/$tag" ]; then
+case "$tag" in v[0-9]*) version=$tag ;; *) version= ;; esac
+if [ -z "$version" ] || [ ! -d "$IMP_HOME/releases/$version" ]; then
 	echo "Downloading Imp ${tag}…"
 	work=$(mktemp -d)
 	trap 'rm -rf "$work"' EXIT
-	curl -fsSL -o "$work/host.tar.gz" "https://github.com/$REPO/releases/download/$tag/imp-host-$tag.tar.gz"
+	curl -fsSL -o "$work/host.tar.gz" "https://github.com/$REPO/releases/download/$tag/imp-host-$tag.tar.gz" ||
+		fail "$REPO has no release $tag"
 	mkdir "$work/release"
 	tar -xzf "$work/host.tar.gz" -C "$work/release"
-	[ "$(cat "$work/release/VERSION")" = "$tag" ] || fail "imp-host-$tag.tar.gz is not release $tag"
-	mv "$work/release" "$IMP_HOME/releases/$tag"
+	version=$(cat "$work/release/VERSION")
+	case "$tag" in
+	v[0-9]*) [ "$version" = "$tag" ] || fail "imp-host-$tag.tar.gz is not release $tag" ;;
+	unreleased) case "$version" in main-*) ;; *) fail "imp-host-$tag.tar.gz is not a build of main" ;; esac ;;
+	esac
+	echo "It is Imp ${version}."
+	if [ -d "$IMP_HOME/releases/$version" ]; then rm -rf "$work/release"; else mv "$work/release" "$IMP_HOME/releases/$version"; fi
 fi
-ln -sfn "releases/$tag" "$IMP_HOME/current"
+ln -sfn "releases/$version" "$IMP_HOME/current"
 
 if [ ! -f "$IMP_HOME/env" ]; then
 	cat > "$IMP_HOME/env" <<'EOF'
@@ -201,7 +218,10 @@ if [ -n "$url" ]; then
 fi
 
 echo
-echo "Imp $tag is running and keeps itself up to date."
+case "$version" in
+v[0-9]*) echo "Imp $version is running and keeps itself up to date." ;;
+*) echo "Imp $version is running. It stays at this build: run the installer again for a newer one." ;;
+esac
 echo
 if [ -n "$url" ]; then
 	echo "  Web app:  $url"

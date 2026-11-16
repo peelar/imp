@@ -11,12 +11,13 @@ set -eu
 fail() { echo "package: $*" >&2; exit 1; }
 [ $# -eq 3 ] || fail "usage: scripts/package.sh host|mac <tag> <out>"
 what=$1 tag=$2
-case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail "the tag is vX.Y.Z, not $tag" ;; esac
+# A release's tag, or main-<commit> for the build of main's newest commit (.github/workflows/unreleased.yml).
+case "$tag" in v[0-9]*.[0-9]*.[0-9]*) version=${tag#v} ;; main-*) version="0.0.0-$tag" ;; *) fail "the tag is vX.Y.Z or main-<commit>, not $tag" ;; esac
 mkdir -p "$3"
 out=$(cd "$3" && pwd)
 root=$(cd "$(dirname "$0")/.." && pwd)
 # The version Exact writes into the Mac app's Info.plist and the web build's app.version.json.
-export EXACT_VERSION="${tag#v}"
+export EXACT_VERSION="$version"
 # The web client asks the page's origin for its host, and the Mac app the address it saved (client/app.ts).
 export API_BASE_URL=
 # The Exact modules the client uses, which its builds read from client/node_modules.

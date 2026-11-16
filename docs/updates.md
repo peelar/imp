@@ -11,7 +11,7 @@ An installed host runs from `~/.imp/current`, a link to one unpacked release und
 
 The web client is built into the release, so the same restart updates it. Open pages notice that the host they reconnected to is another release, and reload. `host/src/update/update.ts` is the whole updater.
 
-Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to keep a host at its release. A checkout never updates itself: it is the developer's to move.
+Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to keep a host at its release. A checkout never updates itself: it is the developer's to move. Nor does a build of `main` installed from the `unreleased` prerelease (its version is `main-<commit>`), since the latest release is older than it; `.github/workflows/unreleased.yml` rebuilds that prerelease on every push to `main`, without the Mac app.
 
 ## The Mac app updates itself
 
