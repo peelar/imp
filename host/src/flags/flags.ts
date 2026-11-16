@@ -8,7 +8,9 @@
 // 3. Else the flag's default.
 //
 // A part of the host never decides a flag itself: the files that put the host together read the decisions and hand
-// each part what a flag changes for it, such as the apps the gateway keeps off.
+// each part what a flag changes for it, such as the apps the gateway keeps off. Settings lists the flags and writes the
+// owner's choice to flags.json (openFlags), which the next start decides by: a flag never changes while the host runs.
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { bool, compile, map } from "@earendil-works/pi-schema";
 import type { Adapter } from "flags";
@@ -19,11 +21,22 @@ import { readKept } from "../kernel/kept.ts";
 export const FLAGS = [
   {
     key: "github-app",
+    label: "GitHub app",
     description:
-      "The GitHub app (client/apps/github): its tab, its sync, and the imp's use of it.",
+      "One inbox for what needs you on GitHub, with Done and Snooze, which your imp can read and act on.",
+    defaultValue: false,
+  },
+  {
+    key: "app-directory",
+    label: "App directory",
+    description:
+      "Apps others built, and any app on GitHub by its link, for your imp to install. It opens from the sidebar.",
     defaultValue: false,
   },
 ] as const;
+
+/** The topic that changes when the owner chooses a flag. */
+export const TOPIC = "flags";
 
 export type FlagKey = (typeof FLAGS)[number]["key"];
 
@@ -37,16 +50,62 @@ export type FlagOptions = {
   readonly log: (message: string) => void;
 };
 
+const chosenPath = (dataDir: string) => path.join(dataDir, "flags.json");
+
+const readChosen = (options: FlagOptions) =>
+  readKept(chosenPath(options.dataDir), chosenFile, options.log) ?? {};
+
+export const isFlagKey = (key: string): key is FlagKey =>
+  FLAGS.some((flag) => flag.key === key);
+
+/** A flag as Settings shows it: whether it is on now, and whether it will be on after the next start. */
+export type FlagState = {
+  readonly key: FlagKey;
+  readonly label: string;
+  readonly description: string;
+  readonly on: boolean;
+  readonly next: boolean;
+};
+
+/**
+ * The flags, decided once as the host starts, with the owner's choice for the next start: `choose` writes it to
+ * flags.json and says so on TOPIC through `changed`.
+ */
+export async function openFlags(
+  options: FlagOptions & { readonly changed: () => void }
+) {
+  const on = await decideFlags(options);
+
+  return {
+    on,
+    list: (): FlagState[] => {
+      const chosen = readChosen(options);
+
+      return FLAGS.map(({ key, label, description }) => ({
+        key,
+        label,
+        description,
+        on: on.has(key),
+        next: chosen[key] ?? on.has(key),
+      }));
+    },
+    choose(key: FlagKey, next: boolean) {
+      writeFileSync(
+        chosenPath(options.dataDir),
+        JSON.stringify({ ...readChosen(options), [key]: next })
+      );
+      options.changed();
+    },
+  };
+}
+
+export type Flags = Awaited<ReturnType<typeof openFlags>>;
+
 /** The flags that are on, decided once: the owner's choice, else Vercel Flags if the host has a key, else the default. */
-export async function decideFlags(
+async function decideFlags(
   options: FlagOptions
 ): Promise<ReadonlySet<FlagKey>> {
-  const chosen =
-    readKept(
-      path.join(options.dataDir, "flags.json"),
-      chosenFile,
-      options.log
-    ) ?? {};
+  const chosen = readChosen(options);
 
   const remote = options.sdkKey
     ? (await import("@flags-sdk/vercel")).createVercelAdapter(options.sdkKey)<

@@ -135,9 +135,7 @@ const crossings = [
   },
   {
     crosses: "a context reading a flag instead of being handed what it changes",
-    files: [
-      ["apps/apps.ts", 'import { decideFlags } from "../flags/flags.ts";'],
-    ],
+    files: [["apps/apps.ts", 'import { openFlags } from "../flags/flags.ts";']],
     says: "uses flags/, which apps/ may not",
   },
   {

@@ -50,7 +50,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `account/` | The model account: the ChatGPT sign-in or an API key, and their credentials |  |
 | `tricks/` | The browser tasks the imp keeps on its computer |  |
 | `update/` | The host's updates to the latest release |  |
-| `flags/` | The feature flags: each one's default, and deciding them from the owner's `flags.json` or Vercel Flags |  |
+| `flags/` | The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start |  |
 
 `npm run check` enforces this map (`scripts/boundaries.ts`). It refuses three things: an import of another part's inner file, a use of a part the table doesn't list, and an import of the top files from inside a part. It also keeps packages to one place each: `e2b` to the E2B adapter, `node:sqlite` to the apps' data and the credentials, and the Flags SDK (`flags`, `@flags-sdk/vercel`) to `flags/flags.ts`, which decides every [feature flag](configuration.md#feature-flags). A part never reads a flag itself: `host.ts` hands it what the flag changes for it, as it hands the app gateway the apps a flag keeps off. A part that needs another one, or a new part, changes the table there and here in the same commit.
 
@@ -79,7 +79,7 @@ Each command with a shortcut is a button that declares its chord (`aria-keyshort
 | Escape | Close the drawer | While it is open |
 | ⌃⌘C | Show or hide the chat beside an app | An app on a wide window |
 
-In the Mac app (or an installed desktop web app, so not in a browser tab, where the browser keeps ⌘N and ⌘1 to ⌘9 for itself), New chat shows its keys in the sidebar, and holding ⌘ alone for a moment puts each visible control's keys on its corner until ⌘ is let go.
+In the Mac app (or an installed desktop web app, so not in a browser tab, where the browser keeps ⌘N and ⌘1 to ⌘9 for itself), New chat and Settings show their keys in the sidebar, and holding ⌘ alone for a moment puts each visible control's keys on its corner until ⌘ is let go.
 
 > [!NOTE]
 > The Contract compiler finds Exact's modules in a `node_modules` folder. `scripts/link-exact.sh` links the ones `client/app.contract` uses from the Exact checkout into `client/node_modules`, and setup, CI and releases run it. The host links them the same way into the copy of the client it builds.

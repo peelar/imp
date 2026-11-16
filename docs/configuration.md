@@ -55,11 +55,12 @@ Some features land behind a feature flag before they reach everyone. `host/src/f
 | Flag | Default | What it turns on |
 | --- | --- | --- |
 | `github-app` | off | The [GitHub app](apps.md#github): its tab, its sync, and the imp's use of it. |
+| `app-directory` | off | The app directory in the sidebar: apps others built, and any app on GitHub by its link, to install. |
 
-To turn the GitHub app on, write this to `flags.json` (`~/.imp/data/flags.json` installed, `host/data/flags.json` in a checkout), then restart the host:
+**Settings → Experimental** lists every flag with a switch, which writes your choice to `flags.json` (`~/.imp/data/flags.json` installed, `host/data/flags.json` in a checkout). A flag never changes while the host runs, so the switch says what the flag will be after the next start; restart the host to apply it. You can also write the file yourself, such as:
 
 ```json
-{ "github-app": true }
+{ "github-app": true, "app-directory": true }
 ```
 
 The host's log says how it decided each flag: `flags: github-app on`.

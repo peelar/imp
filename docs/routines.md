@@ -1,12 +1,12 @@
 # Routines
 
-A routine is an instruction the imp carries out on a schedule, such as "every weekday at 8, check my pull requests and put what needs me in my Todos". You ask for one in the chat. The imp saves it with its `save_routine` tool (`host/src/routines/tools.ts`), and the sidebar lists it under **Routines**.
+A routine is an instruction the imp carries out on a schedule, such as "every weekday at 8, check my pull requests and put what needs me in my Todos". You ask for one in the chat. The imp saves it with its `save_routine` tool (`host/src/routines/tools.ts`), and the sidebar's **Routines** page lists it. **Ask for a routine** there starts the message for you.
 
 ## Where a run happens
 
-Each routine has a conversation of its own, which the sidebar opens. Every run adds a turn to it: the routine's instruction, then what the imp found. You can reply there ("skip Linear from now on"), and the next run reads that, because it continues the same conversation. Above the conversation is the routine's schedule, its next and last run, and **Run now**, **Pause** and **Delete**.
+Each routine has a conversation of its own, which the Routines page opens. Every run adds a turn to it: the routine's instruction, then what the imp found. You can reply there ("skip Linear from now on"), and the next run reads that, because it continues the same conversation. Above the conversation is the routine's schedule, its next and last run, and **Run now**, **Pause** and **Delete**.
 
-A routine marks itself in the sidebar while it runs (cobalt) and when it has a run you have not opened yet (ink). The imp is told the run happens while you are away and that its answer reaches you as a [notification](notifications.md), so it puts the most important line first, and answers only "Nothing new." when there is nothing to tell, which sends none. If a run needs something from you (a key, a choice, or anything destructive or irreversible), it stops and says so in that conversation rather than guessing.
+A routine marks itself, and the sidebar's Routines entry, while it runs (cobalt) and when it has a run you have not opened yet (ink). The imp is told the run happens while you are away and that its answer reaches you as a [notification](notifications.md), so it puts the most important line first, and answers only "Nothing new." when there is nothing to tell, which sends none. If a run needs something from you (a key, a choice, or anything destructive or irreversible), it stops and says so in that conversation rather than guessing.
 
 A run teaches the [memory](memory.md) nothing, since you said nothing in it. A reply you write in a routine's conversation teaches it as any chat does.
 

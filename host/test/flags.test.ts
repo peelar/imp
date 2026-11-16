@@ -1,5 +1,5 @@
 // Feature flags (host/src/flags/flags.ts), decided on the host from DATA_DIR/flags.json: the GitHub app stays off
-// until the owner turns its flag on, and then it is back after a restart. harness.ts starts the host. Run: npm test
+// until the owner turns its flag on in Settings, and then it is back after a restart. harness.ts starts the host. Run: npm test
 import assert from "node:assert/strict";
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -9,6 +9,8 @@ import {
   dataDir,
   done,
   first,
+  isRow,
+  refused,
   rows,
   startTestHost,
   stopTestHost,
@@ -22,6 +24,15 @@ const choose = (flags: Record<string, boolean>) => {
 };
 
 const appIds = async () => rows(await first("apps")).map(({ id }) => id);
+
+/** The flags Settings shows, from the account's stream: whether each is on now, and after the next start. */
+const flagStates = async () => {
+  const account = await first("account");
+
+  return rows(isRow(account) ? account.flags : undefined).map(
+    ({ key, on, next }) => ({ key, on, next })
+  );
+};
 
 before(async () => {
   // The owner chose nothing: every flag is its default.
@@ -67,9 +78,31 @@ test("with its flag off, the imp can neither open nor preview the GitHub app", a
   assert.deepEqual(await appIds(), ["todos"]);
 });
 
-test("turned on in flags.json, the GitHub app is back after a restart", async () => {
-  choose({ "github-app": true });
+test("turned on in Settings, a flag is kept for the next start and changes nothing until then", async () => {
+  assert.deepEqual(await flagStates(), [
+    { key: "github-app", on: false, next: false },
+    { key: "app-directory", on: false, next: false },
+  ]);
+  assert.deepEqual(await call("flagsChoose", ["github-app", true]), done);
+  assert.deepEqual(
+    await call("flagsChoose", ["no-such-flag", true]),
+    refused('There is no feature flag named "no-such-flag".')
+  );
+
+  assert.deepEqual(await flagStates(), [
+    { key: "github-app", on: false, next: true },
+    { key: "app-directory", on: false, next: false },
+  ]);
+  assert.deepEqual(await appIds(), ["todos"]);
+});
+
+test("the GitHub app turned on in Settings is back after a restart", async () => {
   await startTestHost();
 
   assert.deepEqual(await appIds(), ["github", "todos"]);
+  assert.deepEqual((await flagStates())[0], {
+    key: "github-app",
+    on: true,
+    next: true,
+  });
 });

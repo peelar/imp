@@ -65,6 +65,7 @@ const mutations: Record<MutationSource, true> = {
   backupConnect: true,
   backupCancel: true,
   backupDisconnect: true,
+  flagsChoose: true,
   appsSave: true,
   appsDiscard: true,
   appsUndo: true,

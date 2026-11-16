@@ -199,6 +199,19 @@ test "settings back the apps' code up to GitHub, connected with a device code"
   clock until state backup.status == "off" within 5000
   expect tree has "backup-connect"
 
+test "Settings' Experimental section keeps a feature flag for Imp's next start"
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  expect text "flag-label-0" == "GitHub app"
+  expect tree missing "flag-pending-0"
+  tap "flag-github-app"
+  clock until state account.flags.0.next == false within 5000
+  expect state account.flags.0.on == true
+  expect text "flag-pending-0" == "Off after Imp restarts"
+  tap "flag-github-app"
+  clock until state account.flags.0.next == true within 5000
+  expect tree missing "flag-pending-0"
+
 test "the sidebar starts new chats, folds all but the latest three, and lists the imp's tricks"
   size 1280x800
   clock until state account.status == "signedIn" within 5000
@@ -274,17 +287,24 @@ test "the app directory installs an app from a GitHub link through the imp, and 
   expect tree has "chat-panel"
   expect text "todo-1" == "Pack camera"
 
-test "a routine the imp saves is listed in the sidebar, runs now in its own conversation, pauses and is deleted"
+test "a routine the imp saves is listed in the Routines pane, runs now in its own conversation, pauses and is deleted"
   size 1280x800
   clock until state account.status == "signedIn" within 5000
   tap "tab-chat"
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
+  expect tree missing "routines-entry-count"
+  tap "routines-entry"
   expect tree has "routines-empty"
+  tap "routine-new"
+  expect tree missing "routines"
+  expect text "composer" == "Every weekday at 8, "
   type "composer" "Please save routine: Weather | 0 8 * * 1-5 | Check the weather"
   tap "send"
   clock until state routines.length == 1 within 10000
   clock until state chat.busy == false within 10000
+  expect text "routines-count" == "1"
+  tap "routines-entry"
   expect text "routine-name-0" == "Weather"
   tap "routine-0"
   clock until state chat.routine == "Weather" within 5000
@@ -306,6 +326,7 @@ test "a routine the imp saves is listed in the sidebar, runs now in its own conv
   clock until state routines.length == 0 within 5000
   clock until state chat.routine == "" within 5000
   expect tree missing "routine-bar"
+  tap "routines-entry"
   expect tree has "routines-empty"
 
 test "the composer's microphone dictates until it is pressed again"

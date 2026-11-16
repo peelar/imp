@@ -1,6 +1,6 @@
 // What the shell reads and changes, by name. Each read is a live source (kernel/live.ts) and each change answers a Reply,
 // `{ ok, error }`. The shell's own names start with one of a few words (account, chat, routines, apps, build,
-// version, computer, memory, secrets, backup), which no app may take as its id (apps/folders.ts); every other name goes to the
+// version, computer, memory, secrets, backup, flags), which no app may take as its id (apps/folders.ts); every other name goes to the
 // app that owns it, such as `todosSetDone` to the todos app's `setDone`.
 import type { Json } from "../../sdk/app.ts";
 import { type AppGateway, appTopic, SYNC_TOPIC } from "./apps/apps.ts";
@@ -11,6 +11,7 @@ import { type AppBackup, TOPIC as BACKUP } from "./backup/backup.ts";
 import { TOPIC as MEMORY, type MemoryProvider } from "./memory/memory.ts";
 import { TOPIC as SECRETS, type Secrets } from "./secrets/secrets.ts";
 import { TOPIC as ACCOUNT, type ModelAccount } from "./account/account.ts";
+import { TOPIC as FLAGS, type Flags, isFlagKey } from "./flags/flags.ts";
 import { TOPIC as ROUTINES, type Routines } from "./routines/routines.ts";
 import { TOPIC as NOTICES, type Notices } from "./notices/notices.ts";
 import { TOPIC as TRICKS, type Tricks } from "./tricks/tricks.ts";
@@ -31,6 +32,8 @@ export type ShellApiOptions = {
   readonly secrets: Secrets;
   /** The apps' code, kept in git and pushed to GitHub. */
   readonly backup: AppBackup;
+  /** The feature flags, for Settings: each one's state and the owner's choice for the next start. */
+  readonly flags: Flags;
   /** The app studio: drafts, saved versions and the shell's builds. */
   readonly studio: ReturnType<typeof studio>;
   readonly gateway: AppGateway;
@@ -76,6 +79,7 @@ export function shellApi(options: ShellApiOptions) {
     ...memoryCalls(options),
     ...secretsCalls(options),
     ...backupCalls(options),
+    ...flagCalls(options),
   ]);
 
   /** The change an app owns under the shell's name, if any; a write that fails says why. */
@@ -127,6 +131,7 @@ function shellSources(options: ShellApiOptions) {
     backup,
     chats,
     computer,
+    flags,
     memory,
     notices,
     routines,
@@ -149,6 +154,7 @@ function shellSources(options: ShellApiOptions) {
     tricks: tricks.list(),
     routines: routines.state(),
     notices: notices.state(),
+    flags: flags.list(),
   });
 
   return new Map<string, LiveSource>([
@@ -164,6 +170,7 @@ function shellSources(options: ShellApiOptions) {
           TRICKS,
           ROUTINES,
           NOTICES,
+          FLAGS,
         ],
         load: whole,
       },
@@ -185,6 +192,25 @@ function shellSources(options: ShellApiOptions) {
     // Never changes while the host runs: an open page compares it with its own after the host restarts (static.ts).
     ["version", { topics: [], load: async () => ({ version }) }],
   ]);
+}
+
+function flagCalls({ flags }: ShellApiOptions): Calls {
+  return [
+    [
+      "flagsChoose",
+      (args) => {
+        const key = text(args, 0);
+
+        if (!isFlagKey(key)) {
+          return refused(`There is no feature flag named "${key}".`);
+        }
+
+        flags.choose(key, args[1] === true);
+
+        return ok;
+      },
+    ],
+  ];
 }
 
 function accountCalls({ account }: ShellApiOptions): Calls {

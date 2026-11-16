@@ -27,7 +27,7 @@ import {
 import { serveHttp } from "./http.ts";
 import { openRoutines, routinesExtension } from "./routines/routines.ts";
 import { openTricks } from "./tricks/tricks.ts";
-import { decideFlags } from "./flags/flags.ts";
+import { type Flags, TOPIC as FLAGS, openFlags } from "./flags/flags.ts";
 import { Topics } from "./kernel/live.ts";
 import type { Machine, MachineProvider } from "./machine/machine.ts";
 import {
@@ -343,17 +343,47 @@ async function openAgent(
   return { harness, chats, routines, tricks, notices };
 }
 
-/** The apps Imp ships behind a feature flag that is off on this host, by id: the gateway keeps them off. */
-async function appsOff(dataDir: string) {
-  const flags = await decideFlags({
+/**
+ * The feature flags, decided as the host starts; the owner's choice in Settings changes TOPIC for the next start.
+ */
+async function hostFlags(dataDir: string, topics: Topics) {
+  return await openFlags({
     dataDir,
     sdkKey: process.env.FLAGS,
     log: (message) => {
       console.log(message);
     },
+    changed: () => {
+      topics.changed(FLAGS);
+    },
   });
+}
 
-  return new Set(flags.has("github-app") ? [] : ["github"]);
+/** The app gateway: the stored live apps, but those a feature flag keeps off, with the owner's keys. */
+function openAppGateway(
+  { options, topics, registry }: Parts,
+  {
+    stored,
+    machine,
+    secrets,
+    flags,
+  }: {
+    stored: ReturnType<typeof storedApps>;
+    machine: () => Promise<Machine>;
+    secrets: ReturnType<typeof openOwnerSecrets>;
+    flags: Flags;
+  }
+) {
+  return appGateway({
+    apps: stored.live,
+    off: new Set(flags.on.has("github-app") ? [] : ["github"]),
+    dataDir: options.dataDir,
+    topics,
+    registry,
+    machine,
+    keyHosts: secrets.keyHosts,
+    send: secrets.sendForApp,
+  });
 }
 
 /** The agent's machine, for something that is about to use it. */
@@ -396,8 +426,6 @@ export async function startHost(options: HostOptions) {
     registry: agentRegistry(computer, memory),
   };
 
-  const { registry } = parts;
-
   const stored = storedApps(dataDir, options.appsDir, (message) => {
     console.error(message);
   });
@@ -405,16 +433,8 @@ export async function startHost(options: HostOptions) {
   const machine = machineInUse(computer);
   const secrets = openOwnerSecrets(parts, machine);
 
-  const gateway = appGateway({
-    apps: stored.live,
-    off: await appsOff(dataDir),
-    dataDir,
-    topics,
-    registry,
-    machine,
-    keyHosts: secrets.keyHosts,
-    send: secrets.sendForApp,
-  });
+  const flags = await hostFlags(dataDir, topics);
+  const gateway = openAppGateway(parts, { stored, machine, secrets, flags });
 
   const backup = openBackup(parts, gateway);
 
@@ -455,6 +475,7 @@ export async function startHost(options: HostOptions) {
       memory,
       secrets,
       backup,
+      flags,
       studio: apps,
       gateway,
       version,

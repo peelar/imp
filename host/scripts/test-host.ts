@@ -363,7 +363,10 @@ process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
 const flags = path.join(dataDir, "flags.json");
 
 if (!existsSync(flags)) {
-  writeFileSync(flags, JSON.stringify({ "github-app": true }));
+  writeFileSync(
+    flags,
+    JSON.stringify({ "github-app": true, "app-directory": true })
+  );
 }
 
 await startHost({
