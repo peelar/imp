@@ -1,7 +1,7 @@
 #!/bin/sh
 # A push to main releases its changesets (.changeset/README.md), so a commit there that changes what Imp ships needs
 # one. This blocks a push to main whose commits change shipped code, add no changeset, and do not say
-# "Changeset: none" in their messages. `npm ci` installs it (the root's prepare script sets core.hooksPath).
+# "Changeset: none" in their messages. `pnpm install` installs it (the root's prepare script sets core.hooksPath).
 set -eu
 
 zero=0000000000000000000000000000000000000000
@@ -35,7 +35,7 @@ while read -r _local_ref local_sha remote_ref remote_sha; do
 These commits change what Imp ships, and the push adds no changeset:$missing
 
 A push to main releases its changesets to every installed host. Either:
-  - add one: \`npm run changeset\`, or write .changeset/<name>.md with \`"@imp/host": patch\` (minor for a feature)
+  - add one: \`pnpm changeset\`, or write .changeset/<name>.md with \`"@imp/host": patch\` (minor for a feature)
     in its front matter and a sentence for the changelog, commit it and push again; or
   - if the change keeps what Imp does the same (a refactor), add a line \`Changeset: none\` to the commit's message.
 EOF

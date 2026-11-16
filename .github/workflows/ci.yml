@@ -21,15 +21,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          cache: pnpm
       # One install for the workspaces (host, client) and the root's lint and type tooling.
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
 
   studio:
     # The parts that build the shell with Exact: the host's studio tests (skipped in the job above, which has no Exact)
@@ -78,8 +78,11 @@ jobs:
           bun install --frozen-lockfile
           cargo run --manifest-path vendor/ibex/crates/hermes-lean-sys-installer/Cargo.toml -- --target x86_64-unknown-linux-gnu
           bun scripts/exact.mjs setup
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: imp/package.json
       # One install for the workspaces and the root's tooling.
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
         working-directory: imp
       - name: Link the Exact modules the client uses
         working-directory: imp
@@ -90,7 +93,7 @@ jobs:
         run: bun exact.mjs web-build --out "$RUNNER_TEMP/warm"
       - name: Host API tests, the studio's included
         working-directory: imp
-        run: npm test
+        run: pnpm test
       - name: Client tests
         working-directory: imp/client
         env:
@@ -108,10 +111,12 @@ jobs:
       E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Smoke test
         if: env.E2B_API_KEY != ''
         working-directory: host

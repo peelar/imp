@@ -1,4 +1,4 @@
-// The host's architecture as a check (npm run lint:boundaries). host/src holds one folder per bounded context; the
+// The host's architecture as a check (pnpm lint:boundaries). host/src holds one folder per bounded context; the
 // files at its top put the contexts together and serve them over HTTP. docs/architecture.md draws the map this file
 // enforces:
 //

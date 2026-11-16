@@ -1,5 +1,5 @@
 // Feature flags (host/src/flags/flags.ts), decided on the host from DATA_DIR/flags.json: a flag the owner turns on in
-// Settings stays off until the host starts again, and then it is on. harness.ts starts the host. Run: npm test
+// Settings stays off until the host starts again, and then it is on. harness.ts starts the host. Run: pnpm test
 import assert from "node:assert/strict";
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";

@@ -44,10 +44,10 @@ release. [Install](docs/install.md) covers the details, and the Mac app on anoth
 With Node 24+ and git:
 
 ```sh
-npm run setup   # Bun, Rust, Exact and the dependencies, then a build of the web client
-npm start       # http://localhost:8787
-npm run check   # lint, formatting and types
-npm test        # the host's API tests
+sh scripts/setup.sh  # pnpm, Bun, Rust, Exact and the dependencies, then a build of the web client
+pnpm start           # http://localhost:8787
+pnpm check           # lint, unused code, formatting and types
+pnpm test            # the host's API tests
 ```
 
 [Development](docs/development.md) explains setup, the repository's layout and the other checks.

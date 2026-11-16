@@ -4,4 +4,4 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-time npm run setup
+time sh scripts/setup.sh

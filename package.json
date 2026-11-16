@@ -2,35 +2,35 @@
   "name": "imp",
   "private": true,
   "license": "MIT",
-  "workspaces": [
-    "host",
-    "client"
-  ],
   "type": "module",
   "scripts": {
     "setup": "sh scripts/setup.sh",
     "setup:mac": "sh scripts/setup.sh mac",
-    "start": "npm start -w @imp/host",
+    "start": "pnpm --filter @imp/host start",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",
-    "lint": "npm run lint:code && npm run lint:boundaries && npm run lint:policy && npm run format:check",
-    "lint:code": "oxlint --type-aware --deny-warnings --report-unused-disable-directives-severity error host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts",
+    "lint": "pnpm lint:code && pnpm lint:boundaries && pnpm lint:policy && pnpm lint:knip && pnpm format:check",
+    "lint:code": "oxlint --type-aware --deny-warnings --report-unused-disable-directives-severity error host/src host/scripts host/test host/machine sdk client/apps scripts oxlint.config.ts oxfmt.config.ts knip.config.ts",
     "lint:boundaries": "node scripts/boundaries.ts",
     "lint:policy": "node scripts/lint-policy.ts",
-    "lint:fix": "npm run lint:code -- --fix; npm run format",
-    "format": "oxfmt -c oxfmt.config.ts --write host/src host/scripts host/test host/machine sdk client/apps scripts docs oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
-    "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts docs oxlint.config.ts oxfmt.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
+    "lint:knip": "knip",
+    "lint:fix": "pnpm lint:code --fix; pnpm format",
+    "format": "oxfmt -c oxfmt.config.ts --write host/src host/scripts host/test host/machine sdk client/apps scripts docs oxlint.config.ts oxfmt.config.ts knip.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
+    "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts docs oxlint.config.ts oxfmt.config.ts knip.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck",
+    "check": "pnpm lint && pnpm typecheck",
     "changeset": "changeset",
-    "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts --no-audit --no-fund",
+    "changeset:version": "changeset version && pnpm install --lockfile-only --ignore-scripts",
     "prepare": "test -e .git && git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",
     "@oxlint/plugins": "^1.93.0",
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
     "eslint-plugin-sonarjs": "^4.2.2",
+    "knip": "^6.45.1",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
@@ -38,5 +38,5 @@
     "typescript": "^5.9.3",
     "ultracite": "^8.2.0"
   },
-  "packageManager": "npm@10.9.10"
+  "packageManager": "pnpm@12.21.0"
 }

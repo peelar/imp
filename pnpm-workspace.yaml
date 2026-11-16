@@ -1,0 +1,9 @@
+packages:
+  - host
+  - client
+
+# Dependencies whose install scripts pnpm may run. Neither needs one: @google/genai's prepare builds its own checkout,
+# and protobufjs's postinstall only checks its CLI's version.
+allowBuilds:
+  "@google/genai": false
+  protobufjs: false

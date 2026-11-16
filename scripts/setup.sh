@@ -1,8 +1,8 @@
 #!/bin/sh
-# Sets up a checkout to run Imp and work on it: `npm run setup` at the root, then `npm start`.
+# Sets up a checkout to run Imp and work on it: `sh scripts/setup.sh` at the root, then `pnpm start`.
 #
-#   scripts/setup.sh       the web client, which the host serves (npm run setup)
-#   scripts/setup.sh mac   that, and what the Mac app builds with (npm run setup:mac; on macOS)
+#   scripts/setup.sh       the web client, which the host serves
+#   scripts/setup.sh mac   that, and what the Mac app builds with (on macOS)
 #   scripts/setup.sh exact only Bun, Rust and Exact: what an installed host builds the shell with. The host runs this
 #                          from its release (host/src/studio/toolchain.ts), which has no workspaces or tests.
 #
@@ -10,7 +10,8 @@
 # Exact at the commit in client/exact-rev, the Rust toolchains Exact pins, and Bun. This installs Bun and rustup when
 # they are missing, puts Exact where client/exact.mjs and the host look for it (../../../tools/exact from client/, or
 # EXACT), installs what Exact's web build reads (Exact's own `setup` adds the native platforms' tools, which `mac`
-# runs), installs the workspaces' dependencies alongside, and builds the web client into client/dist.
+# runs), installs pnpm when it is missing and the workspaces' dependencies alongside, and builds the web client into
+# client/dist.
 # Only Node 24+ and git must be there first. Run it again after a pull: it moves Exact to a new pin and rebuilds.
 set -eu
 
@@ -33,11 +34,23 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 rev=$(tr -d '[:space:]' <"$root/client/exact-rev")
 exact=${EXACT:-$(cd "$root/../.." && pwd)/tools/exact}
 
-step "Node and Bun"
+step "Node, pnpm and Bun"
 if [ "$platform" != exact ]; then
 	command -v node >/dev/null || fail "Node 24 or newer is missing: https://nodejs.org"
 	major=$(node -p 'process.versions.node.split(".")[0]')
 	[ "$major" -ge 24 ] || fail "Node $(node -v) is too old: Imp needs 24 or newer"
+	# Where pnpm's installer puts it, which also adds it to the shell's profile.
+	if [ -z "${PNPM_HOME:-}" ]; then
+		[ "$(uname -s)" = Darwin ] && PNPM_HOME="$HOME/Library/pnpm" || PNPM_HOME="$HOME/.local/share/pnpm"
+	fi
+	export PNPM_HOME
+	PATH="$PNPM_HOME/bin:$PATH"
+	if ! command -v pnpm >/dev/null; then
+		# The version the root's package.json pins; pnpm switches to a newer pin by itself.
+		version=$(sed -n 's/.*"packageManager": "pnpm@\([^"]*\)".*/\1/p' "$root/package.json")
+		curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION="$version" sh -
+	fi
+	echo "pnpm $(pnpm -v)"
 fi
 [ -x "$HOME/.bun/bin/bun" ] && PATH="$HOME/.bun/bin:$PATH"
 if ! command -v bun >/dev/null; then
@@ -49,11 +62,11 @@ echo "bun $(bun -v)"
 
 # The workspaces' dependencies install while Exact sets up: they share nothing.
 if [ "$platform" != exact ]; then
-	npm_log=$(mktemp)
+	install_log=$(mktemp)
 	cd "$root"
-	npm ci --no-audit --no-fund >"$npm_log" 2>&1 &
-	npm_pid=$!
-	trap 'kill "$npm_pid" 2>/dev/null || true; rm -f "$npm_log"' EXIT
+	pnpm install --frozen-lockfile >"$install_log" 2>&1 &
+	install_pid=$!
+	trap 'kill "$install_pid" 2>/dev/null || true; rm -f "$install_log"' EXIT
 fi
 
 step "Rust"
@@ -110,12 +123,12 @@ fi
 (cd "$exact" && bun scripts/exact.mjs setup --check --platform "$platform")
 
 step "The workspaces' dependencies"
-wait "$npm_pid" || {
-	cat "$npm_log"
-	fail "npm ci failed"
+wait "$install_pid" || {
+	cat "$install_log"
+	fail "pnpm install failed"
 }
-tail -1 "$npm_log"
-# After npm ci, which empties node_modules: the Exact modules the client uses, from the checkout above.
+tail -1 "$install_log"
+# After the install, which may prune client/node_modules: the Exact modules the client uses, from the checkout above.
 sh "$root/scripts/link-exact.sh" "$exact"
 
 step "The web client (the first build compiles Exact's web tools and takes a few minutes)"
@@ -123,7 +136,7 @@ step "The web client (the first build compiles Exact's web tools and takes a few
 
 cat <<EOF
 
-Ready. Start the host with \`npm start\` and open http://localhost:8787. MACHINE=local npm start gives the imp a
+Ready. Start the host with \`pnpm start\` and open http://localhost:8787. MACHINE=local pnpm start gives the imp a
 directory on this computer instead of one you pick in Settings.
 EOF
 if [ "$platform" = macos ]; then

@@ -28,7 +28,7 @@ The app is not signed with an Apple Developer ID. macOS opens it because curl do
 
 Imp is released with [Changesets](https://github.com/changesets/changesets). Its version is the host's, in `host/package.json`.
 
-1. A commit that changes what Imp does carries a changeset: `npm run changeset`, with a patch or minor bump for `@imp/host`. A commit without one releases nothing.
+1. A commit that changes what Imp does carries a changeset: `pnpm changeset`, with a patch or minor bump for `@imp/host`. A commit without one releases nothing.
 2. On every push to `main`, `.github/workflows/release.yml` turns the pending changesets into the next version and its section of `host/CHANGELOG.md`, and commits both to `main`.
 3. The same run builds the host and web client on Linux and the Mac app on macOS (`scripts/package.sh`), and publishes them as GitHub release `v<version>`, with the changelog section as its notes:
 

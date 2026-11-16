@@ -5,8 +5,7 @@
 #                                         web client) and install-host.sh; on Linux or macOS
 #   scripts/package.sh mac <tag> <out>    Imp-macos.zip, the ad-hoc signed Mac app; on macOS
 #
-# Both need Bun and Exact (EXACT, or where scripts/setup.sh puts it); host also needs Node, npm, and `npm ci` at
-# the root for turbo.
+# Both need Bun and Exact (EXACT, or where scripts/setup.sh puts it); host also needs Node and pnpm.
 set -eu
 
 fail() { echo "package: $*" >&2; exit 1; }
@@ -34,16 +33,12 @@ host)
 	(cd "$root" && git ls-files --cached --others --exclude-standard -- LICENSE host sdk client scripts/install-mac.sh scripts/setup.sh scripts/link-exact.sh |
 		tar -cf - -T -) | tar -xf - -C "$stage"
 	cp -R "$root/client/dist" "$stage/client/dist"
-	# The host's production dependencies, from the workspace lockfile pruned to the host (turbo prune). The pruned lock
-	# loses npm's dev flags, so `npm prune` drops what only the root's tooling needs. They go in host/node_modules,
-	# where every release has had them; the workspace files are not shipped.
-	(cd "$root" && npx turbo prune @imp/host --out-dir "$stage/.pruned" >/dev/null)
-	cp "$stage/.pruned/package.json" "$stage/.pruned/package-lock.json" "$stage/"
-	rm -rf "$stage/.pruned"
-	(cd "$stage" && npm ci --omit=dev --no-audit --no-fund && npm prune --omit=dev --no-audit --no-fund)
-	rm -rf "$stage/node_modules/@imp" "$stage/package.json" "$stage/package-lock.json"
-	find "$stage/node_modules" -type d -empty -delete
-	mv "$stage/node_modules" "$stage/host/node_modules"
+	# The host's production dependencies, as the workspace lockfile pins them (pnpm deploy). They go in
+	# host/node_modules, where every release has had them; the rest of the deployed copy is not shipped. Its links
+	# point inside node_modules, so they hold after the move.
+	(cd "$root" && pnpm --filter @imp/host deploy --prod "$stage/.deployed" >/dev/null)
+	mv "$stage/.deployed/node_modules" "$stage/host/node_modules"
+	rm -rf "$stage/.deployed"
 	echo "$tag" > "$stage/VERSION"
 	tar -czf "$out/imp-host-$tag.tar.gz" -C "$stage" .
 	cp "$root/scripts/install-host.sh" "$out/install-host.sh"

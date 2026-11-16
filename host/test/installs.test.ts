@@ -1,5 +1,5 @@
 // Installing and uninstalling apps, through the host's HTTP API: the onboarding installs GitHub and the app directory
-// Todos, and Uninstall removes an app with its data, for good. Run: npm test
+// Todos, and Uninstall removes an app with its data, for good. Run: pnpm test
 import assert from "node:assert/strict";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";

@@ -35,25 +35,26 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Version pending changesets and commit them to main
         run: |
           if ! find .changeset -maxdepth 1 -name '*.md' ! -name README.md | grep -q .; then
             echo "No pending changesets"
             exit 0
           fi
-          npm run changeset:version
+          pnpm changeset:version
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Release Imp v$(node -p 'require("./host/package.json").version')"
           # A push that landed meanwhile goes under this commit; its changesets wait for the next run.
           git pull --rebase origin main
-          # npm ci turned on .githooks/pre-push, which would stop this commit: it consumes changesets, adding none.
+          # pnpm install turned on .githooks/pre-push, which would stop this commit: it consumes changesets, adding none.
           git push --no-verify origin HEAD:main
       - id: unreleased
         env:
@@ -106,8 +107,8 @@ jobs:
           git checkout -q FETCH_HEAD
           bun scripts/exact.mjs setup
           echo "EXACT=$RUNNER_TEMP/exact" >> "$GITHUB_ENV"
-      # turbo, which prunes the workspace lockfile to the host's dependencies (scripts/package.sh).
-      - run: npm ci
+      # pnpm deploy, which installs the host's production dependencies from the workspace lockfile (scripts/package.sh).
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         if: matrix.part == 'host'
       - run: scripts/package.sh ${{ matrix.part }} "${{ needs.version.outputs.tag }}" out
       - uses: actions/upload-artifact@v4

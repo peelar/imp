@@ -1,6 +1,6 @@
 // The host's HTTP API, as the client uses it: live streams, calls, sign-in, the Todos app and the agent operating it,
 // and the studio: the agent's preview of an app it wrote, and the person's Save, Discard and Undo. harness.ts starts
-// the host these tests talk to. Run: npm test
+// the host these tests talk to. Run: pnpm test
 import assert from "node:assert/strict";
 import {
   existsSync,

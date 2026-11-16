@@ -1,6 +1,6 @@
 // Proves the lint configuration still rejects what it is there to reject, not only that today's code passes: each
 // probe is a small file that breaks one rule, and oxlint must report that rule for it. A rule turned off or loosened
-// in oxlint.config.ts fails here. Run: npm run lint:policy (adapted from peelar/cli).
+// in oxlint.config.ts fails here. Run: pnpm lint:policy (adapted from peelar/cli).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -297,8 +297,8 @@ try {
   });
 
   const result = spawnSync(
-    "npx",
-    ["oxlint", "--type-aware", "--format", "unix", ...files],
+    "pnpm",
+    ["exec", "oxlint", "--type-aware", "--format", "unix", ...files],
     { encoding: "utf-8", timeout: 60_000 }
   );
 
