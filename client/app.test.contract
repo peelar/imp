@@ -22,15 +22,17 @@ test "onboarding signs in with ChatGPT through a device code"
   expect state nav.tab == "chat"
   clock until state chat.busy == false within 10000
   // GitHub shows what an app is above it, until that is dismissed. Without GitHub connected it waits, which is no
-  // failure: the bar says nothing of the sync, and the card offers to connect it until it is.
+  // failure: the bar says nothing of the sync, and the card sends the person to Settings to connect it.
   tap "tab-github"
   expect tree has "app-guide"
-  expect tree has "app-github-connect"
+  expect tree has "app-needs"
   expect tree missing "sync-bar"
   tap "app-guide-dismiss"
   expect tree missing "app-guide"
-  expect tree has "app-needs"
   expect tree has "uninstall"
+  tap "app-needs-settings"
+  expect state nav.tab == "settings"
+  expect state settingsPane == "connections"
   tap "tab-chat"
   tap "new-chat-chat"
   clock until state chat.messages.length == 0 within 5000

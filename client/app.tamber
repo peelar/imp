@@ -20,6 +20,8 @@ theme
   line.subtle = light-dark(#e4e4e1, #262625)
   line.strong = light-dark(#c9c9c5, #3d3d3a)
   danger.soft = light-dark(#fdeeee, #3a1d20)
+  // A note in the accent's colour, such as the card above an app: a tint, quieter than a fill.
+  accent.soft = light-dark(#eef1fd, #171c38)
 
   family.display = "Instrument Serif", "Iowan Old Style", Georgia, serif
   family.text = "Instrument Sans", ui-sans-serif, system-ui, sans-serif

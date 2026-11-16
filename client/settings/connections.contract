@@ -34,7 +34,7 @@ component ConnectionsSettings
       else
         column padding="16px 0" border-bottom="1px solid line.subtle"
           GithubSignIn(github=github, busy=busy, connect=connect, cancel=cancel, copyCode=copyCode,
-            note="Sign in once, and your apps, your imp and Backup reach GitHub as you.", prefix="")
+            note="Sign in once, and your apps, your imp and Backup reach GitHub as you.", prefix="", quiet=false)
       if github.error != ""
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"
@@ -101,12 +101,15 @@ component GithubSignIn
     note: string
     // Before each testId, so the same sign-in on two screens stays two things to tap.
     prefix: string
+    // Outlined rather than filled, beside a screen's own main button (the onboarding's Build it).
+    quiet: bool
   view
     if github.status == "waiting"
       column gap=10 testId=`${prefix}github-waiting`
         Step(number="01", title="Open GitHub's sign-in page")
         link href=github.url testId=`${prefix}github-open` display="flex" align-items="center" justify-content="center"
-          gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
+          gap=8 padding="13px 16px" border=(quiet ? "1px solid line.strong" : "1px solid AccentColor")
+          background-color=(quiet ? "transparent" : "AccentColor") color=(quiet ? "ink.strong" : "ink.on-fill")
           font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
           text-decoration-line="none"
           text "Open GitHub"
@@ -138,9 +141,12 @@ component GithubSignIn
       column gap=14 align-items="flex-start"
         if note != ""
           text note font-size="0.9375rem" color="ink.muted" line-height=1.45
-        button press=connect disabled=busy testId=`${prefix}github-connect` padding="10px 14px" border="none"
-          background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.75rem"
-          letter-spacing="0.1em" text-transform="uppercase"
+        button press=connect disabled=busy testId=`${prefix}github-connect` padding="10px 14px"
+          border=(quiet ? "1px solid line.strong" : "1px solid AccentColor")
+          background-color=(quiet ? "transparent" : "AccentColor") color=(quiet ? "ink.strong" : "ink.on-fill")
+          font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+          :hover
+            opacity=0.9
           :disabled
             background-color="surface.soft"
             color="ink.faint"
