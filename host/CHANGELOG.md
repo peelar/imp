@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.14.1
+
+### Patch Changes
+
+- e69de0f: Connect GitHub right from the onboarding or the GitHub app's page, while your imp builds. Until it's connected, the app waits calmly instead of saying its sync is failing, and the note above your first app is a small card.
+- ea55dd4: The Mac app no longer restarts over and over after you install or build an app.
+
 ## 0.14.0
 
 ### Minor Changes
