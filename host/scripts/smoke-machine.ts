@@ -17,7 +17,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { Connection, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { type RawData, WebSocket } from "ws";
-import { Topics } from "../src/kernel/live.ts";
+import { Topics } from "../src/live/live.ts";
 import type { MachineProvider } from "../src/machine/machine.ts";
 import { containerProvider } from "../src/computer/container.ts";
 import { e2bProvider } from "../src/computer/e2b.ts";

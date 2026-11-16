@@ -12,8 +12,8 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile, int, obj } from "@earendil-works/pi-schema";
-import { readKept } from "../kernel/kept.ts";
-import { freePort } from "../kernel/ports.ts";
+import { readKept } from "../datadir/datadir.ts";
+import { freePort } from "../processes/processes.ts";
 
 const ADMIN_POLICY = `
 path "secret/data/imp/*" { capabilities = ["create", "update", "delete"] }

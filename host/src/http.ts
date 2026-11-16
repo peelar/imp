@@ -11,7 +11,7 @@ import {
 import { text } from "node:stream/consumers";
 import { isJsonValue } from "@earendil-works/chord/json";
 import type { Json } from "../../sdk/app.ts";
-import { type Answer, serveLive, type Topics } from "./kernel/live.ts";
+import { type Answer, serveLive, type Topics } from "./live/live.ts";
 import { type ScreenSockets, serveScreenPage } from "./computer/computer.ts";
 import type { ShellApi } from "./shell-api.ts";
 import { clientFile } from "./static.ts";

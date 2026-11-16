@@ -1,4 +1,4 @@
-// What the shell reads and changes, by name. Each read is a live source (kernel/live.ts) and each change answers a Reply,
+// What the shell reads and changes, by name. Each read is a live source (live/live.ts) and each change answers a Reply,
 // `{ ok, error }`. The shell's own names start with one of a few words (account, chat, routines, apps, build,
 // version, computer, memory, secrets, backup, flags), which no app may take as its id (apps/folders.ts); every other name goes to the
 // app that owns it, such as `todosSetDone` to the todos app's `setDone`.
@@ -6,7 +6,7 @@ import type { Json } from "../../sdk/app.ts";
 import { type AppGateway, appTopic, SYNC_TOPIC } from "./apps/apps.ts";
 import { TOPIC as CHAT, type Chats } from "./chats/chats.ts";
 import { TOPIC as COMPUTER, type Computer } from "./computer/computer.ts";
-import type { Answer, LiveSource } from "./kernel/live.ts";
+import type { Answer, LiveSource } from "./live/live.ts";
 import { type AppBackup, TOPIC as BACKUP } from "./backup/backup.ts";
 import { TOPIC as MEMORY, type MemoryProvider } from "./memory/memory.ts";
 import { TOPIC as SECRETS, type Secrets } from "./secrets/secrets.ts";

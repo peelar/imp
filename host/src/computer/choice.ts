@@ -11,7 +11,7 @@ import {
   str,
   union,
 } from "@earendil-works/pi-schema";
-import { readKept } from "../kernel/kept.ts";
+import { readKept } from "../datadir/datadir.ts";
 
 /** The cloud sizes, all within E2B's free plan (up to 8 vCPUs and 8 GiB). */
 export const SIZES = [

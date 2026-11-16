@@ -23,6 +23,7 @@ import {
   agentdToken,
   egressEnv,
   healthFor,
+  healthy,
   runtime,
   runtimePattern,
   SETUP_MARKER,
@@ -31,7 +32,6 @@ import {
   type Runtime,
 } from "./runtime.ts";
 import { machineTunnels } from "./ssh-tunnels.ts";
-import { healthy } from "../kernel/ports.ts";
 
 export type SshTargetOptions = {
   /** `user@host` or `user@host:port`. The host may be a ~/.ssh/config alias. */

@@ -14,7 +14,7 @@ import {
   type Validator,
 } from "@earendil-works/pi-schema";
 import type { Json } from "../../../sdk/app.ts";
-import { killOnExit, lastLines } from "../kernel/children.ts";
+import { killOnExit, lastLines } from "../processes/processes.ts";
 import { tool } from "./programs.ts";
 import { prepare, type VaultFiles, vaultFiles } from "./vault-files.ts";
 

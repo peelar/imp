@@ -4,7 +4,7 @@
 import type { Context } from "@earendil-works/chord/context";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { arr, bool, compile, obj, opt, str } from "@earendil-works/pi-schema";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 
 export const TOPIC = "tricks";
 

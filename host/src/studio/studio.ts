@@ -17,7 +17,7 @@ import type { Context } from "@earendil-works/chord/context";
 import type { Registry } from "@earendil-works/pi-durable";
 import type { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import type { AppInfo, AppGateway } from "../apps/apps.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import { shellBuilds } from "./builds.ts";
 import { codeFolders, impServers } from "./code.ts";
 import { appDecisions } from "./decisions.ts";

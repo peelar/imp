@@ -15,7 +15,7 @@ import path from "node:path";
 import { bool, compile, map } from "@earendil-works/pi-schema";
 import type { Adapter } from "flags";
 import { flag } from "flags/next";
-import { readKept } from "../kernel/kept.ts";
+import { readKept } from "../datadir/datadir.ts";
 
 /** Every feature flag: its key, what it turns on, and whether it is on for a host whose owner did not choose. */
 export const FLAGS = [

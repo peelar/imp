@@ -15,7 +15,7 @@ import { compile, int, map, obj, str } from "@earendil-works/pi-schema";
 import type { AppInfo } from "./folders.ts";
 import type { Loaded } from "./manifest.ts";
 import { EVERY_MS } from "./connections.ts";
-import { readKept } from "../kernel/kept.ts";
+import { readKept } from "../datadir/datadir.ts";
 
 /** The topic the shell's list of apps listens to for a change of a sync's status. */
 export const SYNC_TOPIC = "apps:sync";

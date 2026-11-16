@@ -28,7 +28,7 @@ import { serveHttp } from "./http.ts";
 import { openRoutines, routinesExtension } from "./routines/routines.ts";
 import { openTricks } from "./tricks/tricks.ts";
 import { type Flags, TOPIC as FLAGS, openFlags } from "./flags/flags.ts";
-import { Topics } from "./kernel/live.ts";
+import { Topics } from "./live/live.ts";
 import type { Machine, MachineProvider } from "./machine/machine.ts";
 import {
   TOPIC as MEMORY,

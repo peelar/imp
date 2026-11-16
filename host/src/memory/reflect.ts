@@ -27,8 +27,7 @@ import {
   SELF,
   USER,
 } from "./facts.ts";
-import { isRoutineRun } from "../chats/chats.ts";
-import { messageText } from "../kernel/message-text.ts";
+import { isRoutineRun, messageText } from "../chats/chats.ts";
 
 /** Reflection reads at most this much of one run, newest last. */
 const RUN_CHARS = 12_000;

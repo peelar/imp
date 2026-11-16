@@ -10,7 +10,7 @@ import {
   LiveDoc,
 } from "@earendil-works/pi-durable";
 import { personText } from "./origin.ts";
-import { messageText } from "../kernel/message-text.ts";
+import { messageText } from "./message-text.ts";
 
 export const TOPIC = "chat";
 const SHOWN = 80;

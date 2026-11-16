@@ -22,7 +22,7 @@ import { appSync, SYNC_TOPIC } from "./sync.ts";
 import { appTools } from "./tools.ts";
 import { appVersions } from "./versions.ts";
 import { appWatch } from "./watch.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import type { Machine } from "../machine/machine.ts";
 import {
   type Args,

@@ -16,12 +16,12 @@ import {
   agentdToken,
   egressEnv,
   healthFor,
+  healthy,
   runtime,
   type Runtime,
   writeRuntime,
 } from "./runtime.ts";
-import { freePort, healthy } from "../kernel/ports.ts";
-import { killOnExit } from "../kernel/children.ts";
+import { freePort, killOnExit } from "../processes/processes.ts";
 
 export type LocalProviderOptions = {
   readonly secret: string;

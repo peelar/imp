@@ -14,7 +14,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { after, before, test } from "node:test";
 import { compile, map, obj, opt, str } from "@earendil-works/pi-schema";
-import { freePort } from "../src/kernel/ports.ts";
+import { freePort } from "../src/processes/processes.ts";
 import { sendAppRequest } from "../src/secrets/app-fetch.ts";
 import { tool } from "../src/secrets/programs.ts";
 import { repo } from "./harness.ts";

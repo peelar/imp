@@ -7,7 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { compile, str } from "@earendil-works/pi-schema";
-import { killOnExit, lastLines } from "../kernel/children.ts";
+import { killOnExit, lastLines } from "../processes/processes.ts";
 
 const commit = compile(str({ pattern: "^[0-9a-f]{40}$" }));
 

@@ -18,8 +18,12 @@ import path from "node:path";
 import type { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import { compile, int, obj, opt, str } from "@earendil-works/pi-schema";
-import { killOnExit, lastLines } from "../kernel/children.ts";
-import { accepts, freePort } from "../kernel/ports.ts";
+import {
+  accepts,
+  freePort,
+  killOnExit,
+  lastLines,
+} from "../processes/processes.ts";
 import { tool } from "./programs.ts";
 import type { Vault } from "./vault.ts";
 

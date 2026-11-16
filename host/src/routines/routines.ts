@@ -11,7 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { arr, bool, compile, num, obj, str } from "@earendil-works/pi-schema";
 import { routineRun, type Chats } from "../chats/chats.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import {
   hostZone,
   knownZone,

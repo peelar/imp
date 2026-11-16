@@ -14,7 +14,7 @@ import type { Registry } from "@earendil-works/pi-durable";
 import { type AppRequest, sendAppRequest } from "./app-fetch.ts";
 import { type Egress, openEgress } from "./egress.ts";
 import type { EgressRule, EgressRules, EgressUse } from "./egress-proxy.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import type { Machine } from "../machine/machine.ts";
 import {
   type Described,

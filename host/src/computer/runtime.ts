@@ -243,6 +243,26 @@ export const agentdToken = (secret: string, machineId: string) =>
 export const healthFor = (token: string, digest: string) =>
   createHash("sha256").update(`${token}:${digest}`).digest("hex");
 
+/**
+ * Whether the agentd reached through `port` on this computer's loopback answers /health with `expected` (`healthFor`).
+ * No answer, another answer, and `signal` aborting first all count as not healthy.
+ */
+export async function healthy(
+  port: number,
+  expected: string,
+  signal?: AbortSignal
+): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/health`, {
+      signal: signal ?? null,
+    });
+
+    return (await response.text()) === expected;
+  } catch {
+    return false;
+  }
+}
+
 /** The endpoints every machine offers, given the base URL that reaches agentd's port. */
 export function agentdEndpoints(
   base: { url: string; headers: Readonly<Record<string, string>> },

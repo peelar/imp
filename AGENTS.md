@@ -9,8 +9,8 @@ Rules and conventions you can't read from the code. For how things work, read th
 - Code in `host/machine/` runs on the agent's machine with its types stripped. It may use the `ws` package and nothing else, and import only types from `host/src`.
 - Only `computer/machines.ts` knows about specific machine providers. Everything else goes through the `Machine` interface in `machine/machine.ts`.
 - The shell keeps at most five live streams open. Browsers allow six connections per server, and a sixth makes every other request hang. Put new shell state on a stream that already exists, as `account` carries the computer, memory, secrets and backup. An app's stream is open only while its tab is.
-- Every program the host starts registers with `killOnExit` (`kernel/children.ts`), so it stops when the host stops.
-- Read JSON files in the data directory with `readKept` (`kernel/kept.ts`). A damaged file must never stop the host.
+- Every program the host starts registers with `killOnExit` (`processes/processes.ts`), so it stops when the host stops.
+- Read JSON files in the data directory with `readKept` (`datadir/datadir.ts`). A damaged file must never stop the host.
 - Check anything that comes from outside the process (files, HTTP, `JSON.parse`, child processes, the model's tool arguments, the agent's machine) against a `pi-schema` schema before using it.
 - When you add a new top-level name to the shell's API, add it to `RESERVED` in `apps/folders.ts` too, so no app can take it as its id.
 - Don't edit the `// <apps:…>` blocks in `client/app.contract` and `client/app.ts` by hand. They are generated: run `node host/scripts/shell.ts`.

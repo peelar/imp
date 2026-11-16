@@ -5,7 +5,7 @@
 // person approves on any device, and the host polls for the tokens.
 import type { Models, MutableModels } from "@earendil-works/pi-ai/models";
 import { compile, nullable, obj, opt, str } from "@earendil-works/pi-schema";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import {
   API,
   type ApiSettings,

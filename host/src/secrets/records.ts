@@ -16,7 +16,7 @@ import {
   type Validator,
 } from "@earendil-works/pi-schema";
 import type { EgressUse } from "./egress-proxy.ts";
-import { readKept } from "../kernel/kept.ts";
+import { readKept } from "../datadir/datadir.ts";
 
 const USES_KEPT = 200;
 

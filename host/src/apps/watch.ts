@@ -13,7 +13,7 @@ import path from "node:path";
 import { compile, map, obj, str } from "@earendil-works/pi-schema";
 import type { FetchAnswer } from "../../../sdk/app.ts";
 import type { FetchRequest } from "./protocol.ts";
-import { readKept } from "../kernel/kept.ts";
+import { readKept } from "../datadir/datadir.ts";
 
 const TICK_MS = 15_000;
 const MIN_POLL_MS = 60_000;

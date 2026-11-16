@@ -3,8 +3,7 @@
 // network. This module opens them, opens them again when their `ssh` exited, and closes them with the host.
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
-import { killOnExit } from "../kernel/children.ts";
-import { accepts, freePort } from "../kernel/ports.ts";
+import { accepts, freePort, killOnExit } from "../processes/processes.ts";
 
 export type Tunnel = {
   readonly port: number;

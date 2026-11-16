@@ -33,11 +33,13 @@ import {
   TOPIC,
   titleOf,
 } from "./chat.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import { withAppContext } from "./origin.ts";
 
 // What the other parts of the host use of this context's inner files (scripts/boundaries.ts).
 export { TOPIC } from "./chat.ts";
+
+export { messageText } from "./message-text.ts";
 
 export { isRoutineRun, routineRun, saidNothingNew } from "./origin.ts";
 

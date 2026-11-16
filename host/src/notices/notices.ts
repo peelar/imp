@@ -7,7 +7,7 @@
 // secrets and the chats by their topics and decides; they know nothing of it. The host keeps the latest notices in
 // memory only: a notice is news, and the conversation or Settings keeps what it was about.
 import { type Chats, TOPIC as CHAT, saidNothingNew } from "../chats/chats.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import { type Routines, TOPIC as ROUTINES } from "../routines/routines.ts";
 import { type Secrets, TOPIC as SECRETS } from "../secrets/secrets.ts";
 

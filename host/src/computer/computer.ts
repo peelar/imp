@@ -26,7 +26,7 @@ import {
   type OwnComputers,
   ownComputers,
 } from "./own.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import type { MachineProvider } from "../machine/machine.ts";
 import { COMPUTER_USER, setupPrompt, type TailnetDevice } from "./tailnet.ts";
 

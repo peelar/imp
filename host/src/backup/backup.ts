@@ -12,8 +12,8 @@ import type { AppInfo } from "../apps/apps.ts";
 import { backupCommands } from "./commands.ts";
 import { githubSignIn, type Remote } from "./github.ts";
 import { type BackupHistory, backupHistory } from "./history.ts";
-import { readKept } from "../kernel/kept.ts";
-import type { Topics } from "../kernel/live.ts";
+import { readKept } from "../datadir/datadir.ts";
+import type { Topics } from "../live/live.ts";
 
 export const TOPIC = "backup";
 

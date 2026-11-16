@@ -13,7 +13,7 @@ import {
 import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
 import type { AppGateway } from "../apps/apps.ts";
-import { readKept } from "../kernel/kept.ts";
+import { readKept } from "../datadir/datadir.ts";
 import { buildShell, type ShellApp } from "./shell.ts";
 import type { Toolchain } from "./toolchain.ts";
 

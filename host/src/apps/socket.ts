@@ -12,7 +12,7 @@ import type { Json } from "../../../sdk/app.ts";
 import type { AppData } from "./data.ts";
 import { type AppInfo, appTopic } from "./folders.ts";
 import { checkManifest, type Loaded } from "./manifest.ts";
-import type { Topics } from "../kernel/live.ts";
+import type { Topics } from "../live/live.ts";
 import type { Machine } from "../machine/machine.ts";
 import {
   type Args,

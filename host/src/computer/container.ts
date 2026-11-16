@@ -30,6 +30,7 @@ import {
   agentdToken,
   egressEnv,
   healthFor,
+  healthy,
   packedRuntime,
   runtime,
   runtimePattern,
@@ -37,8 +38,7 @@ import {
   setupScript,
   type Runtime,
 } from "./runtime.ts";
-import { freePort, healthy } from "../kernel/ports.ts";
-import { killOnExit } from "../kernel/children.ts";
+import { freePort, killOnExit } from "../processes/processes.ts";
 
 const BASE_IMAGE = "debian:bookworm";
 const USER = "imp";

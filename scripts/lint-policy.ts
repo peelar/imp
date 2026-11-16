@@ -139,6 +139,14 @@ const crossings = [
     says: "uses flags/, which apps/ may not",
   },
   {
+    crosses:
+      "a context using code others share, which the map does not list for it",
+    files: [
+      ["memory/memory.ts", 'import type { Topics } from "../live/live.ts";'],
+    ],
+    says: "uses live/, which memory/ may not",
+  },
+  {
     crosses: "a context using the files that put the host together",
     files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
     says: "a context never uses the files that put the host together",

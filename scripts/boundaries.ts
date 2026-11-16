@@ -3,32 +3,35 @@
 // enforces:
 //
 // 1. Outside a context, only its entry is imported: <context>/<context>.ts, what the context offers the others. The
-//    rest of its folder is its own to change. kernel/ is code every part shares, so any of its files may be imported.
+//    rest of its folder is its own to change.
 // 2. A context uses only the contexts CONTEXTS lists for it, and never the files that put the host together. A new
-//    use is a change to the map, so it is made here, where review sees it.
+//    use is a change to the map, so it is made here, where review sees it. No context is open to every other one:
+//    code that several contexts need is a context named for what it does, and each use of it is listed.
 // 3. A package that reaches something the host keeps to one place is imported only from there (PACKAGES).
 //
 // Every folder in host/src must be a context listed here, and have its entry, so a new context is a decision too.
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-/** Each context, and the contexts it may use besides kernel/. */
+/** Each context, and the contexts it may use. */
 export const CONTEXTS = new Map<string, readonly string[]>([
-  ["kernel", []],
+  ["live", []],
+  ["datadir", []],
+  ["processes", []],
   ["machine", []],
-  ["account", []],
+  ["account", ["live"]],
   ["update", []],
-  ["flags", []],
-  ["tricks", []],
-  ["chats", []],
-  ["routines", ["chats"]],
-  ["notices", ["chats", "routines", "secrets"]],
+  ["flags", ["datadir"]],
+  ["tricks", ["live"]],
+  ["chats", ["live"]],
+  ["routines", ["chats", "live"]],
+  ["notices", ["chats", "routines", "secrets", "live"]],
   ["memory", ["chats"]],
-  ["apps", ["machine"]],
-  ["studio", ["apps"]],
-  ["backup", ["apps"]],
-  ["secrets", ["machine"]],
-  ["computer", ["machine"]],
+  ["apps", ["machine", "live", "datadir"]],
+  ["studio", ["apps", "live", "datadir", "processes"]],
+  ["backup", ["apps", "live", "datadir"]],
+  ["secrets", ["machine", "live", "datadir", "processes"]],
+  ["computer", ["machine", "live", "datadir", "processes"]],
 ]);
 
 /** Packages only some files may import, by the rule in AGENTS.md that keeps each one there. */
@@ -42,8 +45,6 @@ export const PACKAGES = new Map<string, readonly string[]>([
   ["flags/next", ["flags/flags.ts"]],
   ["@flags-sdk/vercel", ["flags/flags.ts"]],
 ]);
-
-const SHARED = "kernel";
 
 // The specifiers of a file's import and export statements, static and dynamic.
 const STATEMENT = /^(?:import|export)\b[^;]*?\bfrom\s*"([^"]+)"/gms;
@@ -74,11 +75,11 @@ function importProblem(file: string, target: string) {
     return `${file} imports ${target}: a context never uses the files that put the host together.`;
   }
 
-  if (from !== "" && to !== SHARED && !CONTEXTS.get(from)?.includes(to)) {
+  if (from !== "" && !CONTEXTS.get(from)?.includes(to)) {
     return `${file} uses ${to}/, which ${from}/ may not. If it should, add "${to}" to ${from}'s list in scripts/boundaries.ts and to the map in docs/architecture.md.`;
   }
 
-  if (to !== SHARED && target !== entryOf(to)) {
+  if (target !== entryOf(to)) {
     return `${file} imports ${target}: from outside ${to}/, import ${entryOf(to)}, and export what it needs from there.`;
   }
 
@@ -126,7 +127,7 @@ export function violations(files: ReadonlyMap<string, string>): string[] {
   );
 
   const entries = [...CONTEXTS.keys()].flatMap((context) =>
-    context === SHARED || files.has(entryOf(context))
+    files.has(entryOf(context))
       ? []
       : [
           `${context}/ has no entry: ${entryOf(context)} is what the other parts import.`,
