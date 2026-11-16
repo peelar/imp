@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.12.1
+
+### Patch Changes
+
+- ce64818: A step your imp couldn't finish now shows an alert icon instead of its tool's icon, and the line under the message box is gone.
+
 ## 0.12.0
 
 ### Minor Changes
