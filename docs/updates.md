@@ -15,7 +15,14 @@ Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to keep a host at its release. A checkou
 
 ## The Mac app updates itself
 
-The Mac app checks at login and every hour, and replaces itself, quitting and reopening if it is running. It is not signed with an Apple Developer ID. macOS opens it because curl does not quarantine what it downloads.
+A launchd agent that `scripts/install-mac.sh` installs (`dev.imp.updater`) checks GitHub at login and every hour. It never quits Imp:
+
+- While Imp is closed, a new release replaces it at once.
+- While Imp is open, the release is downloaded and checked, and waits in `~/Library/Application Support/Imp/staged`. The updater writes its tag to `update.json` in the app's storage (`~/Library/Application Support/exact/dev.imp.app/data`), and every page's header shows **Restart for vX.Y.Z** (**Update** on a narrow window). Restart writes `restart` beside it and quits Imp. The agent watches for that file: once Imp is gone it puts the release in place and opens Imp again. If the quit is cancelled, the release keeps waiting.
+
+After it installs a release, the updater runs that release's `install-mac.sh --refresh`, which writes the updater again, so a change to the updater reaches every Mac with the release that makes it. A Mac installed before this updater keeps the old one, which quits and reopens Imp, until `install-mac.sh` runs on it once more. What the updater did is in `~/Library/Application Support/Imp/update.log`.
+
+The app is not signed with an Apple Developer ID. macOS opens it because curl does not quarantine what it downloads.
 
 ## Making a release
 

@@ -122,6 +122,10 @@ shape AppTile
 shape Build
   id: string
 
+// A release of the Mac app its updater has ready beside the running app, by its tag; "" for none (scripts/install-mac.sh).
+shape Update
+  version: string
+
 // The agent's computer. `kind` is "container" (this machine: a container on the host's machine, which
 // `containerAvailable` says can run, or `containerProblem` why not), "cloud" (Imp cloud, an E2B sandbox of `size`),
 // "own" (`device` on the tailnet), "dev" (fixed by a development host) or "none"; `status` is "none", "starting", "ready" or "failed" (with `error`).
@@ -458,6 +462,9 @@ component App
   resource chat = chat() when signedIn as shape ChatState else empty()
   resource apps = apps() when signedIn as shape AppTile[] else empty()
   resource build = build() when signedIn as shape Build else empty()
+  resource update = updateReady() as shape Update else empty()
+  // Restart asks the updater to put the ready release in place and open it, then quits.
+  mutation restarting as shape Reply then quitForUpdate
   mutation signInStarted as shape Reply
   mutation signInCancelled as shape Reply
   mutation keyUsed as shape Reply then afterKeyUsed
@@ -629,6 +636,12 @@ component App
     keysShown = false
   action tick
     now = performanceNow()
+    refresh update
+  action restartToUpdate
+    send restarting = updateRestart()
+  action quitForUpdate
+    if match restarting { case some(r) => r.ok, case none => false }
+      close()
   action restoreUnsent
     if draft.trim() == ""
       draft = unsent
@@ -1016,12 +1029,25 @@ component App
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
                       Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
                       row flex=1
+                      // A new release of the Mac app is ready: it waits for the person to restart, never quits Imp.
+                      if update.version != ""
+                        button press=restartToUpdate disabled=pending(restarting) testId=`update-restart-${e.name}`
+                          aria-label=`Restart Imp to update to ${update.version}` display="flex" align-items="center" gap=8
+                          padding="7px 12px" border="none" background-color="AccentColor" color="ink.on-fill"
+                          font-family="family.mono" font-size="0.6875rem" letter-spacing="0.08em" text-transform="uppercase"
+                          white-space="nowrap"
+                          :disabled
+                            background-color="surface.soft"
+                            color="ink.faint"
+                          image "symbol:icon.refresh" width=12 height=12 aria-hidden=true
+                          text (wide ? `Restart for ${update.version}` : "Update")
                       if e.name == "chat" and chat.busy
                         row gap=8 align-items="center" testId="busy"
                           row width=6 height=6 background-color="AccentColor" aria-hidden=true
                             animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
                           text "Imp at work" class=Label color="ink.strong"
-                      else if not wide
+                      // A narrow header gives the date's place to a ready update.
+                      else if not wide and update.version == ""
                         text formatDate(shown, time.utcOffset, "medium") class=Label
                       // New chat from any page; on a wide window the sidebar has it.
                       if not wide

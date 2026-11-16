@@ -18,6 +18,8 @@ const RESERVED = new Set([
   "machine",
   "computer",
   "build",
+  // The Mac app's own update sources (client/app.ts).
+  "update",
   "version",
   "settings",
   "memory",

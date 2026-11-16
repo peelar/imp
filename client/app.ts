@@ -1,7 +1,7 @@
 // The one data module every app shares. Reads are live: each opens a server-sent event stream from the host, which
 // sends a new answer whenever it changes, whoever changed it. Writes are POSTs. The host routes each name to the
 // shell or to the app that owns it, so the client needs no grant beyond its host.
-import type { Answer, MutationSource, StreamEvent } from './app.contract.d.ts';
+import type { Answer, MutationSource, Storage, StreamEvent } from './app.contract.d.ts';
 
 // The host's origin. Development, tests and native builds name it. On the web the host serves this client, so a build
 // with API_BASE_URL set empty asks the page's own origin, whatever address `tailscale serve` gives it: Exact hides
@@ -31,14 +31,36 @@ async function hostOrigin(saved: string): Promise<{ origin: string }> {
   return { origin };
 }
 
+// The Mac app's updater (scripts/install-mac.sh) and the app talk through two files in the app's storage: the updater
+// writes update.json when a release is ready beside the running app, and Restart writes `restart`, which the updater
+// watches for, then quits. Neither is ever there on the web.
+const UPDATE = 'app:/data/update.json';
+const RESTART = 'app:/data/restart';
+
+async function updateReady(storage: Storage): Promise<{ version: string }> {
+  try {
+    const text = String.fromCharCode(...new Uint8Array(await storage.fs.readFile(UPDATE)));
+    const { version } = JSON.parse(text);
+    return { version: typeof version === 'string' && /^v\d[\w.-]*$/.test(version) ? version : '' };
+  } catch {
+    // None ready (no file), none written whole yet, or no storage at all (the build).
+    return { version: '' };
+  }
+}
+
+async function updateRestart(storage: Storage): Promise<{ ok: boolean; error: string }> {
+  await storage.fs.writeFile(RESTART, new Uint8Array([10]));
+  return { ok: true, error: '' };
+}
+
 // Any origin, because the host's address is the person's (their tailnet name, later one they type on a phone). The
 // microphone and speech recognition are the composer's dictation; notifications tell the person what needs them.
 export const grants =
-  'net.fetch https:\nnet.fetch http:\ndevice.microphone purpose.microphone\ndevice.speech-recognition purpose.dictation\ndevice.notifications purpose.notifications';
+  `net.fetch https:\nnet.fetch http:\ndevice.microphone purpose.microphone\ndevice.speech-recognition purpose.dictation\ndevice.notifications purpose.notifications\nfs.read ${UPDATE}\nfs.write ${RESTART}`;
 
-// Every write the shell sends. Typed against the compiled plan, so adding or removing a mutation without listing it
-// here fails the build.
-const mutations: Record<MutationSource, true> = {
+// Every write the shell sends to the host. Typed against the compiled plan, so adding or removing a mutation without
+// listing it here fails the build. A restart for an update stays on this device.
+const mutations: Record<Exclude<MutationSource, 'updateRestart'>, true> = {
   accountSignIn: true,
   accountCancel: true,
   accountUseKey: true,
@@ -95,8 +117,10 @@ async function call(source: MutationSource, args: unknown[]) {
   return response.json();
 }
 
-export const answer: Answer = (source, args) => {
+export const answer: Answer = (source, args, _store, storage) => {
   if (source === 'hostOrigin') return hostOrigin(String(args[0] ?? ''));
+  if (source === 'updateReady') return updateReady(storage);
+  if (source === 'updateRestart') return updateRestart(storage);
   if (isMutation(source)) return call(source, args);
   if (!API) throw new Error(`The host's address is not known yet, so ${source} cannot open.`);
   return fetch(`${API}/api/live/${source}?args=${encodeURIComponent(JSON.stringify(args))}`, {
