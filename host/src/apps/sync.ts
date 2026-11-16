@@ -53,6 +53,8 @@ export type SyncOptions = {
   readonly known: (slot: string) => Loaded | undefined;
   /** Whether the computer is connected now. */
   readonly awake: () => boolean;
+  /** Whether app `id` waits for a key the owner has not added, so a sync could only fail. */
+  readonly waiting: (id: string) => boolean;
   /** Runs the sync of the version in a slot. */
   readonly run: (slot: string) => Promise<void>;
   readonly changed: () => void;
@@ -103,6 +105,36 @@ function line(status: Status | undefined, running: boolean, now: number) {
   return `Synced ${ago === "just now" ? ago : `${ago} ago`}`;
 }
 
+/** The status after a run that ended at `now`, with `error` when it failed: a failure is tried again later, twice as late each time. */
+function after(
+  before: Status | undefined,
+  {
+    error,
+    every,
+    now,
+  }: { error: string | undefined; every: number; now: number }
+): Status {
+  if (error === undefined) {
+    return {
+      last: now,
+      failingSince: 0,
+      failures: 0,
+      error: "",
+      next: now + every,
+    };
+  }
+
+  const failures = (before?.failures ?? 0) + 1;
+
+  return {
+    last: before?.last ?? 0,
+    failingSince: before && before.failingSince > 0 ? before.failingSince : now,
+    failures,
+    error,
+    next: now + Math.min(every * 2 ** failures, MAX_WAIT_MS),
+  };
+}
+
 export function appSync(options: SyncOptions) {
   const file = path.join(options.dataDir, "sync.json");
 
@@ -133,6 +165,7 @@ export function appSync(options: SyncOptions) {
   const due = (id: string) =>
     everyMs(id) !== undefined &&
     !running.has(id) &&
+    !options.waiting(id) &&
     (statuses.get(id)?.next ?? 0) <= Date.now();
 
   /** Runs app `id`'s sync once and records how it went; the error, when it failed. */
@@ -145,6 +178,11 @@ export function appSync(options: SyncOptions) {
 
     if (running.has(id)) {
       return `The ${id} app is syncing already.`;
+    }
+
+    // Not a failure: the app syncs once the key is there (`resume`).
+    if (options.waiting(id)) {
+      return `The ${id} app waits for a key you have not added yet.`;
     }
 
     running.add(id);
@@ -160,30 +198,10 @@ export function appSync(options: SyncOptions) {
 
     running.delete(id);
 
-    const now = Date.now();
-    const before = statuses.get(id);
-
-    if (error === undefined) {
-      statuses.set(id, {
-        last: now,
-        failingSince: 0,
-        failures: 0,
-        error: "",
-        next: now + every,
-      });
-    } else {
-      const failures = (before?.failures ?? 0) + 1;
-
-      statuses.set(id, {
-        last: before?.last ?? 0,
-        failingSince:
-          before && before.failingSince > 0 ? before.failingSince : now,
-        failures,
-        error,
-        next: now + Math.min(every * 2 ** failures, MAX_WAIT_MS),
-      });
-    }
-
+    statuses.set(
+      id,
+      after(statuses.get(id), { error, every, now: Date.now() })
+    );
     save();
 
     return error;
@@ -195,7 +213,7 @@ export function appSync(options: SyncOptions) {
     });
   };
 
-  const timer = setInterval(() => {
+  const syncDue = () => {
     if (!options.awake()) {
       return;
     }
@@ -205,7 +223,9 @@ export function appSync(options: SyncOptions) {
         inBackground(id);
       }
     }
-  }, TICK_MS);
+  };
+
+  const timer = setInterval(syncDue, TICK_MS);
 
   timer.unref();
 
@@ -218,11 +238,16 @@ export function appSync(options: SyncOptions) {
     },
     /** Sync now: runs it, and answers why it failed, if it did. */
     now: async (id: string) => await sync(id),
-    /** What the app's bar says about its sync; "" for an app without one. */
+    /** What the app's bar says about its sync; "" for an app without one, or one that waits for a key. */
     line: (id: string) =>
-      everyMs(id) === undefined
+      everyMs(id) === undefined || options.waiting(id)
         ? ""
         : line(statuses.get(id), running.has(id), Date.now()),
+    /** The owner's keys changed: an app that waited for one syncs now, and the shell hears what each waits for. */
+    resume: () => {
+      options.changed();
+      syncDue();
+    },
     stop: () => {
       clearInterval(timer);
     },

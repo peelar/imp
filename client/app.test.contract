@@ -13,17 +13,23 @@ test "onboarding signs in with ChatGPT through a device code"
   // build, and on a narrow window the chat opens to watch it.
   expect tree has "first-app"
   expect text "onboarding-step" == "3 / 3"
+  // Connecting GitHub is offered, never required.
+  expect tree has "first-app-github-connect"
   tap "first-app-build"
   clock until state account.introduceApps == false within 10000
   expect tree missing "onboarding"
   clock until state chat.messages.0.text == "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review." within 5000
   expect state nav.tab == "chat"
   clock until state chat.busy == false within 10000
-  // GitHub shows what an app is above it, until that is dismissed.
+  // GitHub shows what an app is above it, until that is dismissed. Without GitHub connected it waits, which is no
+  // failure: the bar says nothing of the sync, and the card offers to connect it until it is.
   tap "tab-github"
   expect tree has "app-guide"
+  expect tree has "app-github-connect"
+  expect tree missing "sync-bar"
   tap "app-guide-dismiss"
   expect tree missing "app-guide"
+  expect tree has "app-needs"
   expect tree has "uninstall"
   tap "tab-chat"
   tap "new-chat-chat"

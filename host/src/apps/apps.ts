@@ -133,11 +133,21 @@ export function appGateway(options: GatewayOptions) {
 
   const slots = machine.slots();
 
+  /** The key the live version of app `id` reads with that the owner has not added, such as "github"; "" for none. */
+  const needs = (id: string) =>
+    machine
+      .known(id)
+      ?.manifest.connections.find(
+        ({ secret }) =>
+          secret !== undefined && options.keyHosts(secret) === undefined
+      )?.secret ?? "";
+
   const sync = appSync({
     dataDir: path.join(options.dataDir, "apps"),
     slots: () => slots,
     known: machine.known,
     awake: machine.awake,
+    waiting: (id) => needs(id) !== "",
     run: async (id) => {
       await machine.call(id, SYNC, {});
     },
@@ -196,6 +206,9 @@ export function appGateway(options: GatewayOptions) {
     syncNow: async (id: string) => await sync.now(id),
     /** What the app's bar says about its live version's sync: "Synced 3 min ago"; "" for an app without one. */
     syncLine: sync.line,
+    needs,
+    /** The owner added or removed a key: what waited for one syncs now. */
+    keysChanged: sync.resume,
     /** What the version the shell shows reads, in words: "Reads api.github.com with your github key, every 15 min." */
     reads: (id: string) => {
       const slot = slots.has(draftSlot(id)) ? draftSlot(id) : id;

@@ -31,49 +31,10 @@ component ConnectionsSettings
             :hover
               color="-exact-system-red"
             text "Disconnect" class=Label color="inherit"
-      else if github.status == "waiting"
-        column gap=10 padding="18px 0" border-bottom="1px solid line.subtle" testId="github-waiting"
-          Step(number="01", title="Open GitHub's sign-in page")
-          link href=github.url testId="github-open" display="flex" align-items="center" justify-content="center"
-            gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
-            font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
-            text-decoration-line="none"
-            text "Open GitHub"
-            image "symbol:icon.open" width=14 height=14 aria-hidden=true
-          Step(number="02", title="Enter this code")
-          row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
-            text github.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
-              letter-spacing="0.18em" user-select="all" testId="github-code"
-            button press=copyCode testId="github-copy" display="flex" align-items="center" gap=6
-              padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
-              font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
-              :hover
-                background-color="surface.soft"
-              image "symbol:icon.copy" width=13 height=13 aria-hidden=true
-              text "Copy"
-          row gap=10 align-items="center" padding-top=2
-            progress aria-label="Waiting for approval"
-            text "Waiting for you to approve…" font-style="italic" color="ink.muted"
-          button press=cancel testId="github-cancel" align-self="flex-start" padding="4px 0" border="none"
-            background-color="transparent" color="ink.muted"
-            :hover
-              color="ink.strong"
-            text "Cancel" class=Label color="inherit"
-      else if github.status == "starting"
-        row gap=10 align-items="center" padding="18px 0" border-bottom="1px solid line.subtle" testId="github-starting"
-          progress aria-label="Loading"
-          text "Asking GitHub for a code…" font-style="italic" color="ink.muted"
       else
-        column gap=14 align-items="flex-start" padding="16px 0" border-bottom="1px solid line.subtle"
-          text "Sign in once, and your apps, your imp and Backup reach GitHub as you." font-size="0.9375rem"
-            color="ink.muted" line-height=1.45
-          button press=connect disabled=busy testId="github-connect" padding="10px 14px" border="none"
-            background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.75rem"
-            letter-spacing="0.1em" text-transform="uppercase"
-            :disabled
-              background-color="surface.soft"
-              color="ink.faint"
-            text "Connect GitHub"
+        column padding="16px 0" border-bottom="1px solid line.subtle"
+          GithubSignIn(github=github, busy=busy, connect=connect, cancel=cancel, copyCode=copyCode,
+            note="Sign in once, and your apps, your imp and Backup reach GitHub as you.", prefix="")
       if github.error != ""
         row gap=8 align-items="flex-start" padding="10px 14px" margin-top=12 background-color="danger.soft"
           border-left="2px solid -exact-system-red"
@@ -127,3 +88,60 @@ component ConnectionsSettings
             border-left="2px solid -exact-system-red"
             image "symbol:icon.alert" color="-exact-system-red" width=16 height=16 aria-hidden=true
             text backup.error font-size="0.9375rem" flex=1 min-width=0 overflow-wrap="anywhere" testId="backup-error"
+
+// Connecting GitHub, until it is on: the button, then GitHub's code to enter on its sign-in page. Settings shows it,
+// and so do the onboarding's first app and an app's page while the app waits for GitHub.
+component GithubSignIn
+  props
+    github: Connection
+    busy: bool
+    connect: action
+    cancel: action
+    copyCode: action
+    note: string
+    // Before each testId, so the same sign-in on two screens stays two things to tap.
+    prefix: string
+  view
+    if github.status == "waiting"
+      column gap=10 testId=`${prefix}github-waiting`
+        Step(number="01", title="Open GitHub's sign-in page")
+        link href=github.url testId=`${prefix}github-open` display="flex" align-items="center" justify-content="center"
+          gap=8 padding="13px 16px" background-color="AccentColor" color="ink.on-fill"
+          font-family="family.mono" font-size="0.8125rem" letter-spacing="0.1em" text-transform="uppercase"
+          text-decoration-line="none"
+          text "Open GitHub"
+          image "symbol:icon.open" width=14 height=14 aria-hidden=true
+        Step(number="02", title="Enter this code")
+        row align-items="center" gap=8 padding="6px 6px 6px 16px" border="1px solid line.strong"
+          text github.code flex=1 font-family="family.mono" font-size="1.5rem" font-weight=500
+            letter-spacing="0.18em" user-select="all" testId=`${prefix}github-code`
+          button press=copyCode testId=`${prefix}github-copy` display="flex" align-items="center" gap=6
+            padding="9px 12px" border="1px solid line.strong" background-color="transparent" color="ink.strong"
+            font-family="family.mono" font-size="0.75rem" letter-spacing="0.1em" text-transform="uppercase"
+            :hover
+              background-color="surface.soft"
+            image "symbol:icon.copy" width=13 height=13 aria-hidden=true
+            text "Copy"
+        row gap=10 align-items="center" padding-top=2
+          progress aria-label="Waiting for approval"
+          text "Waiting for you to approve…" font-style="italic" color="ink.muted"
+        button press=cancel testId=`${prefix}github-cancel` align-self="flex-start" padding="4px 0" border="none"
+          background-color="transparent" color="ink.muted"
+          :hover
+            color="ink.strong"
+          text "Cancel" class=Label color="inherit"
+    else if github.status == "starting"
+      row gap=10 align-items="center" testId=`${prefix}github-starting`
+        progress aria-label="Loading"
+        text "Asking GitHub for a code…" font-style="italic" color="ink.muted"
+    else
+      column gap=14 align-items="flex-start"
+        if note != ""
+          text note font-size="0.9375rem" color="ink.muted" line-height=1.45
+        button press=connect disabled=busy testId=`${prefix}github-connect` padding="10px 14px" border="none"
+          background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.75rem"
+          letter-spacing="0.1em" text-transform="uppercase"
+          :disabled
+            background-color="surface.soft"
+            color="ink.faint"
+          text "Connect GitHub"

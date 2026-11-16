@@ -29,7 +29,11 @@ import {
   type MemorySystem,
   graphMemory,
 } from "./memory/memory.ts";
-import { openSecrets, type Secrets } from "./secrets/secrets.ts";
+import {
+  openSecrets,
+  type Secrets,
+  TOPIC as SECRETS,
+} from "./secrets/secrets.ts";
 import { openNotifications } from "./notifications/notifications.ts";
 import { shellApi } from "./shell-api.ts";
 import {
@@ -399,7 +403,7 @@ function openAppGateway(
     secrets: ReturnType<typeof openOwnerSecrets>;
   }
 ) {
-  return appGateway({
+  const gateway = appGateway({
     apps: stored.live,
     dataDir: options.dataDir,
     topics,
@@ -408,6 +412,13 @@ function openAppGateway(
     keyHosts: secrets.keyHosts,
     send: secrets.sendForApp,
   });
+
+  // Connecting GitHub, or adding a key in Secrets, lets an app that waited for it sync.
+  topics.on(SECRETS, () => {
+    gateway.keysChanged();
+  });
+
+  return gateway;
 }
 
 /** The agent's machine, for something that is about to use it. */

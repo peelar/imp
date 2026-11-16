@@ -73,6 +73,20 @@ function oneAtATime() {
 
 export type Studio = ReturnType<typeof studio>;
 
+/** An app as the shell lists it: its draft and undo, what it reads, how its sync went and the key it waits for. */
+const tile = (
+  gateway: AppGateway,
+  decisions: ReturnType<typeof appDecisions>,
+  app: ReturnType<AppGateway["apps"]>[number]
+) => ({
+  ...app,
+  draft: gateway.draft(app.id) !== undefined,
+  undo: decisions.undoKind(app.id),
+  reads: gateway.reads(app.id),
+  sync: gateway.syncLine(app.id),
+  needs: gateway.needs(app.id),
+});
+
 export function studio(options: StudioOptions) {
   const { gateway, topics } = options;
 
@@ -158,15 +172,8 @@ export function studio(options: StudioOptions) {
   );
 
   return {
-    /** The apps for the shell, with each one's draft and undo, what it reads and how its sync went. */
-    state: () =>
-      gateway.apps().map((app) => ({
-        ...app,
-        draft: gateway.draft(app.id) !== undefined,
-        undo: decisions.undoKind(app.id),
-        reads: gateway.reads(app.id),
-        sync: gateway.syncLine(app.id),
-      })),
+    /** The apps for the shell, as `tile` shows each one. */
+    state: () => gateway.apps().map((app) => tile(gateway, decisions, app)),
     /** Whether the onboarding still shows the person their first app: the host never had an app. */
     introduceApps: () => !folders.any(),
     /** The build the host serves, "repo" while it serves the repository's own. */

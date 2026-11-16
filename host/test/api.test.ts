@@ -48,6 +48,7 @@ const todos = {
   // Todos reads nothing from outside and has no sync.
   reads: "",
   sync: "",
+  needs: "",
 };
 
 /**
@@ -137,10 +138,12 @@ test("the shell lists the installed apps and the running version", async () => {
       cover: "",
       draft: false,
       undo: "",
-      // The bar says what it reads before its first sync, which its tab starts.
+      // The bar says what it reads. Without GitHub connected it waits, which is no failure: its bar says nothing of
+      // the sync, and its page offers to connect GitHub.
       reads:
         "Reads api.github.com with your github key, every 15 min, and when api.github.com/notifications changes.",
-      sync: "Not synced yet",
+      sync: "",
+      needs: "github",
     },
     todos,
   ]);

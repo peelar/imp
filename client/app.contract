@@ -98,6 +98,8 @@ fn readsOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.reads, case none => "" }
 fn syncOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.sync, case none => "" }
+fn needsOf(name: string, apps: AppTile[]): string =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.needs, case none => "" }
 // The count a Settings tab carries: what is remembered, the secrets; "" for none.
 fn settingsCount(section: string, memory: Memory, secrets: Secrets): string =
   (section == "memory" ? `${sum(memory.entries.map(m => m.facts.length + m.links.length))}`
@@ -1052,10 +1054,10 @@ component App
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=openSettings("computer"))
                   // <apps:screens>
                   if e.name == "github"
-                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "github"), dismissGuide=dismissGuide, keys=keys)
+                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "github"), dismissGuide=dismissGuide, keys=keys, needs=needsOf("github", apps), github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       GithubScreen(inbox=githubReadInbox, done=githubDoDone, snooze=githubDoSnooze, restore=githubDoRestore)
                   if e.name == "todos"
-                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "todos"), dismissGuide=dismissGuide, keys=keys)
+                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "todos"), dismissGuide=dismissGuide, keys=keys, needs=needsOf("todos", apps), github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The tabs, in a bar along the bottom: on a wide window under the page, between the sidebar and the chat's
@@ -1194,7 +1196,9 @@ component App
                     text "Connect"
             else if needsFirstApp
               FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=pending(appInstalled), error=installError,
-                build=buildFirstApp, skip=skipFirstApp, still=still)
+                build=buildFirstApp, skip=skipFirstApp, still=still, github=github,
+                githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub,
+                copyGithubCode=copyGithubCode)
             else if signedIn
               ComputerWizard(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
                 error=(keyError != "" ? keyError : switchError),

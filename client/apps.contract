@@ -5,12 +5,16 @@
 use Label, rise from "./look.contract"
 use KeyBadge, Confirm from "./parts.contract"
 use WizardTitle, WizardButton from "./onboarding.contract"
+use Connection from "./host.contract"
+use GithubSignIn from "./settings/connections.contract"
 
 // A word set in the display serif with its first letter in the script, the catalogue's drop capital.
 // An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
 // preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
 // Otherwise it says how the app's sync went, with Sync now, after a save offers to undo it, and offers to uninstall it.
-// `guide` shows what an app is above the first one the onboarding installed, until the person dismisses it.
+// Above the app's screen, a card: what an app is, above the first one the onboarding installed, until the person
+// dismisses it (`guide`); and while the app waits for a key (`needs`), where to add it, with GitHub's sign-in right
+// there. Waiting is setup still to do, not a failure: the bar says nothing of the sync until the key is there.
 component AppPage
   props
     id: string
@@ -28,6 +32,12 @@ component AppPage
     guide: bool
     dismissGuide: action
     keys: bool
+    needs: string
+    github: Connection
+    githubBusy: bool
+    connectGithub: action
+    cancelGithub: action
+    copyGithubCode: action
   slot
   view
     column flex=1 min-height=0
@@ -83,20 +93,31 @@ component AppPage
           message="Are you sure you want to delete the app and all its data?", label="Uninstall", confirm=uninstall(id),
           testId="uninstall")
       scroll id=`${id}-screen` flex=1 min-height=0
-        if guide and not draft
-          column gap=10 padding="16px 24px" border-bottom="1px solid line.subtle" background-color="surface.soft"
-            testId="app-guide"
-            text "Your first app" class=Label color="ink.strong" role="heading" aria-level=2
-            column gap=6 max-width="40rem"
-              text `This is ${name}. Use it here, or ask your imp in the chat: it uses the same app, and you see what it changes.`
-                font-size="0.9375rem" line-height=1.45
-              text "Ask your imp to change how it works, or to build you an app of your own. Uninstall an app you no longer need, with its data, from the bar above."
-                font-size="0.9375rem" line-height=1.45 color="ink.muted"
-            button press=dismissGuide testId="app-guide-dismiss" align-self="flex-start" padding="7px 12px"
-              border="1px solid line.strong" background-color="transparent" color="ink.strong"
-              :hover
-                background-color="surface.page"
-              text "Got it" class=Label color="inherit"
+        if not draft and (guide or needs != "")
+          column padding="20px 24px 4px"
+            column gap=14 max-width="34rem" padding="16px 18px" border="1px solid line.strong" testId="app-card"
+              if guide
+                column gap=6 testId="app-guide"
+                  text "Your first app" class=Label color="ink.strong" role="heading" aria-level=2
+                  text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
+                    font-size="0.9375rem" line-height=1.45
+              if needs == "github"
+                column gap=12 testId="app-needs"
+                  text "This app reads GitHub as you: connect it, and the app fills in. Your imp can work on it meanwhile."
+                    font-size="0.9375rem" line-height=1.45 color="ink.muted"
+                  GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
+                    copyCode=copyGithubCode, note="", prefix="app-")
+                  if github.error != ""
+                    text github.error font-size="0.875rem" color="-exact-system-red" overflow-wrap="anywhere"
+              else if needs != ""
+                text `This app reads with your ${needs} key: add it in Settings → Secrets, and the app fills in.`
+                  font-size="0.9375rem" line-height=1.45 color="ink.muted" testId="app-needs"
+              if guide
+                button press=dismissGuide testId="app-guide-dismiss" align-self="flex-start" padding="4px 0"
+                  border="none" background-color="transparent" color="ink.muted"
+                  :hover
+                    color="ink.strong"
+                  text "Got it" class=Label color="inherit"
         children
 
 // One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
@@ -130,6 +151,7 @@ component AppTab
 
 // The onboarding's last step: the first app. The person describes the GitHub app they want, and the imp builds it
 // over Imp's GitHub app, which reads GitHub for it, while they watch; or they skip, and have Imp's as it ships.
+// Connecting GitHub is offered here but never required: a sign-in still waiting carries on to the app's page.
 component FirstAppWizard
   props
     ask: string
@@ -139,6 +161,11 @@ component FirstAppWizard
     build: action
     skip: action
     still: bool
+    github: Connection
+    githubBusy: bool
+    connectGithub: action
+    cancelGithub: action
+    copyGithubCode: action
   view
     column gap=18 testId="first-app" animation=(still ? "none" : "rise 260ms ease-out both")
       WizardTitle(title="Build your first app", note="Say what you want to see. Your imp builds it while you watch.")
@@ -151,6 +178,12 @@ component FirstAppWizard
           text "GitHub" font-family="family.display" font-size="1.375rem" line-height=1.1
           text "Imp reads your review requests, your pull requests, what's assigned to you and your notifications. Your app shows what you choose."
             font-size="0.9375rem" color="ink.muted" line-height=1.4
+      if github.status == "on"
+        text (github.login == "" ? "GitHub is connected." : `Connected as @${github.login}.`) font-size="0.9375rem"
+          testId="first-app-connected"
+      else
+        GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
+          copyCode=copyGithubCode, note="Connect now, or later: your imp builds the app either way.", prefix="first-app-")
       textarea value=ask input=edit rows=4 aria-label="The app you want" testId="first-app-ask" padding="12px 14px"
         border="1px solid line.strong" background-color="transparent" outline="none" resize="vertical"
         font-family="family.text" font-size="1rem" line-height=1.5 color="ink.strong"

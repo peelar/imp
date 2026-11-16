@@ -1,5 +1,5 @@
 // Live apps, through the host's HTTP API: an app that names its connections and has a sync. The host syncs its live
-// version when its tab reads it and on Sync now, never its draft; it keeps the sync's status and says what a version
+// version when its tab reads it and on Sync now, never its draft, and waits without failing for a key it lacks; it keeps the sync's status and says what a version
 // reads; and it holds every app.fetch to the app's connections, to reads, and away from the host's own network.
 // The apps are written into the host's data directory before it starts, as the studio keeps saved code and drafts.
 import assert from "node:assert/strict";
@@ -91,8 +91,33 @@ after(async () => {
   await stopTestHost();
 });
 
-test("opening a live app syncs it once, and the shell says when and what it reads", async () => {
-  // Its tab reads it, which starts the sync; the read answers again once the sync wrote.
+test("an app waits for a key it lacks without failing, and syncs once the owner adds it", async () => {
+  // Waiting is no failure: the bar says nothing of the sync, and the shell hears which key the app waits for.
+  const waiting = await until(
+    "apps",
+    tile("reader", (app) => app.needs === "example")
+  );
+
+  assert.equal(waiting?.sync, "");
+  assert.equal(await first("readerRuns"), 0);
+  assert.deepEqual(
+    await call("appsSync", ["reader"]),
+    refused("The reader app waits for a key you have not added yet.")
+  );
+
+  // A key for another host, so the app's own fetches still fail below, the same way every time.
+  assert.deepEqual(
+    await call("secretsPut", [
+      "example",
+      "other",
+      "key",
+      "other.example.net",
+      "",
+      "",
+      "",
+    ]),
+    done
+  );
   await until("readerRuns", (answer) => (answer === 1 ? answer : undefined));
 
   const shown = await until(
@@ -100,6 +125,7 @@ test("opening a live app syncs it once, and the shell says when and what it read
     tile("reader", (app) => app.sync === "Synced just now")
   );
 
+  assert.equal(shown?.needs, "");
   assert.equal(
     shown?.reads,
     "Reads api.example.com with your example key, every 15 min."
@@ -123,13 +149,14 @@ test("a draft is never synced, and the shell says what the draft reads", async (
 test("Sync now runs it again, and a failed sync says why on the app's bar", async () => {
   assert.deepEqual(await call("readerFail", []), done);
 
-  const needs = "needs secret example: add it in Settings → Secrets.";
+  const why =
+    "The example key is not for api.example.com: it goes on requests to other.example.net.";
 
-  assert.deepEqual(await call("appsSync", ["reader"]), refused(needs));
+  assert.deepEqual(await call("appsSync", ["reader"]), refused(why));
   assert.equal(await first("readerRuns"), 2);
   await until(
     "apps",
-    tile("reader", (app) => app.sync === `Sync failing: ${needs}`)
+    tile("reader", (app) => app.sync === `Sync failing: ${why}`)
   );
   assert.deepEqual(
     await call("appsSync", ["todos"]),
@@ -157,8 +184,8 @@ test("app.fetch reaches only the app's connections, over HTTPS, and only reads",
     "app.fetch reaches HTTPS on port 443 only, not https://api.example.com:8443.",
     "Apps only read: app.fetch takes GET and HEAD, and POST only to a connection's query path (/graphql on api.example.com), not DELETE /items.",
     "Apps only read: app.fetch takes GET and HEAD, and POST only to a connection's query path (/graphql on api.example.com), not POST /items.",
-    // A read by POST to the query path passes the rules, and then needs the key.
-    "needs secret example: add it in Settings → Secrets.",
+    // A read by POST to the query path passes the rules, and then needs the key to be for its host.
+    "The example key is not for api.example.com: it goes on requests to other.example.net.",
   ]);
 });
 

@@ -90,6 +90,9 @@ shape AppTile
   undo: string
   reads: string
   sync: string
+  // The key the app reads with that the owner has not added yet, such as "github": it waits, and syncs once it is
+  // there. "" for none.
+  needs: string
 
 // The web build the host serves now. A page from an older build relaunches to load it.
 shape Build
