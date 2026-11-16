@@ -92,6 +92,9 @@ after(async () => {
 });
 
 test("an app waits for a key it lacks without failing, and syncs once the owner adds it", async () => {
+  // Its tab reads it, which loads it on the computer: what it needs is known from then on, and it does not sync.
+  assert.equal(await first("readerRuns"), 0);
+
   // Waiting is no failure: the bar says nothing of the sync, and the shell hears which key the app waits for.
   const waiting = await until(
     "apps",
@@ -99,7 +102,6 @@ test("an app waits for a key it lacks without failing, and syncs once the owner 
   );
 
   assert.equal(waiting?.sync, "");
-  assert.equal(await first("readerRuns"), 0);
   assert.deepEqual(
     await call("appsSync", ["reader"]),
     refused("The reader app waits for a key you have not added yet.")
