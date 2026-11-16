@@ -33,7 +33,8 @@ component Transcript
             else if m.role == "activity"
               column gap=2 padding="5px 0" testId=`${prefix}message-${m.id}`
                 row gap=10 align-items="center" color=(m.failed ? "-exact-system-red" : "ink.muted")
-                  image m.icon width=13 height=13 aria-hidden=true
+                  // A step that failed shows the alert, whatever its tool's own symbol is.
+                  image (m.failed ? "symbol:icon.alert" : m.icon) width=13 height=13 aria-hidden=true
                   text m.title class=Label color=(m.failed ? "-exact-system-red" : "ink.strong") white-space="nowrap"
                   if m.detail != ""
                     text m.detail font-family="family.mono" font-size="0.75rem" color="ink.muted" flex=1 min-width=0
@@ -130,6 +131,3 @@ component Composer
                 background-color="surface.soft"
                 color="ink.faint"
               image "symbol:icon.send" width=16 height=16
-        if not compact
-          text "Asks before anything it can't undo" class=Label color="ink.faint" text-align="center"
-            font-size="0.625rem"
