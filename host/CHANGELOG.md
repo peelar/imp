@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.12.2
+
+### Patch Changes
+
+- 5212a46: The rows under Your apps on Home are padded on the left, so their icons no longer touch the edge of the highlight when you point at one.
+- 134a98b: When Imp is still installing the tools it builds apps with, a preview now waits for them to finish instead of failing, so the imp no longer gives up on a new app before trying it.
+
 ## 0.12.1
 
 ### Patch Changes
