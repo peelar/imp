@@ -71,5 +71,5 @@ The [docs](docs/README.md) cover hosting your own Imp and how it works inside:
 
 ## Credits
 
-Fonts: Instrument Serif, Newsreader, Pinyon Script and IBM Plex Mono, under the SIL Open Font License
+Fonts: Instrument Serif, Instrument Sans, Pinyon Script and IBM Plex Mono, under the SIL Open Font License
 (`client/assets/fonts`).

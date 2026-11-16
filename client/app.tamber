@@ -1,7 +1,7 @@
 tamber imp
 
 // Catalogue: white paper, black ink, one cobalt action, square corners, engraved art in greyscale. Headlines are
-// Instrument Serif with a Pinyon Script capital, prose is Newsreader, labels and numbers are IBM Plex Mono.
+// Instrument Serif with a Pinyon Script capital, prose is Instrument Sans, labels and numbers are IBM Plex Mono.
 
 theme
   AccentColor = light-dark(#2341d6, #5b74f2)
@@ -22,7 +22,7 @@ theme
   danger.soft = light-dark(#fdeeee, #3a1d20)
 
   family.display = "Instrument Serif", "Iowan Old Style", Georgia, serif
-  family.text = "Newsreader", "Iowan Old Style", Georgia, serif
+  family.text = "Instrument Sans", ui-sans-serif, system-ui, sans-serif
   family.script = "Pinyon Script", "Snell Roundhand", serif
   family.mono = "IBM Plex Mono", ui-monospace, monospace
 

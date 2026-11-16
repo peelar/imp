@@ -16,9 +16,9 @@ use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speec
 
 font "Instrument Serif" = "assets/fonts/InstrumentSerif-Regular.ttf"
 font "Pinyon Script" = "assets/fonts/PinyonScript-Regular.ttf"
-font "Newsreader"
-  200 800 = "assets/fonts/Newsreader.ttf"
-  200 800 italic = "assets/fonts/Newsreader-Italic.ttf"
+font "Instrument Sans"
+  400 700 = "assets/fonts/InstrumentSans.ttf"
+  400 700 italic = "assets/fonts/InstrumentSans-Italic.ttf"
 font "IBM Plex Mono"
   400 = "assets/fonts/IBMPlexMono-Regular.ttf"
   500 = "assets/fonts/IBMPlexMono-Medium.ttf"
