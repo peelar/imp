@@ -34,9 +34,10 @@ On the machine that will run your Imp (Linux with systemd, or macOS), with Node 
 curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
 ```
 
-It installs Imp as a service, serves it on your tailnet and prints one link. Open it, sign in with ChatGPT or an
-OpenAI-compatible API key, and give your imp a computer. The host keeps itself at the latest release. [Install](docs/install.md) covers the
-details, and the optional Mac app, which installs from your host with one command.
+It installs Imp as a service and serves it on your tailnet. On a Mac it also installs the Mac app, then opens it and
+the web app; on Linux it opens the web app if there is a desktop, and prints its link. Sign in with ChatGPT or an
+OpenAI-compatible API key, and give your imp a computer. The host and the Mac app keep themselves at the latest
+release. [Install](docs/install.md) covers the details, and the Mac app on another Mac.
 
 ## Development
 

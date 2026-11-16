@@ -5,8 +5,9 @@
 #
 # Everything lives in IMP_HOME (default ~/.imp): releases/<tag> holds each unpacked release, `current` links the one
 # that runs, data/ is the host's data and `env` holds the few settings the app does not have. It serves the host on
-# your tailnet with `tailscale serve`, and prints the one link to open: everything else, such as the agent's computer,
-# is set up in the app. The host then keeps itself at the latest release (host/src/update/update.ts); IMP_AUTO_UPDATE=0 in
+# your tailnet with `tailscale serve`, and opens it: on macOS it installs the Mac app (scripts/install-mac.sh) and opens
+# it and the web app, on Linux it opens the web app when there is a desktop, and it always prints the link. Everything
+# else, such as the agent's computer, is set up in the app. The host then keeps itself at the latest release (host/src/update/update.ts); IMP_AUTO_UPDATE=0 in
 # `env` stops that. Running this again updates and restarts it.
 set -eu
 
@@ -163,14 +164,64 @@ serve_on_tailnet() {
 }
 serve_on_tailnet
 
+# What opens next waits for the host to answer, so it does not find it still starting. curl without -f succeeds on any
+# HTTP reply.
+wait_for_host() {
+	for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+		curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$port/" && return
+		sleep 1
+	done
+}
+
+# Under `curl | sh` the rest of this script is on stdin, so nothing started from here may read it: each gets
+# /dev/null instead.
+mac="" opened=false
+if [ -n "$url" ]; then
+	wait_for_host
+	case "$(uname -s)" in
+	Darwin)
+		# The release's Mac installer, pointed at this host as the host's /install-mac.sh would be. It installs Imp.app with
+		# the agent that keeps it up to date, and opens it.
+		echo "Installing the Mac app…"
+		if IMP_HOST="$url" IMP_REPO="$REPO" sh "$IMP_HOME/current/scripts/install-mac.sh" </dev/null >"$IMP_HOME/install-mac.log" 2>&1; then
+			mac=installed
+		else
+			mac=failed
+		fi
+		open "$url" </dev/null >/dev/null 2>&1 && opened=true
+		;;
+	Linux)
+		# Only a desktop session has a browser to open; over SSH the link is printed instead.
+		if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null; then
+			xdg-open "$url" </dev/null >/dev/null 2>&1 &
+			opened=true
+		fi
+		;;
+	esac
+fi
+
 echo
 echo "Imp $tag is running and keeps itself up to date."
 echo
 if [ -n "$url" ]; then
-	echo "  Open $url to sign in and set up your imp."
+	echo "  Web app:  $url"
+	case "$mac" in
+	installed) echo "  Mac app:  $HOME/Applications/Imp.app" ;;
+	failed) echo "  Mac app:  did not install; $IMP_HOME/install-mac.log says why. To try again: curl -fsSL $url/install-mac.sh | sh" ;;
+	esac
+	echo "  Logs:     $logs"
 	echo
-	echo "  The Mac app, if you want it: curl -fsSL $url/install-mac.sh | sh"
+	if [ "$mac" = installed ] && $opened; then
+		echo "Imp is open on this Mac and in your browser. Sign in to either to set up your imp."
+	elif [ "$mac" = installed ]; then
+		echo "Imp is open on this Mac. Sign in to set up your imp."
+	elif $opened; then
+		echo "Imp is open in your browser. Sign in to set up your imp."
+	else
+		echo "Open the web app to sign in and set up your imp."
+	fi
 else
 	echo "  One thing left: $note"
+	[ "$(uname -s)" != Darwin ] || echo "  Running this again then installs the Mac app and opens Imp."
+	echo "  Logs: $logs"
 fi
-echo "  Logs: $logs"

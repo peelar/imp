@@ -8,9 +8,24 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
    curl -fsSL https://github.com/peelar/imp/releases/latest/download/install-host.sh | sh
    ```
 
-   It downloads the latest release into `~/.imp`, installs it as a service (a systemd user unit on Linux, a launchd agent on macOS), serves it on your tailnet with `tailscale serve`, and prints one link.
+   It downloads the latest release into `~/.imp`, installs it as a service (a systemd user unit on Linux, a launchd agent on macOS) and serves it on your tailnet with `tailscale serve`. Then it opens Imp:
 
-2. **Open the link and sign in with ChatGPT**
+   - **On macOS** it installs the Mac app in `~/Applications`, connected to this host and kept at the latest release, and opens it and the web app in your default browser. If the Mac app does not install, the web app still opens, and the installer prints the command that tries again and the log (`~/.imp/install-mac.log`) that says why.
+   - **On Linux** it opens the web app with `xdg-open` when you run it in a desktop session. Over SSH it prints the link.
+
+   It ends with the web app's link and where the logs are:
+
+   ```
+   Imp v0.9.0 is running and keeps itself up to date.
+
+     Web app:  https://<your host>.ts.net
+     Mac app:  /Users/you/Applications/Imp.app
+     Logs:     tail -f /Users/you/.imp/host.log
+
+   Imp is open on this Mac and in your browser. Sign in to either to set up your imp.
+   ```
+
+2. **Sign in with ChatGPT**
 
    The host shows a code and a link. Approve it on any device. This is ChatGPT's device code flow, so it works from your phone too. Your ChatGPT plan is the model the agent runs on.
 
@@ -20,13 +35,15 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
 
    The app asks next. Imp cloud takes an E2B key, and a computer of yours is any Linux computer on your tailnet, which a setup prompt you hand to a coding agent prepares. With neither, or to try Imp first, **Skip, use a container here** runs it in a container on the host's machine, free, once Docker, OrbStack or Podman is installed there. See [The agent's computer](computer.md).
 
-4. **Optional: install the Mac app**
+## The Mac app on another Mac
 
-   ```sh
-   curl -fsSL https://<your host>.ts.net/install-mac.sh | sh
-   ```
+The installer puts the Mac app on the Mac that runs the host. On any other Mac on your tailnet, install it from your host:
 
-   This puts Imp in `~/Applications`, already connected to that host. `sh install-mac.sh --uninstall` removes it.
+```sh
+curl -fsSL https://<your host>.ts.net/install-mac.sh | sh
+```
+
+This puts Imp in `~/Applications`, already connected to that host. `curl -fsSL https://<your host>.ts.net/install-mac.sh | sh -s -- --uninstall` removes it.
 
 ## What the installer leaves behind
 
@@ -38,6 +55,8 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
   - `env`: the few settings outside the app
   - `run.sh`: what the service runs
   - `host.log`: logs, on macOS
+  - `install-mac.log`: what the Mac app's install printed, on macOS
+- `~/Applications/Imp.app`: the Mac app, on macOS, and in `~/Library/Application Support/Imp/` its updater
 
 Run the installer again at any time. It updates the host and restarts it.
 
@@ -45,7 +64,7 @@ On Linux, follow the logs with `journalctl --user -u imp -f`. A systemd user ser
 
 ## When the link does not appear
 
-The installer prints what is in the way instead of a link:
+The installer prints what is in the way instead of a link, and opens nothing until it is out of the way. On a Mac, the run after that also installs the Mac app.
 
 | It says | Do this |
 | --- | --- |

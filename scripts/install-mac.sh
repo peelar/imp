@@ -3,6 +3,8 @@
 #
 #   curl -fsSL https://<your host>/install-mac.sh | sh
 #
+# install-host.sh runs it too, from the release it installs, with IMP_HOST and IMP_REPO set, when the host is a Mac.
+#
 # It puts Imp.app from the latest GitHub release in ~/Applications and adds a launchd agent that keeps it at the
 # latest release: it checks at login and every hour, and when a new release is out it quits Imp, replaces it and opens
 # it again. The release is ad-hoc signed (no Apple Developer ID), which macOS opens because curl does not quarantine
