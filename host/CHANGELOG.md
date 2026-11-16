@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.13.0
+
+### Minor Changes
+
+- 40ba379: Choose which ChatGPT model your imp runs on, right next to the message box. Your choice stays after Imp restarts.
+
 ## 0.12.2
 
 ### Patch Changes
