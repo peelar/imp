@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { violations } from "./boundaries.ts";
+import { CONTEXTS, mapProblems, violations } from "./boundaries.ts";
 
 const branches = (count: number) =>
   Array.from(
@@ -181,6 +181,45 @@ for (const { crosses, files, says } of crossings) {
 }
 
 console.log(`The context map refuses all ${crossings.length} crossings.`);
+
+// docs/architecture.md must draw the map as boundaries.ts has it: a row that drifts from it is refused.
+const row = (name: string, owns: string, uses: readonly string[]) =>
+  `| \`${name}/\` | ${owns} | ${uses.map((use) => `\`${use}\``).join(", ")} |`;
+
+const drawn = [...CONTEXTS].map(([name, { owns, uses }]) =>
+  row(name, owns, uses)
+);
+
+assert.deepEqual(mapProblems(drawn.join("\n")), []);
+
+for (const { drifts, rows, says } of [
+  {
+    drifts: "a row that lists a use the map does not have",
+    rows: drawn.map((line) =>
+      line.startsWith("| `memory/`")
+        ? row("memory", CONTEXTS.get("memory")?.owns ?? "", ["chats", "apps"])
+        : line
+    ),
+    says: "says memory/ may use chats, apps",
+  },
+  {
+    drifts: "a context the map has no row for",
+    rows: drawn.filter((line) => !line.startsWith("| `flags/`")),
+    says: "has no row for flags/",
+  },
+  {
+    drifts: "a row for a folder that is not a context",
+    rows: [...drawn, row("notes", "Notes", [])],
+    says: "lists notes/, which is not in CONTEXTS",
+  },
+]) {
+  assert.ok(
+    mapProblems(rows.join("\n")).some((problem) => problem.includes(says)),
+    `The context map did not refuse ${drifts}`
+  );
+}
+
+console.log("The context map refuses a drawing that drifts from it.");
 
 // Inside host/src, so the probes are linted and type-checked as the host's own files are.
 const folder = mkdtempSync(path.resolve("host/src/.lint-policy-"));

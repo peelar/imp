@@ -13,25 +13,130 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-/** Each context, and the contexts it may use. */
-export const CONTEXTS = new Map<string, readonly string[]>([
-  ["live", []],
-  ["datadir", []],
-  ["processes", []],
-  ["machine", []],
-  ["account", ["live"]],
-  ["update", []],
-  ["flags", ["datadir"]],
-  ["tricks", ["live"]],
-  ["chats", ["live"]],
-  ["routines", ["chats", "live"]],
-  ["notices", ["chats", "routines", "secrets", "live"]],
-  ["memory", ["chats"]],
-  ["apps", ["machine", "live", "datadir"]],
-  ["studio", ["apps", "live", "datadir", "processes"]],
-  ["backup", ["apps", "live", "datadir"]],
-  ["secrets", ["machine", "live", "datadir", "processes"]],
-  ["computer", ["machine", "live", "datadir", "processes"]],
+/** A context: what it owns, in the words of docs/architecture.md's table, and the contexts it may use. */
+type Context = { readonly owns: string; readonly uses: readonly string[] };
+
+/** Each context, in the order docs/architecture.md's table lists them. */
+export const CONTEXTS = new Map<string, Context>([
+  [
+    "apps",
+    {
+      owns: "The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, what it reads from outside and its syncs, and the two tools the agent runs apps with",
+      uses: ["machine", "live", "datadir"],
+    },
+  ],
+  [
+    "studio",
+    {
+      owns: "Making apps: previews, Save, Discard and Undo, the code the host keeps, and the web builds with the apps in them",
+      uses: ["apps", "live", "datadir", "processes"],
+    },
+  ],
+  [
+    "chats",
+    {
+      owns: "The conversations, and the lines the host adds to a message, such as a routine's",
+      uses: ["live"],
+    },
+  ],
+  [
+    "routines",
+    {
+      owns: "What the imp does on a schedule, each in a conversation of its own",
+      uses: ["chats", "live"],
+    },
+  ],
+  [
+    "notices",
+    {
+      owns: "What the person is told while they are away: a routine's run, a key the imp asks for, a reply it finished",
+      uses: ["chats", "routines", "secrets", "live"],
+    },
+  ],
+  [
+    "memory",
+    {
+      owns: "The memory contract and the knowledge graph behind it",
+      uses: ["chats"],
+    },
+  ],
+  [
+    "secrets",
+    {
+      owns: "The vault, the egress proxy and typing logins into Chrome",
+      uses: ["machine", "live", "datadir", "processes"],
+    },
+  ],
+  [
+    "computer",
+    {
+      owns: "The owner's choice of computer, every machine provider, the runtime the host installs, and the screen",
+      uses: ["machine", "live", "datadir", "processes"],
+    },
+  ],
+  [
+    "machine",
+    {
+      owns: "The machine adapter contract that every provider meets",
+      uses: [],
+    },
+  ],
+  [
+    "backup",
+    {
+      owns: "Every saved version of the apps' code, in git and on GitHub",
+      uses: ["apps", "live", "datadir"],
+    },
+  ],
+  [
+    "account",
+    {
+      owns: "The model account: the ChatGPT sign-in or an API key, and their credentials",
+      uses: ["live"],
+    },
+  ],
+  [
+    "tricks",
+    {
+      owns: "The browser tasks the imp keeps on its computer",
+      uses: ["live"],
+    },
+  ],
+  [
+    "update",
+    {
+      owns: "The host's updates to the latest release",
+      uses: [],
+    },
+  ],
+  [
+    "flags",
+    {
+      owns: "The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start",
+      uses: ["datadir"],
+    },
+  ],
+  [
+    "live",
+    {
+      owns: "Live answers: the topics a change names, and the streams that answer again when one changes",
+      uses: [],
+    },
+  ],
+  [
+    "datadir",
+    {
+      owns: "Reading back the JSON files the host keeps in its data directory, so a damaged one never stops the host",
+      uses: [],
+    },
+  ],
+  [
+    "processes",
+    {
+      owns: "The programs the host runs beside itself, killed when it exits, and the ports they take on its loopback",
+      uses: [],
+    },
+  ],
 ]);
 
 /** Packages only some files may import, by the rule in AGENTS.md that keeps each one there. */
@@ -75,7 +180,7 @@ function importProblem(file: string, target: string) {
     return `${file} imports ${target}: a context never uses the files that put the host together.`;
   }
 
-  if (from !== "" && !CONTEXTS.get(from)?.includes(to)) {
+  if (from !== "" && !CONTEXTS.get(from)?.uses.includes(to)) {
     return `${file} uses ${to}/, which ${from}/ may not. If it should, add "${to}" to ${from}'s list in scripts/boundaries.ts and to the map in docs/architecture.md.`;
   }
 
@@ -122,7 +227,7 @@ export function violations(files: ReadonlyMap<string, string>): string[] {
     CONTEXTS.has(folder)
       ? []
       : [
-          `host/src/${folder}/ is not a context: add it to CONTEXTS in scripts/boundaries.ts with what it may use.`,
+          `host/src/${folder}/ is not a context. Read "Where code goes" in AGENTS.md: if it is one, add it to CONTEXTS in scripts/boundaries.ts and to the map in docs/architecture.md, with what it owns and what it may use.`,
         ]
   );
 
@@ -139,6 +244,57 @@ export function violations(files: ReadonlyMap<string, string>): string[] {
   );
 
   return [...unknown, ...entries, ...imports];
+}
+
+// A row of docs/architecture.md's map: | `<context>/` | what it owns | `<context>`, `<context>` |
+const ROW = /^\| `([a-z-]+)\/` \| (.*?) \| (.*?) \|$/gm;
+const NAME = /`([a-z-]+)`/g;
+
+/** Where docs/architecture.md's map, given as its Markdown, differs from CONTEXTS. */
+export function mapProblems(markdown: string): string[] {
+  const rows = new Map(
+    [...markdown.matchAll(ROW)].map(([, name = "", owns = "", uses = ""]) => [
+      name,
+      {
+        owns,
+        uses: [...uses.matchAll(NAME)].flatMap((match) => match[1] ?? []),
+      },
+    ])
+  );
+
+  const missing = [...CONTEXTS.keys()].flatMap((name) =>
+    rows.has(name)
+      ? []
+      : [`docs/architecture.md's map has no row for ${name}/.`]
+  );
+
+  const differing = [...rows].flatMap(([name, row]) => {
+    const context = CONTEXTS.get(name);
+
+    if (!context) {
+      return [
+        `docs/architecture.md's map lists ${name}/, which is not in CONTEXTS in scripts/boundaries.ts.`,
+      ];
+    }
+
+    const problems = [];
+
+    if (row.owns !== context.owns) {
+      problems.push(
+        `docs/architecture.md says ${name}/ owns "${row.owns}"; scripts/boundaries.ts says "${context.owns}".`
+      );
+    }
+
+    if ([...row.uses].sort().join(",") !== [...context.uses].sort().join(",")) {
+      problems.push(
+        `docs/architecture.md says ${name}/ may use ${row.uses.join(", ") || "nothing"}; scripts/boundaries.ts says ${context.uses.join(", ") || "nothing"}.`
+      );
+    }
+
+    return problems;
+  });
+
+  return [...missing, ...differing];
 }
 
 /** host/src's TypeScript files by their path relative to it, without the lint policy's probe folders. */
@@ -167,7 +323,15 @@ if (import.meta.main) {
     path.join(import.meta.dirname, "..", "host", "src")
   );
 
-  const found = violations(files);
+  const found = [
+    ...violations(files),
+    ...mapProblems(
+      readFileSync(
+        path.join(import.meta.dirname, "..", "docs", "architecture.md"),
+        "utf-8"
+      )
+    ),
+  ];
 
   for (const problem of found) {
     console.error(problem);
@@ -176,6 +340,8 @@ if (import.meta.main) {
   if (found.length > 0) {
     process.exitCode = 1;
   } else {
-    console.log(`host/src's ${files.size} files keep to the context map.`);
+    console.log(
+      `host/src's ${files.size} files keep to the context map, and docs/architecture.md draws it as it is.`
+    );
   }
 }
