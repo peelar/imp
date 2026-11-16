@@ -38,11 +38,7 @@ export { screenSockets, serveScreenPage } from "./screen.ts";
 
 export type { ScreenSockets } from "./screen.ts";
 
-export { SIZES } from "./choice.ts";
-
 export { computerCalls, computerSource, TOPIC } from "./shell.ts";
-
-export type { ComputerDevice } from "./own.ts";
 
 export type ComputerState = {
   /** "dev" is a development host's fixed machine. */

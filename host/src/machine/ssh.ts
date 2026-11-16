@@ -52,7 +52,7 @@ export type SshProviderOptions = {
 } & SshTargetOptions;
 
 /** `user@host[:port]`, split. */
-export function parseSshTarget(
+function parseSshTarget(
   target: string
 ):
   | { user?: string | undefined; host: string; port?: number | undefined }

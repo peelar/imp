@@ -54,7 +54,7 @@ const propIn = (line: string): ScreenProp[] => {
 };
 
 /** The props of the app's `component Screen`, in order. */
-export function screenProps(id: string, contract: string): ScreenProp[] {
+function screenProps(id: string, contract: string): ScreenProp[] {
   const lines = contract.split("\n");
   const start = lines.findIndex((line) => /^component Screen\s*$/.test(line));
 

@@ -28,7 +28,7 @@ const BRIDGE_CLIENT = path.join(here, "bridge-client.ts");
 export const AGENTD_PORT = 7070;
 
 /** Where agentd takes the agent's HTTPS requests that may need a secret (secrets/egress.ts), on the machine's loopback. */
-export const EGRESS_PORT = 7071;
+const EGRESS_PORT = 7071;
 
 /** Where a machine records the digest of the setup it last ran. */
 export const SETUP_MARKER = "/var/lib/imp/setup";

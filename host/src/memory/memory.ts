@@ -44,7 +44,7 @@ export type MemoryEntry = {
   readonly links: readonly string[];
 };
 
-export type MemoryOptions = {
+type MemoryOptions = {
   /** The host's data directory. */
   readonly dataDir: string;
   /** Tells open views that memory changed. */

@@ -84,7 +84,7 @@ const related = compile(
 const forgotten = compile(obj({ about: str(), fact: str() }, { open: true }));
 
 /** The model's answer as changes: the first JSON object in it, with every field checked. */
-export function readReflection(answer: string): Reflection {
+function readReflection(answer: string): Reflection {
   let value: unknown;
 
   try {

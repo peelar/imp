@@ -116,7 +116,7 @@ const ENTER = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 };
 const SETTLE_MS = 2000;
 
 /** Whether `url` is an https page on `site` or one of its subdomains. */
-export function onSite(url: string, site: string): boolean {
+function onSite(url: string, site: string): boolean {
   const parsed = URL.parse(url);
 
   return (

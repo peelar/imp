@@ -109,7 +109,7 @@ export type FetchRequest = Extract<DbRequest, { op: "fetch" }>;
 /** An app's `app.db` call. */
 export type SqlRequest = Exclude<DbRequest, FetchRequest>;
 
-export type CallResult = Static<typeof callResult>;
+type CallResult = Static<typeof callResult>;
 
 export type FromAgentd = Static<typeof fromAgentd>;
 

@@ -32,13 +32,7 @@ import { agentWorkspace } from "./workspace.ts";
 
 export { storedApps } from "./code.ts";
 
-export {
-  APPS_TOPIC,
-  appsSource,
-  BUILD_TOPIC,
-  buildSource,
-  studioCalls,
-} from "./shell.ts";
+export { APPS_TOPIC, appsSource, buildSource, studioCalls } from "./shell.ts";
 
 export type StudioOptions = {
   readonly dataDir: string;

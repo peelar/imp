@@ -61,7 +61,7 @@ const CANDIDATES = [
 ];
 
 /** A container CLI whose engine answers: the command to run, and its name for the person. */
-export type ContainerCli = { readonly command: string; readonly name: string };
+type ContainerCli = { readonly command: string; readonly name: string };
 
 export type ContainerRuntime =
   | { readonly ok: true; readonly cli: ContainerCli }

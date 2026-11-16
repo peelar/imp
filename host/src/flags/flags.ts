@@ -18,7 +18,7 @@ import { flag } from "flags/next";
 import { readKept } from "../datadir/datadir.ts";
 
 /** Every feature flag: its key, what it turns on, and whether it is on for a host whose owner did not choose. */
-export const FLAGS = [
+const FLAGS = [
   {
     key: "app-directory",
     label: "App directory",

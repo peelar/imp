@@ -41,14 +41,14 @@ export type UpdaterOptions = {
 };
 
 /** The asset every release carries for the host: the host, its production dependencies and the built web client. */
-export const hostAsset = (tag: string) => `imp-host-${tag}.tar.gz`;
+const hostAsset = (tag: string) => `imp-host-${tag}.tar.gz`;
 
 const TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 
 const numbers = (tag: string) => TAG.exec(tag)?.slice(1).map(Number);
 
 /** Whether release tag `a` is newer than `b`. A tag that is not vX.Y.Z is never newer. */
-export function newer(a: string, b: string): boolean {
+function newer(a: string, b: string): boolean {
   const x = numbers(a);
   const y = numbers(b) ?? [0, 0, 0];
 

@@ -167,7 +167,7 @@ const KNOWN = new Map<string, readonly [string, string, string, string]>([
   ],
 ]);
 
-export type ToolUse = {
+type ToolUse = {
   readonly name: string;
   readonly args: ToolArgs;
   readonly apps: readonly AppLabel[];
@@ -225,7 +225,7 @@ function browserStep(command: string) {
 }
 
 /** What a tool call did, in words the person reads at a glance. */
-export function describeTool({ name, args, apps }: ToolUse) {
+function describeTool({ name, args, apps }: ToolUse) {
   if (name === "run_app_action") {
     return describeAction(args, apps);
   }

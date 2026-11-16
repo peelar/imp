@@ -16,7 +16,7 @@ const NOVNC = path.dirname(
   path.dirname(fileURLToPath(import.meta.resolve("@novnc/novnc")))
 );
 
-export const SOCKET_PATH = "/api/computer/screen";
+const SOCKET_PATH = "/api/computer/screen";
 const KEEP_ALIVE_MS = 30_000;
 
 /** A request to upgrade to a WebSocket. */

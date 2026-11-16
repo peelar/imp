@@ -24,7 +24,7 @@ const BODY = 180;
  * replying). `conversation` is the conversation it opens ("" for a key, which Settings takes). `at` is when it was
  * posted, in milliseconds since the epoch, and grows with every notice, so a page tells the new ones by it.
  */
-export type Notice = {
+type Notice = {
   readonly id: string;
   readonly kind: "routine" | "key" | "reply";
   readonly title: string;

@@ -37,7 +37,6 @@ export {
   APP_FILES,
   APP_ID,
   appInfo,
-  appTopic,
   readAppFiles,
   readApps,
 } from "./folders.ts";
@@ -78,7 +77,7 @@ export type GatewayOptions = {
 };
 
 /** An app's `app.fetch` the host checked: to `address`, the address its host resolved to, with `secret` on it. */
-export type Outbound = Omit<FetchRequest, "op"> & {
+type Outbound = Omit<FetchRequest, "op"> & {
   readonly app: string;
   readonly secret: string | undefined;
   readonly address: string;

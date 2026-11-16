@@ -29,8 +29,6 @@ import {
 } from "./facts.ts";
 import { reflection } from "./reflect.ts";
 
-export { SELF, USER } from "./facts.ts";
-
 /** How many other entities the prompt names; the agent recalls the rest. */
 const NAMED = 60;
 

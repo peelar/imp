@@ -199,8 +199,6 @@ async function unsealed(socket: string) {
 const logTail = (log: string) =>
   existsSync(log) ? lastLines(readFileSync(log, "utf-8")) : "";
 
-export type VaultServer = ReturnType<typeof vaultServer>;
-
 export function vaultServer({ dir, toolsDir }: VaultServerOptions) {
   const files = vaultFiles(dir);
   let child: ChildProcess | undefined;

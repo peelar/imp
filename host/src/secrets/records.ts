@@ -61,8 +61,6 @@ const readList = <T>(file: string, listed: Validator<T[]>): T[] =>
     console.error(`secrets: ${problem}`);
   }) ?? [];
 
-export type SecretRecords = ReturnType<typeof secretRecords>;
-
 export function secretRecords(dataDir: string) {
   const usesFile = path.join(dataDir, "secrets-uses.json");
   const requestsFile = path.join(dataDir, "secrets-requests.json");

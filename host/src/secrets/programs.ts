@@ -51,7 +51,7 @@ const mitm = (arch: string, sha256: string, path = "mitmdump"): Build => ({
 
 const APP_MITMDUMP = "mitmproxy.app/Contents/MacOS/mitmdump";
 
-export const TOOLS = {
+const TOOLS = {
   bao: {
     version: "2.7.2",
     builds: {

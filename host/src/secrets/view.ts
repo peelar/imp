@@ -6,7 +6,7 @@ import { hostsOf, SERVICES, variables } from "./services.ts";
 
 const USES_SHOWN = 12;
 
-export type SecretView = {
+type SecretView = {
   readonly name: string;
   /** "key" or "login". */
   readonly kind: string;

@@ -22,7 +22,7 @@ export type { GithubApi } from "./github.ts";
 
 export const TOPIC = "backup";
 
-export type Backup = {
+type Backup = {
   /** Whether the host has git, which keeps the versions. */
   readonly git: boolean;
   /** GitHub: "off", "starting" (finding the repository) or "on" (pushing to `repo`). */

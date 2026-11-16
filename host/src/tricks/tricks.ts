@@ -54,7 +54,7 @@ const titled = (name: string) => {
 };
 
 /** What `agent-browser flow list --json` printed, as the shell's tricks, in the order of their titles. */
-export function parseTricks(output: string): Trick[] {
+function parseTricks(output: string): Trick[] {
   const answer: unknown = JSON.parse(output);
 
   if (!listed.check(answer) || !answer.success) {
