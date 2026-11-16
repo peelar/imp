@@ -1,5 +1,19 @@
 # @imp/host
 
+## 0.12.0
+
+### Minor Changes
+
+- 9a6c74d: Each part of the window now has one job. The sidebar holds Imp's own pages (Home, Routines, Tricks, the app directory and Settings) and your recent chats. The bar along the bottom holds only your apps, and an app is highlighted only while it is open, with ⌘1 to ⌘9 in the bar's order. The chat stays beside every page except its own. Routines, Tricks and the app directory have their own addresses, so Back works, and **Ask for a routine** types straight into the chat beside the page.
+- 9a6c74d: Dictation works in the Mac app too: the microphone button in the message box listens with Apple's speech recognition, on your Mac. In the sidebar, Settings now lines up with the bar of apps beside it.
+- a4cc339: The Mac app no longer quits by itself to update. When a new version is ready, the page header shows a Restart button, and Imp restarts into the new version when you press it. A Mac that already has Imp gets this after you run the Mac install command (`curl -fsSL https://<your host>/install-mac.sh | sh`) once more.
+
+### Patch Changes
+
+- 770262b: Chat and the rest of the app's prose are set in Instrument Sans instead of Newsreader, which is easier to read on screen.
+- 9a6c74d: The Mac app has a proper macOS icon: the imp fills a rounded tile instead of sitting small on a white square, in the Dock and when you switch apps with ⌘Tab, and it turns white on black in Dark mode.
+- 08cac69: Your imp can preview the apps it builds on an installed Imp again. Previews used to fail with "no such file or directory … shell/app.contract", because Imp had nothing to build them with. Now the first start after this update sets up those tools by itself, which takes a few minutes and about 6 GB of disk. Until it finishes, the imp says a preview has to wait.
+
 ## 0.11.1
 
 ### Patch Changes
