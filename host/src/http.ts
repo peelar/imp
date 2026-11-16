@@ -176,7 +176,7 @@ function serveFile(options: HttpOptions, { req, res, url }: Request): boolean {
   const file = clientFile({ dir, pathname, version: options.version });
 
   if (file.found) {
-    res.writeHead(200, file.headers);
+    res.writeHead(file.status, file.headers);
     res.end(file.body);
   } else {
     send(res, 404, { error: file.error });

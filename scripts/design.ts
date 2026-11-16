@@ -1,4 +1,4 @@
-// The shell's design system as a check (pnpm lint:design). The shell's look is its tokens in client/app.tamber, the
+// The shell's design system as a check (pnpm lint:design). The shell's look is its tokens in client/app.forma, the
 // text styles in client/look.contract and the controls in client/controls.contract (docs/design.md). Every other
 // screen of the shell names them, and writes none of its own:
 //
@@ -25,12 +25,12 @@ const RULES = [
   },
   {
     pattern: /#[\da-f]{3,8}\b|\brgba?\(|light-dark\(|-exact-system-/iu,
-    says: "writes a colour: use a token from app.tamber",
+    says: "writes a colour: use a token from app.forma",
   },
   {
     pattern:
       /\b(?:gap|padding|margin)[\w-]*=(?:"[^"]*(?<![-\d.])(?:[2-9]|\d{2,})(?:\.\d+)?px[^"]*"|\([^\n]*?"[^"]*(?<![-\d.])(?:[2-9]|\d{2,})(?:\.\d+)?px[^"]*"|[1-9]\d*\b)/u,
-    says: "spaces in pixels: use a space.* token from app.tamber",
+    says: "spaces in pixels: use a space.* token from app.forma",
   },
 ] as const;
 

@@ -1,7 +1,7 @@
 // Imp's shell: onboarding first (a model account, a computer, then the first app), then the chat home and the installed apps, compiled into one
 // plan. Every source goes to the host through the one data module in app.ts, which streams each resource live. Each
 // app's resources and mutations live here, in the root, because Contract allows them only there; its screen is
-// imported from apps/<id>/app.contract. Colours and type are app.tamber's; the look is "Catalogue": white paper,
+// imported from apps/<id>/app.contract. Colours and type are app.forma's; the look is "Catalogue": white paper,
 // black ink, engraved art, square corners, mono labels and one cobalt action.
 //
 // This file is the root: the routes, every resource, mutation and action, and the page around the screens. The screens

@@ -16,7 +16,7 @@ Rules and conventions you can't read from the code. For how things work, read th
 - Read JSON files in the data directory with `readKept` (`datadir/datadir.ts`). A damaged file must never stop the host.
 - Check anything that comes from outside the process (files, HTTP, `JSON.parse`, child processes, the model's tool arguments, the agent's machine) against a `pi-schema` schema before using it.
 - When you add a new top-level name to the shell's API, add it to `RESERVED` in `apps/folders.ts` too, so no app can take it as its id.
-- The shell's screens are built from its design system (`docs/design.md`): app.tamber's tokens, look.contract's text styles and controls.contract's controls. `pnpm check` refuses a font, colour or pixel spacing of their own. A look the system lacks goes into those files first.
+- The shell's screens are built from its design system (`docs/design.md`): app.forma's tokens, look.contract's text styles and controls.contract's controls. `pnpm check` refuses a font, colour or pixel spacing of their own. A look the system lacks goes into those files first.
 - Don't edit the `// <apps:…>` blocks in `client/app.contract` and `client/app.ts` by hand. They are generated: run `node host/scripts/shell.ts`.
 - Code in `host/src` and `host/machine` may only import packages listed under `dependencies` in `host/package.json`. In a checkout the root's packages resolve too, from the root's `node_modules`, but a release ships only the host's own dependencies.
 - Node runs the host's TypeScript as it is, so use only syntax that can simply be erased: no enums, namespaces or constructor parameter properties.

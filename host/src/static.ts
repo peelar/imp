@@ -1,7 +1,10 @@
-// The built web client (`exact web-build --out dist`) as files to serve, by Exact's static-host rule: a file at the
-// path, else shell.html, from which the client draws the route (or its notfound route).
+// The built web client (`exact web-build --out dist`) as files to serve, by Exact's static-host rule: the file at the
+// path; else, for a path a route in routes.json matches, shell.html, from which the client draws the route; else a
+// 404, with shell.html as its body for a page (the client draws its notfound route) and none for a file.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { arr, bool, compile, map, obj, str } from "@earendil-works/pi-schema";
+import { readKept } from "./datadir/datadir.ts";
 
 const TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -19,6 +22,18 @@ const TYPES = new Map([
   [".txt", "text/plain; charset=utf-8"],
 ]);
 
+/** routes.json, which Exact writes: the build's routes in the plan's order, and its files named by their content (old name: new name). */
+const routesJson = compile(
+  obj(
+    {
+      routes: arr(obj({ pattern: str(), notfound: bool() }, { open: true })),
+      files: map(str()),
+    },
+    // Exact writes the file and may add to it; the host reads only these.
+    { open: true }
+  )
+);
+
 export type ClientRequest = {
   /** The built client's folder. */
   readonly dir: string;
@@ -30,6 +45,8 @@ export type ClientRequest = {
 export type ClientFile =
   | {
       readonly found: true;
+      /** 200, or 404 for shell.html at a path no route matches. */
+      readonly status: number;
       readonly headers: {
         readonly "content-type": string;
         readonly "cache-control": string;
@@ -51,22 +68,37 @@ export function clientFile({
     return { found: false, error: "not found" };
   }
 
-  const file = existing(root, asked);
+  const shell = path.join(root, "shell.html");
 
-  if (!file) {
+  if (!existsSync(shell)) {
     return { found: false, error: "the web client is not built" };
   }
 
-  const type = path.extname(file);
-  const body = readFileSync(file);
+  const table = routeTable(root);
+  const file = existing(asked);
+
+  const routed = table.routes.some(
+    (route) => !route.notfound && matches(route.pattern, pathname)
+  );
+
+  // A file the build lacks (a browser's /favicon.ico, an old script) is a plain 404; the not-found page is for readers.
+  if (!file && !routed && /\.[A-Za-z0-9]+$/.test(pathname)) {
+    return { found: false, error: "not found" };
+  }
+
+  const served = file ?? shell;
+  const type = path.extname(served);
+  const body = readFileSync(served);
+  const named = new Set(Object.values(table.files));
 
   return {
     found: true,
+    status: file || routed ? 200 : 404,
     headers: {
       "content-type": TYPES.get(type) ?? "application/octet-stream",
-      // Files named by their content (`fragment-Cxnx3vsw.js`) never change; app.js, app.plan and the pages change
-      // with every publish, so the browser asks again each time and open clients get the new version.
-      "cache-control": /-[A-Za-z0-9_]{8}\.[a-z]+$/.test(file)
+      // routes.json `files` names the files named by their content, which never change; the pages, app.plan and the
+      // rest change with every publish, so the browser asks again each time and open clients get the new version.
+      "cache-control": named.has(path.relative(root, served))
         ? "public, max-age=31536000, immutable"
         : "no-cache",
     },
@@ -77,16 +109,38 @@ export function clientFile({
   };
 }
 
-/** The file to serve for `asked`: itself, its index.html, or the shell; none when the client is not built. */
-function existing(root: string, asked: string) {
+/** The file at `asked`, or its index.html (a page rendered at build); none when neither is there. */
+function existing(asked: string) {
   if (existsSync(asked) && !statSync(asked).isDirectory()) {
     return asked;
   }
 
   const index = path.join(asked, "index.html");
-  const fallback = existsSync(index) ? index : path.join(root, "shell.html");
 
-  return existsSync(fallback) ? fallback : undefined;
+  return existsSync(index) ? index : undefined;
+}
+
+/** The build's routes.json; a build without one, or with a damaged one, has no routes and no content-named files. */
+function routeTable(root: string) {
+  return (
+    readKept(path.join(root, "routes.json"), routesJson, (problem) => {
+      console.error(`client: ${problem}`);
+    }) ?? {
+      routes: [],
+      files: {},
+    }
+  );
+}
+
+/** Whether a route's pattern (`/apps`, `/thread/:id`) matches a path: segment by segment, a `:name` matching any one. */
+function matches(pattern: string, pathname: string) {
+  const want = pattern.split("/").filter(Boolean);
+  const have = pathname.split("/").filter(Boolean);
+
+  return (
+    want.length === have.length &&
+    want.every((part, i) => part.startsWith(":") || part === have[i])
+  );
 }
 
 /**

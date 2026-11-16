@@ -4,7 +4,7 @@ Imp's shell, the app you open, looks like a catalogue: white paper, black ink, o
 
 | File | What it holds |
 | --- | --- |
-| `app.tamber` | The tokens: colours, the type scale, spacing, and the widths a column of reading runs to |
+| `app.forma` | The tokens: colours, the type scale, spacing, and the widths a column of reading runs to |
 | `look.contract` | The text styles, one per role of type, and the shell's motion |
 | `controls.contract` | The controls: `Button`, `DialogButton`, `ButtonLink`, `Callout` and `ErrorNote` |
 

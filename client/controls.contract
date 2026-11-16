@@ -1,5 +1,5 @@
 // The design system's controls (docs/design.md): the button in each of its looks, a link that looks like one, the
-// callout a screen says something in, and an error. Their colours, type and spacing are app.tamber's tokens; a screen
+// callout a screen says something in, and an error. Their colours, type and spacing are app.forma's tokens; a screen
 // passes what the control says and does, never how it looks.
 
 use Label, Control, Body from "./look.contract"

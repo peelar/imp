@@ -23,7 +23,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 
 ## The host
 
-`host/src/host.ts` opens every part and connects them, and serves one HTTP origin on localhost: the built web client, and its API. `host/src/server.ts` starts it, and is the one file that reads settings from the environment.
+`host/src/host.ts` opens every part and connects them, and serves one HTTP origin on localhost: the built web client, and its API. It serves the client by Exact's static-host rule (`host/src/static.ts`): the file at a path; else `shell.html` for a path one of the shell's routes matches; else a 404, with `shell.html` for a page so the client draws its not-found screen. The files `routes.json` names as named by their content are cached for good. `host/src/server.ts` starts it, and is the one file that reads settings from the environment.
 
 - **The agent** (`host/src/agent/agent.ts`) runs on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable), with its conversation in `harness.sqlite`. It survives restarts in the middle of a turn. The model is your ChatGPT account, signed in with ChatGPT's device code flow (`host/src/account/account.ts`), or a key for an OpenAI-compatible API (`host/src/account/api-key.ts`).
 - **The app gateway** (`host/src/apps/apps.ts`) loads every app's server code onto the computer and keeps each app's SQLite database on the host. See [Apps](apps.md).

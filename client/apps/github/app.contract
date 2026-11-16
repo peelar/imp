@@ -47,6 +47,7 @@ fn matches(i: Item, q: string): bool = q == "" or `${i.repo} #${i.number} ${i.ti
 fn kindLabel(kind: string): string = kind == "pr" ? "PR" : kind == "issue" ? "Issue" : kind == "ci" ? "CI" : kind == "discussion" ? "Talk" : kind == "release" ? "Release" : "Other"
 
 fn heading(n: number): string = n == 0 ? "Nothing needs you" : `${n} ${n == 1 ? "thing needs" : "things need"} you`
+fn reviewsWaiting(n: number): string = `${n} ${n == 1 ? "review" : "reviews"} waiting`
 
 // A small square button with a symbol, for a row's Done, Snooze and Back.
 component RowButton
@@ -90,7 +91,7 @@ component ItemRow
   view
     row align-items="flex-start" gap=14 padding="14px 0" border-bottom="1px solid line.subtle"
       testId=`github-item-${item.key}`
-      column width=52 min-width=52 gap=6 padding-top=4
+      column width="3.25rem" min-width="3.25rem" gap=6 padding-top=4
         text kindLabel(item.kind) class=Label color=(item.unread ? "AccentColor" : "ink.muted")
         if item.draft
           text "Draft" class=Label color="ink.faint"
@@ -138,11 +139,11 @@ component Screen
       column gap=6
         text heading(items.filter(i => i.status == "inbox").length) font-family="family.display" font-size="2.25rem"
           line-height=1.05 testId="github-heading"
-        text `${items.filter(i => i.status == "inbox" and i.review).length} reviews waiting · ${items.filter(i => i.status == "inbox" and i.unread).length} unread`
+        text `${reviewsWaiting(items.filter(i => i.status == "inbox" and i.review).length)} · ${items.filter(i => i.status == "inbox" and i.unread).length} unread`
           class=Label
         if status.note != ""
           text status.note font-size="0.875rem" color="ink.muted" font-style="italic" testId="github-note"
-      row gap=6 flex-wrap="wrap" role="toolbar" aria-label="Filter"
+      row gap=6 flex-wrap="wrap" role="group" aria-label="Filter"
         for f in filterIds() key=f
           FilterButton(filter=f, count=items.filter(i => under(i, f)).length, current=(filter == f), press=pick(f))
       row align-items="center" gap=8 padding="0 12px" border="1px solid line.strong"

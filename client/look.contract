@@ -1,5 +1,5 @@
 // The design system's text styles and motion, which every screen of the shell shares (docs/design.md). Each style is
-// one role of type: its token in app.tamber, with the spacing and case the role takes. A screen sets a text's role
+// one role of type: its token in app.forma, with the spacing and case the role takes. A screen sets a text's role
 // with `class=`, and its colour with a colour token; it writes no font, size or line height of its own.
 
 // The catalogue's headlines, in the display serif: a page's welcome, a screen's title, a section or card's name, and a

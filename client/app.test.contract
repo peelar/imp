@@ -1,5 +1,6 @@
-// The tests share one host (scripts/test-host.ts), so they run in order: the first signs in, the rest are signed in.
-// Each opens Imp again, so each starts on a new chat.
+// Exact starts the host (scripts/test-host.ts) empty for each test, so each test sets up what it needs through the
+// host's API with `request`: the first starts from nothing to onboard; the rest are signed in, with GitHub installed
+// as onboarding leaves it, and Todos and its todos where they need them. Each opens Imp on a new chat.
 
 test "onboarding signs in with ChatGPT through a device code"
   clock data
@@ -43,6 +44,8 @@ test "onboarding signs in with ChatGPT through a device code"
   expect text "account-plan" == "Plus"
 
 test "the model is chosen next to the message box"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-chat"
   expect text "model" == "faux-1"
@@ -54,6 +57,8 @@ test "the model is chosen next to the message box"
 
 test "the app directory installs Todos, which Imp ships, and opens it"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "directory-entry"
   tap "directory-install-todos"
@@ -64,6 +69,9 @@ test "the app directory installs Todos, which Imp ships, and opens it"
   tap "home-entry"
 
 test "a todo added in the Todos app is listed and counted"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-todos"
   type "todo-draft" "Pack camera"
@@ -74,6 +82,9 @@ test "a todo added in the Todos app is listed and counted"
   expect text "todo-draft" == ""
 
 test "the assistant adds a todo that the open Todos app shows at once"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
   clock until state account.status == "signedIn" within 5000
   type "composer" "Please add todo: Book train to Kraków"
   tap "tab-todos"
@@ -83,19 +94,22 @@ test "the assistant adds a todo that the open Todos app shows at once"
   clock until state chat.busy == false within 10000
   expect tree missing "message-live"
   tap "tab-todos"
-  clock until state todosReadList.1.title == "Book train to Kraków" within 5000
-  expect text "todo-2" == "Book train to Kraków"
+  clock until state todosReadList.0.title == "Book train to Kraków" within 5000
+  expect text "todo-1" == "Book train to Kraków"
 
 test "on a wide window the chat sits beside an open app, and what it is asked there lands in the app"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-todos"
   expect tree has "chat-panel"
   type "side-composer" "Add todo: Call the vet"
   tap "side-send"
-  clock until state todosReadList.2.title == "Call the vet" within 10000
+  clock until state todosReadList.0.title == "Call the vet" within 10000
   clock until state chat.busy == false within 10000
-  expect text "todo-3" == "Call the vet"
+  expect text "todo-1" == "Call the vet"
   clock until state chat.messages.0.text == "Add todo: Call the vet" within 1000
   expect state chat.messages.1.title == "Todos · Add"
   expect state chat.messages.1.detail == "Call the vet"
@@ -106,6 +120,8 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   expect tree has "tab-settings"
 
 test "settings show the computer the agent works on, and offer to turn notifications on"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "settings-pane-general"
@@ -123,6 +139,8 @@ test "settings show the computer the agent works on, and offer to turn notificat
 
 test "the computer's screen opens in its own tab, beside the chat on a wide window, and connects only while shown"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   clock until state computer.status == "ready" within 10000
   tap "tab-computer"
@@ -137,6 +155,8 @@ test "the computer's screen opens in its own tab, beside the chat on a wide wind
   expect tree has "computer-frame"
 
 test "what the imp is asked to remember shows in Settings, reaches its prompt, and can be forgotten"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "settings-pane-memory"
@@ -162,6 +182,8 @@ test "what the imp is asked to remember shows in Settings, reaches its prompt, a
   expect tree has "memory-empty"
 
 test "after a chat the imp remembers what it learned on its own, without a tool call"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-chat"
   type "composer" "By the way, I live in Gdańsk now."
@@ -173,6 +195,8 @@ test "after a chat the imp remembers what it learned on its own, without a tool 
   expect text "memory-fact-0-0" == "Lives in Gdańsk"
 
 test "a key added in Settings reaches the imp's commands as a stand-in, never as its value"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "settings-pane-secrets"
@@ -195,6 +219,8 @@ test "a key added in Settings reaches the imp's commands as a stand-in, never as
   clock until state chat.messages.2.text == "I see imp-secret-github." within 10000
 
 test "the imp asks for a key it lacks, and the owner adds it from the request"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   type "composer" "Please ask for a key: linear"
   tap "send"
@@ -202,6 +228,7 @@ test "the imp asks for a key it lacks, and the owner adds it from the request"
   clock until state chat.busy == false within 10000
   tap "tab-settings"
   tap "settings-pane-secrets"
+  clock until state secrets.status == "ready" within 120000
   expect tree has "secret-request-0"
   tap "secret-request-add-0"
   expect tree has "secret-form"
@@ -209,14 +236,17 @@ test "the imp asks for a key it lacks, and the owner adds it from the request"
   tap "secret-save"
   clock until state secrets.requests.length == 0 within 20000
   expect tree missing "secret-request-0"
-  clock until state secrets.secrets.length == 2 within 5000
-  tap "secret-delete-0"
-  expect state secrets.secrets.length == 2
-  tap "secret-delete-confirm"
-  clock until state secrets.secrets.length == 1 within 10000
+  clock until state secrets.secrets.length == 1 within 5000
   expect text "secret-name-0" == "Linear"
+  tap "secret-delete-0"
+  expect state secrets.secrets.length == 1
+  tap "secret-delete-confirm"
+  clock until state secrets.secrets.length == 0 within 10000
+  expect tree has "secrets-empty"
 
 test "the imp asks for a login, and the owner adds it with its one-time-code key"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   type "composer" "Please ask for a login: github.com"
   tap "send"
@@ -246,6 +276,9 @@ test "the imp asks for a login, and the owner adds it with its one-time-code key
   expect text "secret-detail-0" == "github.com · adrian-p · one-time codes"
 
 test "settings connect GitHub with a device code, then back the apps' code up to it"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "settings-pane-connections"
@@ -267,6 +300,8 @@ test "settings connect GitHub with a device code, then back the apps' code up to
   expect tree has "github-connect"
 
 test "Settings' Experimental tab keeps a feature flag for Imp's next start"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "settings-pane-experimental"
@@ -282,11 +317,19 @@ test "Settings' Experimental tab keeps a feature flag for Imp's next start"
 
 test "the sidebar starts new chats, folds all but the latest three, and lists the imp's tricks"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   expect tree has "sidebar"
   // Imp opens on the home page, not on the conversation the last test left open.
   expect tree has "home"
-  expect text "conversation-0" == "Please ask for a login: github.com"
+  type "composer" "An earlier chat"
+  tap "send"
+  clock until state chat.conversations.0.title == "An earlier chat" within 5000
+  clock until state chat.busy == false within 10000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  expect text "conversation-0" == "An earlier chat"
   expect text "tricks-count" == "2"
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
@@ -308,9 +351,9 @@ test "the sidebar starts new chats, folds all but the latest three, and lists th
   expect text "conversation-2" == "First new chat"
   expect tree missing "conversation-3"
   tap "conversations-older"
-  expect text "conversation-3" == "Please ask for a login: github.com"
+  expect text "conversation-3" == "An earlier chat"
   tap "conversation-3"
-  clock until state chat.messages.0.text == "Please ask for a login: github.com" within 5000
+  clock until state chat.messages.0.text == "An earlier chat" within 5000
   tap "tricks-entry"
   expect tree has "tricks"
   expect text "trick-title-0" == "Search Hacker News"
@@ -326,7 +369,27 @@ test "the sidebar starts new chats, folds all but the latest three, and lists th
 
 test "pointing at a chat in the sidebar shows Archive, which folds the chat under Archived until it is restored"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
+  type "composer" "First new chat"
+  tap "send"
+  clock until state chat.conversations.0.title == "First new chat" within 5000
+  clock until state chat.busy == false within 10000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  type "composer" "Second new chat"
+  tap "send"
+  clock until state chat.conversations.0.title == "Second new chat" within 5000
+  clock until state chat.busy == false within 10000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  type "composer" "Third new chat"
+  tap "send"
+  clock until state chat.conversations.0.title == "Third new chat" within 5000
+  clock until state chat.busy == false within 10000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
   expect text "conversation-0" == "Third new chat"
   expect tree missing "conversation-archive-0"
   tap "conversation-row-0" hover
@@ -359,6 +422,8 @@ test "pointing at a chat in the sidebar shows Archive, which folds the chat unde
 
 test "on a narrow window the conversations and tricks open as a drawer"
   size 390x844
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-chat"
   expect tree missing "sidebar"
@@ -370,6 +435,10 @@ test "on a narrow window the conversations and tricks open as a drawer"
 
 test "the app directory installs an app from a GitHub link through the imp, and opens one already installed"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
+  request POST "/api/call/todosAdd" ["Pack camera"]
   clock until state account.status == "signedIn" within 5000
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
@@ -397,6 +466,8 @@ test "the app directory installs an app from a GitHub link through the imp, and 
 
 test "a routine the imp saves is listed in the Routines pane, runs now in its own conversation, pauses and is deleted"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
@@ -438,6 +509,8 @@ test "a routine the imp saves is listed in the Routines pane, runs now in its ow
   expect tree has "routines-empty"
 
 test "the composer's microphone dictates until it is pressed again"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-chat"
   tap "dictate"
@@ -448,27 +521,32 @@ test "the composer's microphone dictates until it is pressed again"
   expect tree missing "dictation"
 
 test "a todo is renamed in place, and deleted"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-todos"
   type "todo-draft" "Water plnts"
   tap "todo-add"
-  clock until state todosReadList.3.title == "Water plnts" within 5000
-  tap "todo-edit-4"
-  type "todo-rename-4" "Water the plants"
-  type "todo-rename-4" key "Escape"
-  expect tree missing "todo-rename-4"
-  expect text "todo-4" == "Water plnts"
-  tap "todo-edit-4"
-  type "todo-rename-4" "Water the plants"
-  type "todo-rename-4" key "Enter"
-  clock until state todosReadList.3.title == "Water the plants" within 5000
-  expect text "todo-4" == "Water the plants"
-  tap "todo-delete-4"
-  clock until state todosReadList.length == 3 within 5000
-  expect tree missing "todo-4"
+  clock until state todosReadList.0.title == "Water plnts" within 5000
+  tap "todo-edit-1"
+  type "todo-rename-1" "Water the plants"
+  type "todo-rename-1" key "Escape"
+  expect tree missing "todo-rename-1"
+  expect text "todo-1" == "Water plnts"
+  tap "todo-edit-1"
+  type "todo-rename-1" "Water the plants"
+  type "todo-rename-1" key "Enter"
+  clock until state todosReadList.0.title == "Water the plants" within 5000
+  expect text "todo-1" == "Water the plants"
+  tap "todo-delete-1"
+  clock until state todosReadList.length == 0 within 5000
+  expect tree missing "todo-1"
 
 test "Enter sends a message, Shift+Enter breaks its line, and one the host never got comes back to the box"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "chat-new"
   clock until state chat.messages.length == 0 within 5000
@@ -492,6 +570,9 @@ test "Enter sends a message, Shift+Enter breaks its line, and one the host never
 test "⌘ chords open the apps, Settings, a new chat and the message box, and a browser tab hints at none of them"
   size 1280x800
   prefer pointer fine
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
   clock until state account.status == "signedIn" within 5000
   tap "chat-new"
   type "composer" key "Meta+,"
@@ -516,6 +597,8 @@ test "⌘ chords open the apps, Settings, a new chat and the message box, and a 
 // The GitHub app Imp ships: with no github key it has nothing yet, and says how it gets its data.
 test "the GitHub app opens to an empty inbox that says it has not synced yet"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-github"
   clock until state githubReadInbox.synced == false within 5000
@@ -525,9 +608,13 @@ test "the GitHub app opens to an empty inbox that says it has not synced yet"
 
 test "an app is uninstalled with its data only once the person confirms it"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
+  request POST "/api/call/todosAdd" ["Pack camera"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-todos"
-  clock until state todosReadList.length == 3 within 5000
+  clock until state todosReadList.length == 1 within 5000
   tap "uninstall"
   tap "uninstall-cancel"
   clock settle
@@ -539,9 +626,11 @@ test "an app is uninstalled with its data only once the person confirms it"
   expect state nav.tab == "chat"
   expect state uninstallError == ""
 
-// Last: it signs the shared host out of ChatGPT. scripts/test-host.ts serves an OpenAI-compatible API on port 8799.
+// scripts/test-host.ts serves an OpenAI-compatible API on port 8799.
 test "onboarding takes an OpenAI-compatible API key in place of ChatGPT, and the imp answers on it"
   size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
   clock until state account.status == "signedIn" within 5000
   tap "tab-settings"
   tap "settings-pane-general"
