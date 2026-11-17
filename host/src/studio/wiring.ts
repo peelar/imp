@@ -379,13 +379,20 @@ function linkExactModules(workDir: string, exact: string, contract: string) {
 async function webBuild(options: BuildOptions) {
   return await new Promise<{ code: number | null; output: string }>(
     (resolve) => {
-      // API_BASE_URL empty: the page asks the origin it was served from (see client/app.ts).
+      // API_BASE_URL empty: the page asks the origin it was served from (see client/app.ts). BUN, unless the host's
+      // environment names one: exact.mjs otherwise looks for Bun only at fixed paths, not where its installer puts it
+      // (~/.bun/bin), which toolEnv's PATH finds.
       const child = spawn(
         "sh",
         ["exact.mjs", "web-build", "--out", options.outDir],
         {
           cwd: options.workDir,
-          env: { ...toolEnv(), EXACT: options.exact, API_BASE_URL: "" },
+          env: {
+            BUN: "bun",
+            ...toolEnv(),
+            EXACT: options.exact,
+            API_BASE_URL: "",
+          },
           stdio: ["ignore", "pipe", "pipe"],
         }
       );
