@@ -1,5 +1,16 @@
 # @imp/host
 
+## 0.16.2
+
+### Patch Changes
+
+- da1d3ef: Connect GitHub now works on an installed host without installing anything: the host downloads its own GitHub CLI the first time you connect, instead of asking you to install `gh`.
+- 5698363: Discarding a preview or undoing a save answers at once instead of waiting for Imp to rebuild itself, so the Mac app no longer gives up on it when the rebuild is slow.
+- ff250dc: An app's page has one bar: its name, then its controls. A preview shows "Preview" beside the name, with Save and a back arrow that discards it, in place of the big blue banner, and the back arrow undoes your last save. Sync now and Uninstall moved to a Manage dialog behind the gear. A preview now shows as soon as it's ready, so you don't have to press Save to see it.
+- ae2b441: Buttons, links, switches and menus show the pointing hand when you hover them, and a button you can't press yet keeps the arrow.
+- 8b0f2f6: Every Settings tab now has the same layout: a line saying what the tab is for, then sections with the same headings, rows and empty states, and their actions in the same places. Backup on Connections says plainly that your host always keeps every version of your apps' code, and that **Copy to GitHub** only adds a copy there.
+- 1c92976: A chat your imp is still working in now shows a small pulsing mark beside its name in the sidebar, so you can tell it is busy after you move to another chat. Pointing at a chat in the sidebar now darkens the whole row evenly, with Archive sitting on it.
+
 ## 0.16.1
 
 ### Patch Changes
