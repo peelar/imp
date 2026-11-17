@@ -61,7 +61,7 @@ component ChatEntry
             color="ink.strong"
           image (verb == "Archive" ? "symbol:icon.archive" : "symbol:icon.restore") width=14 height=14 aria-hidden=true
 
-// The left sidebar: a new chat on a line of its own, the imp's pages (home, routines, tricks, the app directory), then the
+// The left sidebar: a new chat, the imp's pages (home, routines, tricks, the app directory), then the
 // three latest conversations and, folded under them, the rest, and pinned at its foot the archived ones, folded too.
 component Sidebar
   props
@@ -96,18 +96,18 @@ component Sidebar
   derive routineMark = routines.filter(r => r.running).length > 0 ? "AccentColor" : routines.filter(r => r.unread).length > 0 ? "ink.strong" : ""
   view
     column flex=1 min-height=0 testId=`${prefix}sidebar`
-      column padding="space.ms space.sm space.sm"
-        // Beside the chat on a wide window ⌘N is this button's; on a narrow one, the page header's (under the drawer).
+      column gap="space.xxs" padding="space.ms space.sm" border-bottom="1px solid line.subtle"
+        // New chat is the first of the places, in their look. Beside the chat on a wide window ⌘N is this button's; on
+        // a narrow one, the page header's (under the drawer).
         button press=newChat aria-keyshortcuts=(prefix == "" ? "Meta+N" : "") testId=`${prefix}chat-new`
-          appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
-          border="1px solid line.strong" background-color="transparent" color="ink.strong" text-align="start"
+          appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm" border="none"
+          background-color="transparent" color="ink.strong" text-align="start"
           :hover
             background-color="surface.soft"
-          image "symbol:icon.compose" width=13 height=13 aria-hidden=true
-          text "New chat" class=Label color="inherit" flex=1
+          image "symbol:icon.compose" width=15 height=15 aria-hidden=true
+          text "New chat" class=Body flex=1
           if keyboard
-            text "⌘N" class=Key border-color="line.subtle" testId=`${prefix}chat-new-keys` aria-hidden=true
-      column gap="space.xxs" padding="space.xs space.sm space.ms" border-bottom="1px solid line.subtle"
+            text "⌘N" class=Key testId=`${prefix}chat-new-keys` aria-hidden=true
         PlaceEntry(id=`${prefix}home`, label="Home", symbol="symbol:icon.home", count=0, mark="", selected=atHome,
           press=home)
         PlaceEntry(id=`${prefix}routines`, label="Routines", symbol="symbol:icon.repeat", count=routines.length,

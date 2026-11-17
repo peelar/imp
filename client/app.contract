@@ -829,7 +829,7 @@ component App
       else if signedIn and not needsComputer and not needsFirstApp
         // The routes. On a wide window they sit under the top bar, between the sidebar and the chat's column, above the
         // tab bar.
-        column position="absolute" left=(wide ? "15rem" : "0px") bottom=(wide ? "3.5rem" : "0px") top=(wide ? "3.25rem" : "0px") right=(wide ? "24rem" : "0px")
+        column position="absolute" left=(wide ? "24rem" : "0px") bottom=(wide ? "3.5rem" : "0px") top=(wide ? "3.25rem" : "0px") right=(wide ? "24rem" : "0px")
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
@@ -1071,7 +1071,7 @@ component App
         // Every tab stays in a tablist, hidden while the bar does not show it: a tab left out unlinks its panel,
         // which then shows over every page.
         if wide
-          aside position="absolute" top="3.25rem" left=0 bottom=0 width="15rem" box-sizing="border-box"
+          aside position="absolute" top="3.25rem" left=0 bottom=0 width="24rem" box-sizing="border-box"
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
             aria-label="Conversations, routines and settings"
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome, tricks=tricks.length,
@@ -1092,7 +1092,7 @@ component App
                 text "Settings" class=Body flex=1
                 if keys
                   text "⌘," class=Key aria-hidden=true testId="keys-Meta+,"
-          row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left="15rem" right="24rem" bottom=0
+          row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left="24rem" right="24rem" bottom=0
             height="3.5rem" box-sizing="border-box" justify-content="center" align-items="stretch"
             background-color="surface.page" border-top="1px solid line.subtle"
             // The chat's, Settings' and the imp's pages' tabs stay here, hidden, for their panels: the sidebar opens them.
