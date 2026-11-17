@@ -135,6 +135,37 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   expect tree has "composer"
   expect tree has "tab-settings"
 
+test "on a wide window each app keeps its own chat beside it, which a reload opens again"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "A chat from the home page"
+  tap "send"
+  clock until state chat.conversations.0.title == "A chat from the home page" within 5000
+  clock until state chat.busy == false within 10000
+  // No chat is about Todos yet, so a new one sits beside it, whichever was open.
+  tap "tab-todos"
+  clock until state chat.messages.length == 0 within 5000
+  type "side-composer" "Add todo: Call the vet"
+  tap "side-send"
+  clock until state chat.messages.0.text == "Add todo: Call the vet" within 5000
+  clock until state chat.busy == false within 10000
+  // Another chat picked in the sidebar opens on the chat page; Todos opens its own beside it again.
+  tap "conversation-1"
+  clock until state chat.messages.0.text == "A chat from the home page" within 5000
+  expect state nav.tab == "chat"
+  tap "tab-todos"
+  clock until state chat.messages.0.text == "Add todo: Call the vet" within 5000
+  reload
+  clock until state chat.messages.0.text == "Add todo: Call the vet" within 5000
+  expect state nav.tab == "todos"
+  expect tree has "chat-panel"
+  // GitHub has none of its own.
+  tap "tab-github"
+  clock until state chat.messages.length == 0 within 5000
+
 test "settings show the computer the agent works on, and offer to turn notifications on"
   request POST "/api/call/accountSignIn" []
   request POST "/api/call/appsInstall" ["github"]

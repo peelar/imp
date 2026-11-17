@@ -177,8 +177,9 @@ component App
   // The newest notice this page has taken in, by its `at`; -1 before the first. A page tells only what comes after:
   // opening Imp does not tell again what happened before.
   state noticedAt = -1
-  // Imp opens on the home page, a new chat, not on the conversation last open (the host keeps that one open). The chat
-  // stream opens once the host has moved to it, so the last conversation never shows first.
+  // Imp opens on the home page, a new chat, not on the conversation last open (the host keeps that one open); opened on
+  // an app's page on a wide window, on the chat beside that app. The chat stream opens once the host has moved to it,
+  // so the last conversation never shows first.
   state landed = false
   resource page = exactPage() as shape Page
   resource speech = speechRecognitionStatus() as shape SpeechRecognitionStatus else empty()
@@ -356,7 +357,7 @@ component App
     change(showWaiting)
   task leaveOffTab when offTab
     after(1, toChat)
-  // Opening Imp asks the host for a new chat beside the account stream, not after it. A host that refuses still lets
+  // Opening Imp asks the host for the chat it opens on beside the account stream, not after it. A host that refuses still lets
   // the chat open, on the conversation it has.
   task openHome when host.origin != "" key=host.origin
     change(startHome)
@@ -364,6 +365,10 @@ component App
     change(land)
   task openAdded when toOpen != "" and appTabs.includes(toOpen)
     after(1, showAdded)
+  // Beside an app sits the latest chat started beside it, or a new chat until there is one, whichever conversation
+  // was open before: the host keeps which app each chat is about, so a reload shows the same one.
+  task openBeside when landed and docked and apps.map(a => a.id).includes(nav.tab) key=nav.tab
+    change(showBeside)
 
   action applyScheme
     setScheme(scheme)
@@ -434,7 +439,7 @@ component App
     nav = select(nav, "chat")
   action startHome
     if not pending(openedHome)
-      send openedHome = chatNew()
+      send openedHome = chatBeside(wide ? nav.tab : "")
   action land
     landed = true
   action follow(url: string)
@@ -579,6 +584,8 @@ component App
     send chatArchived = chatArchive(id)
   action restoreChat(id: string)
     send chatArchived = chatRestore(id)
+  action showBeside
+    send chatChanged = chatBeside(nav.tab)
   action showChat(id: string)
     drawer = false
     nav = select(nav, "chat")

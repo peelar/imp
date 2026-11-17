@@ -256,6 +256,66 @@ test("Archive moves a chat to Archived, archiving the open one opens a new chat,
   );
 });
 
+test("beside an app opens the latest chat started beside it, or a new chat until there is one, also after a restart", async () => {
+  assert.deepEqual(await call("appsInstall", ["todos"]), done);
+
+  const start = await until(
+    "chat",
+    chatsWhen(() => true)
+  );
+
+  // No chat is about Todos yet: the one open gives way to a new chat.
+  assert.deepEqual(await call("chatShow", [start.list[0]?.id ?? ""]), done);
+  assert.deepEqual(await call("chatBeside", ["todos"]), done);
+
+  const blank = await until(
+    "chat",
+    chatsWhen((c) => c.current !== start.list[0]?.id)
+  );
+
+  assert.deepEqual(blank.messages, []);
+  assert.deepEqual(await call("chatSend", ["About my todos", "todos"]), done);
+  await until(
+    "chat",
+    chatsWhen((c) => c.list[0]?.title === "About my todos")
+  );
+
+  // Another chat opened, and one written in from the chat page, do not take Todos' place.
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.deepEqual(await call("chatSend", ["Not about todos", ""]), done);
+  await until(
+    "chat",
+    chatsWhen((c) => c.list[0]?.title === "Not about todos")
+  );
+  assert.deepEqual(await call("chatBeside", ["todos"]), done);
+
+  const beside = await until(
+    "chat",
+    chatsWhen((c) => c.current === blank.current)
+  );
+
+  assert.equal(beside.messages[0]?.text, "About my todos");
+
+  // A page that is no app's opens a new chat, as opening Imp on it does.
+  assert.deepEqual(await call("chatBeside", ["settings"]), done);
+  await until(
+    "chat",
+    chatsWhen((c) => c.current !== blank.current && c.messages.length === 0)
+  );
+
+  await startTestHost();
+  assert.deepEqual(await call("chatBeside", ["todos"]), done);
+  assert.equal(
+    (
+      await until(
+        "chat",
+        chatsWhen((c) => c.current === blank.current)
+      )
+    ).messages[0]?.text,
+    "About my todos"
+  );
+});
+
 test("a host started again keeps the conversations, and one from before there were several adopts its only one", async () => {
   const kept = await until(
     "chat",

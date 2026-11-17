@@ -65,6 +65,10 @@ On disk, under `DATA_DIR/code/<id>/`:
 
 The host keeps the last three web builds in `DATA_DIR/builds/`, and `builds/current.json` names the one it serves.
 
+## The chat beside an app
+
+On a wide window an app's page has the chat beside it, and the imp is told which app you have open when you write there. Each app keeps its own chat: opening an app shows the latest chat you started beside it, or a new chat until you write in one, whichever chat was open before. A chat you pick in the sidebar opens on the chat page. The host remembers which app each chat was started beside in `DATA_DIR/conversations.json` (`host/src/chats/chats.ts`), so a reload, or opening Imp on an app's page, shows the same chat. On any other page Imp opens on a new chat.
+
 ## Install and uninstall
 
 No app runs until it is installed. A new host has none until the onboarding installs GitHub.

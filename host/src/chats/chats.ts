@@ -49,14 +49,16 @@ export { chatCalls, chatSource } from "./shell.ts";
 type Id = Conversation["id"];
 
 /**
- * A conversation in the sidebar: what it is about, when it was last written in, whether a routine runs in it, and
- * whether the person archived it, which keeps it but takes it out of the sidebar.
+ * A conversation in the sidebar: what it is about, when it was last written in, whether a routine runs in it, the app
+ * it was started beside (whose page it sits beside again), and whether the person archived it, which keeps it but
+ * takes it out of the sidebar.
  */
 type Stored = {
   readonly id: Id;
   title: string;
   updated: number;
   routine?: boolean;
+  app?: string;
   archived?: boolean;
 };
 
@@ -74,6 +76,7 @@ const stored = compile(
             title: str(),
             updated: num(),
             routine: opt(bool()),
+            app: opt(str()),
             archived: opt(bool()),
           },
           { open: true }
@@ -280,7 +283,10 @@ function routineConversations({ options, index, save, conversation }: Shared) {
   };
 }
 
-/** What the sidebar does with the person's chats: show one, open a new one, archive one and restore it. */
+/**
+ * What the person does with their chats: show one, open a new one or the one beside an app, archive one and restore
+ * it.
+ */
 function sidebarChats({ options, index, save, conversation }: Shared) {
   const { harness, topics, context, agent } = options;
 
@@ -320,6 +326,26 @@ function sidebarChats({ options, index, save, conversation }: Shared) {
   }
 
   return {
+    /**
+     * Opens the chat beside an app's page: the latest one started beside it, or a new chat until there is one. The open
+     * chat stays when it is that app's.
+     */
+    async beside(app: string) {
+      if (index.list.find((c) => c.id === index.current)?.app === app) {
+        return;
+      }
+
+      const [latest] = index.list
+        .filter((c) => c.app === app && !c.routine && !c.archived)
+        .toSorted((a, b) => b.updated - a.updated);
+
+      if (latest) {
+        await conversation(latest.id);
+        showing(latest.id);
+      } else {
+        await fresh();
+      }
+    },
     /** Shows another conversation. */
     async show(id: string) {
       const shown = index.list.find((c) => String(c.id) === id);
@@ -430,16 +456,25 @@ export async function openChats(options: ChatsOptions) {
           }
         : undefined;
     },
-    /** The person writes in the open conversation; its first message names it in the sidebar. */
+    /**
+     * The person writes in the open conversation, from the chat page or beside `app`; its first message names it in
+     * the sidebar, and the first app it is written beside is the one it sits beside from then on.
+     */
     async submit(text: string, app: AppLabel | undefined) {
       const shown = index.list.find((c) => c.id === index.current);
-      const home = await conversation(index.current);
 
       if (shown) {
         shown.title ||= titleOf(text);
         shown.updated = Date.now();
+
+        if (app) {
+          shown.app ??= app.id;
+        }
+
         save();
       }
+
+      const home = await conversation(index.current);
 
       await home.submit(
         {
