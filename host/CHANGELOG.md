@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.14.7
+
+### Patch Changes
+
+- 68ffdc8: The three-column layout, with the sidebar and the chat beside the page, now starts at 1280px wide instead of 1100px, so the page between them has room. Narrower windows get the tab bar and drawer.
+
 ## 0.14.6
 
 ### Patch Changes
