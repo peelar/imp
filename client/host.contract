@@ -180,13 +180,22 @@ shape Secret
   updated: string
   lastUsed: string
 
-// A secret the imp asked for (request_secret), which the owner adds or dismisses.
+// A secret the imp asked for (request_secret), with its form filled in but for the value, which the owner adds or
+// dismisses. `host` is an "other" key's hosts or a login's site; `header`, `prefix` and `envName` an "other" key's,
+// `username` a login's ("" where it does not apply). `label` is what the person calls it, and `detail` one line on
+// where its value goes.
 shape SecretRequest
   id: string
   name: string
   service: string
   why: string
   host: string
+  header: string
+  prefix: string
+  envName: string
+  username: string
+  label: string
+  detail: string
 
 // One use of a secret: which request it went on, or the sign-in it typed, and how it went ("200", "typed", "failed").
 shape SecretUse

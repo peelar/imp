@@ -22,7 +22,7 @@ use getUserMedia, stopTrack, MediaStream, MediaStreamTrack from "@exact/media-ca
 use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
 use Label, pulse, Key, rise, Body, Code, Control, Display, Heading, Lead, Mono, Title, Initial, Page from "./look.contract"
 use Button from "./controls.contract"
-use SecretSettings from "./settings/secrets.contract"
+use SecretSettings, SecretAsk from "./settings/secrets.contract"
 use MemorySettings from "./settings/memory.contract"
 use GeneralSettings from "./settings/general.contract"
 use ExperimentalSettings from "./settings/experimental.contract"
@@ -1068,6 +1068,13 @@ component App
                                   text s
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
+                    // What the imp asked for, where the person pastes it: the value goes to the vault, not the conversation.
+                    if secrets.requests.length > 0
+                      row justify-content="center" padding="0 space.md"
+                        column width="100%" max-width="measure.page" gap="space.sm"
+                          for q, k in secrets.requests key=q.id
+                            SecretAsk(request=q, prefix="", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
+                              error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
                       canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
@@ -1210,6 +1217,13 @@ component App
                   font-style="italic" color="ink.muted"
             else
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
+            // What the imp asked for, where the person pastes it: the value goes to the vault, not the conversation.
+            if secrets.requests.length > 0
+              row justify-content="center" padding="0 space.ms"
+                column width="100%" max-width="measure.page" gap="space.sm"
+                  for q, k in secrets.requests key=q.id
+                    SecretAsk(request=q, prefix="side-", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
+                      error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
             Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,

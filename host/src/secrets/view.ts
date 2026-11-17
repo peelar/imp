@@ -1,6 +1,6 @@
 // What Settings shows about the owner's secrets: each key's name, hosts and variables, each login's site and username,
 // what the imp asked for, the latest uses, and the services to pick from. Never a value.
-import type { Described } from "./descriptions.ts";
+import { type Described, envFor } from "./descriptions.ts";
 import type { KeyRequest, RecordedUse } from "./records.ts";
 import { hostsOf, SERVICES, variables } from "./services.ts";
 
@@ -29,7 +29,11 @@ export type SecretsState = {
   readonly status: string;
   readonly error: string;
   readonly secrets: readonly SecretView[];
-  readonly requests: readonly KeyRequest[];
+  /** Each with `label`, what the person calls it, and `detail`, one line on where its value will go. */
+  readonly requests: readonly (KeyRequest & {
+    readonly label: string;
+    readonly detail: string;
+  })[];
   readonly uses: readonly {
     readonly id: string;
     readonly secret: string;
@@ -88,6 +92,25 @@ function detail(secret: Described) {
   }
 
   return `${hostsOf(secret.rules)} · ${variables(secret.env)}`;
+}
+
+/** Where a requested secret's value will go, as its form says: the site, or the hosts, header and variable. */
+function requestDetail(request: KeyRequest) {
+  const service = SERVICES.find((known) => known.id === request.service);
+
+  if (request.service === "login") {
+    return [request.host, request.username].filter(Boolean).join(" · ");
+  }
+
+  if (service) {
+    return `${hostsOf(service.rules)} · ${variables(service.env)}`;
+  }
+
+  const header = request.header || "Authorization";
+  const prefix = request.prefix ? `${request.prefix.trim()} ` : "";
+  const env = request.envName || envFor(request.name);
+
+  return `${request.host} · ${header}: ${prefix}… · $${env}`;
 }
 
 /** Who the host sent a request for: an app ("github"), or an MCP server's connection ("mcp:linear"). */
@@ -161,7 +184,13 @@ export function secretsState(snapshot: SecretsSnapshot): SecretsState {
       updated: ago(secret.updated),
       lastUsed: lastUsed(secret.name),
     })),
-    requests,
+    requests: requests.map((request) => ({
+      ...request,
+      label:
+        SERVICES.find((service) => service.id === request.service)?.label ??
+        request.name,
+      detail: requestDetail(request),
+    })),
     uses: uses.slice(-USES_SHOWN).toReversed().map(useRow),
     services: SERVICES.map((service) => ({
       id: service.id,

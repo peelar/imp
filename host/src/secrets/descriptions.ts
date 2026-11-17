@@ -73,7 +73,7 @@ const rulesJson = compile(
 const refused = (error: string): Refused => ({ ok: false, error });
 export const standInFor = (name: string) => `imp-secret-${name}`;
 
-const envFor = (name: string) =>
+export const envFor = (name: string) =>
   `${name.toUpperCase().replaceAll("-", "_")}_API_KEY`;
 
 /** The rules a description holds, as the host wrote them; undefined when they are not that. */
@@ -111,12 +111,17 @@ export function described(stored: StoredSecret): Described | undefined {
     : undefined;
 }
 
+/** A host as written, or the host of an address: "https://www.example.com/api" is "www.example.com". */
+export const hostName = (written: string) =>
+  written
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+    .replace(/[/?#].*$/, "");
+
 /** Where a key the owner describes themselves goes: the hosts, header and variable they named. */
 function ownPlacement(name: string, input: KeyInput): Placed {
-  const hosts = input.hosts
-    .split(",")
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean);
+  const hosts = input.hosts.split(",").map(hostName).filter(Boolean);
 
   if (hosts.length === 0 || !hosts.every((host) => HOST.test(host))) {
     return refused("Name the hosts the key is for, such as api.example.com.");

@@ -323,6 +323,23 @@ test "the imp asks for a key it lacks, and the owner adds it from the request"
   clock until state secrets.secrets.length == 0 within 10000
   expect tree has "secrets-empty"
 
+test "the imp asks for a key in the chat, and the owner pastes it there"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "Please ask for an api key: api.weather.example | X-Api-Key | Token"
+  tap "send"
+  clock until state secrets.requests.0.name == "weather" within 10000
+  clock until state chat.busy == false within 10000
+  expect text "secret-ask-detail-0" == "api.weather.example · X-Api-Key: Token … · $WEATHER_API_KEY"
+  clock until state secrets.status == "ready" within 120000
+  type "secret-ask-value-0" "wx-secret"
+  tap "secret-ask-save-0"
+  clock until state secrets.requests.length == 0 within 20000
+  expect tree missing "secret-ask-0"
+  clock until state secrets.secrets.0.name == "weather" within 5000
+  expect state chat.messages.length == 3
+
 test "the imp asks for a login, and the owner adds it with its one-time-code key"
   request POST "/api/call/accountSignIn" []
   request POST "/api/call/appsInstall" ["github"]

@@ -7,7 +7,13 @@ import {
   section,
 } from "@earendil-works/pi-durable";
 import { obj, oneOf, opt, str } from "@earendil-works/pi-schema";
-import { type Described, NAME } from "./descriptions.ts";
+import {
+  type Described,
+  HOST,
+  hostName,
+  NAME,
+  newKey,
+} from "./descriptions.ts";
 import { loginName, siteOf } from "./logins.ts";
 import type { KeyRequest } from "./records.ts";
 import { hostsOf, SERVICES, variables } from "./services.ts";
@@ -28,7 +34,7 @@ type Asked = {
 };
 
 const RULE =
-  "Never ask the user for a key, password or code, or to paste one in the chat. If a task needs one that is not listed, call request_secret: the user adds it in Settings, where you never see it.";
+  "Never ask the user for a key, password or code, or to paste one in the chat. If a task needs one that is not listed, call request_secret: the user pastes it into the request it shows, where you never see it.";
 
 const text = (value: string) => ({
   output: [{ type: "text" as const, text: value }],
@@ -45,7 +51,9 @@ function requestName({ service, name, host }: Asked) {
   if (site) {
     fallback = loginName(site);
   } else if (service === "other") {
-    fallback = (host ?? "").split(".").at(-2);
+    fallback = hostName(host?.split(",")[0] ?? "")
+      .split(".")
+      .at(-2);
   }
 
   return (name ?? fallback ?? "").toLowerCase();
@@ -85,65 +93,134 @@ function prompt(secrets: readonly Described[]) {
   return `${parts.join("\n\n")}\n${RULE}`;
 }
 
+/** What request_secret takes: the whole form but the value. */
+const REQUEST = obj({
+  service: oneOf([...SERVICES.map((service) => service.id), "other", "login"], {
+    description:
+      'The service of an API key, "other" for another API, or "login" for a website sign-in.',
+  }),
+  why: str({
+    description: "What you need it for, in a sentence the user reads.",
+  }),
+  name: opt(
+    str({
+      description:
+        'A short lowercase name, such as "github". Default: from the service or host.',
+    })
+  ),
+  host: opt(
+    str({
+      description:
+        'For "other": the API\'s host names, comma-separated, such as "api.example.com". For "login": the site, such as "github.com".',
+    })
+  ),
+  header: opt(
+    str({
+      description:
+        'For "other": the header the key goes in, from the API\'s docs. Default: "Authorization".',
+    })
+  ),
+  prefix: opt(
+    str({
+      description:
+        'For "other": the word sent before the key, such as "Bearer" or "Token". Default: none.',
+    })
+  ),
+  envName: opt(
+    str({
+      description:
+        'For "other": the variable you read it from, such as "WEATHER_API_KEY". Default: <NAME>_API_KEY.',
+    })
+  ),
+  username: opt(
+    str({
+      description:
+        'For "login": the username or email, when you know it. Default: the user types it.',
+    })
+  ),
+});
+
+/** The tool the agent asks for a secret with: the whole form but the value, checked to save as it is. */
+function requestSecretTool({
+  secrets,
+  ask,
+}: Pick<SecretToolsOptions, "secrets" | "ask">) {
+  return defineTool({
+    name: "request_secret",
+    description:
+      "Ask the user to add an API key or a website login you need, such as a GitHub token. Fill in everything but the value: for another API, look up in its docs which hosts, header and word before the key it takes. The user sees the request in the chat and in Settings with the form filled in, and only pastes the value, which you never see. You can use it once they add it (it shows in your secrets).",
+    parameters: REQUEST,
+    execute: async (asked) => {
+      const { service, why, host = "" } = asked;
+
+      if (service === "login" && !siteOf(host)) {
+        return text("Name the site the login is for, such as github.com.");
+      }
+
+      const hosts = host.split(",").map(hostName).filter(Boolean);
+
+      if (
+        service === "other" &&
+        (hosts.length === 0 || !hosts.every((one) => HOST.test(one)))
+      ) {
+        return text(
+          "Name the hosts the key is for, such as api.example.com, from the API's docs."
+        );
+      }
+
+      const id = requestName(asked);
+
+      if (!NAME.test(id)) {
+        return text(
+          'Give the secret a short lowercase name, such as "github".'
+        );
+      }
+
+      if (secrets().some((secret) => secret.name === id)) {
+        return text(
+          `The user already has ${id}. Use it as your secrets section says.`
+        );
+      }
+
+      const request = {
+        name: id,
+        service,
+        why,
+        host:
+          service === "login"
+            ? (siteOf(host) ?? "")
+            : host.split(",").map(hostName).filter(Boolean).join(", "),
+        header: asked.header ?? "",
+        prefix: asked.prefix ?? "",
+        envName: asked.envName ?? "",
+        username: asked.username ?? "",
+      };
+
+      // The form must save as it is, so the user only pastes the value: checked with a stand-in for it.
+      const placed =
+        service === "login"
+          ? undefined
+          : newKey({ ...request, hosts: request.host, value: "-" }, secrets());
+
+      if (placed && !placed.ok) {
+        return text(placed.error);
+      }
+
+      ask(request);
+
+      return text(
+        `Asked. The user sees your request for ${id} in this chat, and pastes the ${service === "login" ? "password" : "key"} there; you never see it. Wait: it shows in your secrets once they add it.`
+      );
+    },
+  });
+}
+
 export function secretsExtension({ secrets, ask, signIn }: SecretToolsOptions) {
   return defineExtension({
     name: "secrets",
     sections: [section("secrets", () => prompt(secrets()))],
     tools: [
-      defineTool({
-        name: "request_secret",
-        description:
-          "Ask the user to add an API key or a website login you need, such as a GitHub token. They see the request in Settings, with the form filled in; you never see the value, and you can use it once they add it (it shows in your secrets).",
-        parameters: obj({
-          service: oneOf(
-            [...SERVICES.map((service) => service.id), "other", "login"],
-            {
-              description:
-                'The service of an API key, "other" for another API, or "login" for a website sign-in.',
-            }
-          ),
-          why: str({
-            description: "What you need it for, in a sentence the user reads.",
-          }),
-          name: opt(
-            str({
-              description:
-                'A short lowercase name, such as "github". Default: from the service or host.',
-            })
-          ),
-          host: opt(
-            str({
-              description:
-                'For "other": the API\'s host name, such as "api.example.com". For "login": the site, such as "github.com".',
-            })
-          ),
-        }),
-        execute: async ({ service, why, name, host }) => {
-          if (service === "login" && !siteOf(host ?? "")) {
-            return text("Name the site the login is for, such as github.com.");
-          }
-
-          const id = requestName({ service, name, host });
-
-          if (!NAME.test(id)) {
-            return text(
-              'Give the secret a short lowercase name, such as "github".'
-            );
-          }
-
-          if (secrets().some((secret) => secret.name === id)) {
-            return text(
-              `The user already has ${id}. Use it as your secrets section says.`
-            );
-          }
-
-          ask({ name: id, service, why, host: host ?? "" });
-
-          return text(
-            `Asked. The user sees your request for ${id} in Settings → Secrets. Tell them, then wait: it shows in your secrets once they add it.`
-          );
-        },
-      }),
+      requestSecretTool({ secrets, ask }),
       defineTool({
         name: "sign_in",
         description:

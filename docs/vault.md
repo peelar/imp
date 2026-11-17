@@ -88,11 +88,11 @@ For GitHub you don't need to make a token: **Connect GitHub** in Settings → Co
 | Linear | `api.linear.app` | `LINEAR_API_KEY` |
 | Other | the hosts you enter | `<NAME>_API_KEY` |
 
-An **Other** key goes in the `Authorization` header unless you name another. A word you put in **Before the key**, such as `Bearer`, is sent before it with a space.
+An **Other** key goes in the `Authorization` header unless you name another. Its hosts may be written as addresses: `https://www.example.com/api` is `www.example.com`. A word you put in **Before the key**, such as `Bearer`, is sent before it with a space.
 
 A new key reaches the imp's next command.
 
-When the imp needs a key you have not added, it calls `request_secret` with the service and why. The request shows at the top of Settings → Secrets with **Add** and **Dismiss**. The imp never gets a field to paste a value into, so you never send a secret through the chat.
+When the imp needs a key or a login you have not added, it calls `request_secret` with everything but the value: the service and why, and for another API the hosts, header, word before the key and variable it found in the API's docs; for a login the site and, when it knows it, your username. The host checks that the form would save as it is before it asks. The request shows as a card above the chat's message box, with where the value will go, and at the top of Settings → Secrets. You paste the value into the card's own field (or **Add** in Settings, which opens the form filled in) and press **Save**, or dismiss it. The card saves with the same call as Settings, straight to the vault: the value never joins the conversation, and the imp only learns the secret is there.
 
 ## Logins
 

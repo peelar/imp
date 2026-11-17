@@ -3,7 +3,7 @@
 // run in real workers, a GitHub CLI (fake-gh.ts) whose sign-in approves itself, and a GitHub API (fake-github.ts) whose
 // repositories are folders in the data directory. When the
 // user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
-// "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for a login: <site>", "sign in: <login>",
+// "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for an api key: <hosts> | <header> | <prefix>", "ask for a login: <site>", "sign in: <login>",
 // "run: <command>" and "save routine: <name> | <cron> | <instruction>" make it call the memory's, the studio's, the
 // secrets', the shell's and the routines' tools the same way, and "reply: <words>" makes it answer those words. Its
 // The model is "faux-1", with "faux-2" to fall back on: "refuse: <model>" (or "all") makes that model refuse as
@@ -49,6 +49,21 @@ const TOOL_CALLS = [
         schedule,
         timezone: "Europe/Warsaw",
         instruction,
+      });
+    },
+  },
+  {
+    // "ask for an api key: <hosts> | <header> | <word before the key>": another API's key, its form filled in.
+    pattern: /ask for an api key: ([^"\\]+)/,
+    call: (asked: string) => {
+      const [host = "", header = "", prefix = ""] = asked.split(" | ");
+
+      return fauxToolCall("request_secret", {
+        service: "other",
+        host,
+        header,
+        prefix,
+        why: "To check the weather.",
       });
     },
   },

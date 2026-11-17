@@ -54,7 +54,7 @@ test("the imp asks for a key it lacks, and the owner sees the request", async ()
 
   assert.match(
     JSON.stringify(asked.text),
-    /your request for linear in Settings/
+    /your request for linear in this chat/
   );
 
   const { requests } = await until(
@@ -70,6 +70,12 @@ test("the imp asks for a key it lacks, and the owner sees the request", async ()
         service: "linear",
         why: "To read your issues.",
         host: "",
+        header: "",
+        prefix: "",
+        envName: "",
+        username: "",
+        label: "Linear",
+        detail: "api.linear.app · $LINEAR_API_KEY",
       },
     ]
   );
@@ -290,5 +296,66 @@ test("sign_in names the logins there are, and asks for the page first while Chro
         failed: true,
       },
     ]
+  );
+});
+
+test("the imp fills in another API's key but for the value, and the request saves as it is", async () => {
+  const wrong = await toolRow("Please ask for an api key: not a host");
+
+  assert.match(JSON.stringify(wrong.text), /Name the hosts the key is for/);
+
+  await toolRow(
+    "Please ask for an api key: https://api.weather.example/v1 | X-Api-Key | Token"
+  );
+
+  const { requests } = await until(
+    "account",
+    secretsWhen((secrets) =>
+      rows(secrets.requests).some((request) => request.service === "other")
+    )
+  );
+
+  const request = rows(requests).find(({ service }) => service === "other");
+
+  assert.ok(request);
+  assert.deepEqual(
+    {
+      name: request.name,
+      header: request.header,
+      prefix: request.prefix,
+      detail: request.detail,
+    },
+    {
+      name: "weather",
+      header: "X-Api-Key",
+      prefix: "Token",
+      detail: "api.weather.example · X-Api-Key: Token … · $WEATHER_API_KEY",
+    }
+  );
+  // What the chat's card sends: the request's own form, and the pasted value.
+  assert.deepEqual(
+    await call("secretsPut", [
+      request.name ?? "",
+      request.service ?? "",
+      "wx-secret",
+      request.host ?? "",
+      request.header ?? "",
+      request.prefix ?? "",
+      request.envName ?? "",
+    ]),
+    done
+  );
+
+  const added = await until(
+    "account",
+    secretsWhen((secrets) =>
+      rows(secrets.secrets).some((secret) => secret.name === "weather")
+    )
+  );
+
+  assert.ok(!rows(added.requests).some(({ name }) => name === "weather"));
+  assert.equal(
+    rows(added.secrets).find(({ name }) => name === "weather")?.detail,
+    "api.weather.example · $WEATHER_API_KEY"
   );
 });

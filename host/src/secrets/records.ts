@@ -20,13 +20,21 @@ import { readKept } from "../datadir/datadir.ts";
 
 const USES_KEPT = 200;
 
-/** A key the imp asked the owner for. */
+/**
+ * A key or login the imp asked the owner for, with everything but the value filled in: for "other", the hosts
+ * (comma-separated), header, word before the key and variable; for a login, the site and, when the imp knows it, the
+ * username. "" where it does not apply.
+ */
 export type KeyRequest = {
   readonly id: string;
   readonly name: string;
   readonly service: string;
   readonly why: string;
   readonly host: string;
+  readonly header: string;
+  readonly prefix: string;
+  readonly envName: string;
+  readonly username: string;
 };
 
 /** One use of a secret, and when the host recorded it. */
@@ -35,8 +43,21 @@ export type RecordedUse = EgressUse & {
   readonly at: string;
 };
 
+// Requests written before the imp filled in the rest of the form lack the last four.
 const requestsJson = compile(
-  arr(obj({ id: str(), name: str(), service: str(), why: str(), host: str() }))
+  arr(
+    obj({
+      id: str(),
+      name: str(),
+      service: str(),
+      why: str(),
+      host: str(),
+      header: opt(str()),
+      prefix: opt(str()),
+      envName: opt(str()),
+      username: opt(str()),
+    })
+  )
 );
 
 const usesJson = compile(
@@ -65,7 +86,17 @@ export function secretRecords(dataDir: string) {
   const usesFile = path.join(dataDir, "secrets-uses.json");
   const requestsFile = path.join(dataDir, "secrets-requests.json");
   let uses: readonly RecordedUse[] = readList(usesFile, usesJson);
-  let requests: readonly KeyRequest[] = readList(requestsFile, requestsJson);
+
+  let requests: readonly KeyRequest[] = readList(
+    requestsFile,
+    requestsJson
+  ).map((request) => ({
+    ...request,
+    header: request.header ?? "",
+    prefix: request.prefix ?? "",
+    envName: request.envName ?? "",
+    username: request.username ?? "",
+  }));
 
   const keepRequests = (next: readonly KeyRequest[]) => {
     requests = next;
