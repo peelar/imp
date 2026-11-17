@@ -1,7 +1,7 @@
 // The app gateway. Every app is a folder (folders.ts). Its server code runs in a worker on the agent's machine
 // (socket.ts); its data is a SQLite database here on the host (data.ts). An app declares operations (see
-// sdk/app.ts); the shell's views call them by position, and the agent finds and runs them by name through two tools
-// (tools.ts). Every write tells the open views to refresh.
+// sdk/app.ts); the shell's views call them by position, and the agent finds and runs them by name through the
+// catalogue's two tools (actions/), which `agent` serves. Every write tells the open views to refresh.
 //
 // Versions run in slots. An app's live version runs in the slot named by its id; a draft being previewed runs beside
 // it in `<id>~draft`, on a copy of the live data, and the shell's views use the draft while there is one. The agent's
@@ -11,7 +11,6 @@
 // (sync.ts), which the host also runs when a URL the sync watches changes (watch.ts). The host holds every `app.fetch`,
 // and every watched URL it asks, to the app's connections and sends it with `send`, which the owner's secrets provide.
 import path from "node:path";
-import type { Registry } from "@earendil-works/pi-durable";
 import { bool, compile, obj, str } from "@earendil-works/pi-schema";
 import type { FetchAnswer, Json } from "../../../sdk/app.ts";
 import { checkFetch } from "./connections.ts";
@@ -24,7 +23,6 @@ import {
 } from "./folders.ts";
 import { type AppMachine, appMachine } from "./socket.ts";
 import { appSync, SYNC_TOPIC } from "./sync.ts";
-import { type AgentApps, appTools } from "./tools.ts";
 import { appVersions } from "./versions.ts";
 import { appWatch } from "./watch.ts";
 import type { Topics } from "../live/live.ts";
@@ -50,7 +48,22 @@ export type { AppFiles, AppInfo } from "./folders.ts";
 
 export { OPERATIONS_TOPIC } from "./folders.ts";
 
-export type { AgentApps } from "./tools.ts";
+/** The saved apps' operations the agent may run, which the gateway offers as `agent`. */
+export type AgentApps = {
+  /** The user's saved apps. */
+  readonly apps: () => readonly AppInfo[];
+  /** A saved app's operations, once it loaded; throws why it did not. */
+  readonly operations: (id: string) => Promise<readonly Operation[]>;
+  /** A saved app's operations as it last loaded, without reaching the machine; undefined before it loaded. */
+  readonly known: (id: string) => readonly Operation[] | undefined;
+  /** Runs an operation the agent may run, in the saved app or in its draft. */
+  readonly run: (action: {
+    readonly app: string;
+    readonly name: string;
+    readonly args: Args;
+    readonly draft: boolean;
+  }) => Promise<Json>;
+};
 
 export { SYNC_TOPIC } from "./sync.ts";
 
@@ -76,7 +89,6 @@ export type GatewayOptions = {
   readonly apps: readonly AppInfo[];
   readonly dataDir: string;
   readonly topics: Topics;
-  readonly registry: Registry;
   readonly machine: () => Promise<Machine>;
   /** The hosts the owner's key `secret` goes on; undefined when they have no key of that name. */
   readonly keyHosts: (secret: string) => readonly string[] | undefined;
@@ -177,8 +189,6 @@ export function appGateway(options: GatewayOptions) {
 
   const agent = agentApps(machine);
 
-  options.registry.install(appTools(agent));
-
   /** Stops whatever runs in `slot`. Its data stays. */
   const uninstall = (slot: string) => {
     const app = machine.uninstall(slot);
@@ -201,8 +211,8 @@ export function appGateway(options: GatewayOptions) {
 
   return {
     /**
-     * The saved apps' operations the agent may run, and their runs: what the agent's tools and other assistants (over
-     * MCP) reach, by the same path, so a write refreshes the open views either way.
+     * The saved apps' operations the agent may run, and their runs: what the imp's catalogue (actions/) and other
+     * assistants (over MCP) reach, by the same path, so a write refreshes the open views either way.
      */
     agent,
     /** Every app the shell or the agent can reach, saved or only a draft so far: the draft's name when it has one. */
@@ -252,7 +262,7 @@ export function appGateway(options: GatewayOptions) {
   };
 }
 
-/** The saved apps' operations, as the agent finds and runs them (tools.ts), and other assistants over MCP. */
+/** The saved apps' operations, as the imp's catalogue finds and runs them, and other assistants over MCP. */
 const agentApps = (machine: AppMachine): AgentApps => ({
   apps: () => saved(machine.slots()),
   operations: async (id) => (await machine.loaded(id)).manifest.operations,

@@ -1,10 +1,12 @@
 // Settings' Connections: the accounts the host signs in to, and what each one turns on. GitHub first: connecting
-// signs in with a device code, and below it the person turns on Backup, which pushes their apps' code to it.
+// signs in with a device code, and below it the person turns on Backup, which pushes their apps' code to it. Then the
+// MCP servers the imp uses for the person.
 
 use Label, Body, Code, ControlLarge, Heading, Mono, Subheading from "../look.contract"
 use Button, ButtonLink, ErrorNote from "../controls.contract"
-use Connection, Backup from "../host.contract"
+use Connection, Backup, McpServer from "../host.contract"
 use Step from "../onboarding.contract"
+use Confirm from "../parts.contract"
 
 component ConnectionsSettings
   props
@@ -116,3 +118,90 @@ component GithubSignIn
             text "Connect GitHub"
       if github.error != ""
         ErrorNote(message=github.error, testId=`${prefix}github-error`)
+
+// The MCP servers the owner added, such as Linear, Notion or Sentry: the imp finds and runs their tools, and asks
+// before it changes anything in one. Signing in opens the server's own sign-in page; its tokens, or a key pasted here,
+// stay in the vault, and are never shown again.
+component McpServerSettings
+  props
+    servers: McpServer[]
+    adding: bool
+    error: string
+    removeError: string
+    add: action
+    signIn: action
+    cancel: action
+    remove: action
+  state name = ""
+  state url = ""
+  state key = ""
+  // The server Remove asks about.
+  state removing = ""
+  derive ready = name.trim() != "" and url.trim() != ""
+  action editName(v: string)
+    name = v
+  action editUrl(v: string)
+    url = v
+  action editKey(v: string)
+    key = v
+  action submit
+    if ready and not adding
+      add(name.trim(), url.trim(), key.trim())
+  action askRemove(id: string)
+    removing = id
+    showModal("confirm-server-remove")
+  action confirmRemove
+    remove(removing)
+    removing = ""
+  view
+    column testId="mcp-servers" padding-top="space.lg"
+      row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
+        text "MCP servers" class=Label color="ink.strong" role="heading" aria-level=2
+      if servers.length == 0
+        text "Add a service's MCP server, and your imp can use it for you: it asks before it changes anything there."
+          class=Body color="ink.muted" padding="space.md 0" border-bottom="1px solid line.subtle" testId="mcp-empty"
+      for x, i in servers key=x.id
+        column gap="space.sm" padding="space.md 0" border-bottom="1px solid line.subtle" testId=`mcp-server-${i}`
+          row gap="space.ms" align-items="center"
+            column flex=1 min-width=0 gap="space.xxs"
+              text x.name class=Heading overflow-wrap="anywhere" testId=`mcp-name-${i}`
+              text x.url class=Mono color="ink.muted" overflow-wrap="anywhere"
+              text (x.status == "on" ? (x.tools < 0 ? "Connected" : `Connected · ${x.tools} ${x.tools == 1 ? "tool" : "tools"}`)
+                : x.status == "starting" ? "Asking the server…" : x.status == "waiting" ? "Waiting for you to sign in…"
+                : "Not signed in") class=Label testId=`mcp-status-${i}`
+            if x.status == "off"
+              Button(press=signIn(x.id), variant="secondary", disabled=false, testId=`mcp-sign-in-${i}`)
+                text "Sign in"
+            else if x.status == "on"
+              Button(press=signIn(x.id), variant="quiet", disabled=false, testId=`mcp-sign-in-${i}`)
+                text "Sign in again"
+            Button(press=askRemove(x.id), variant="quiet-danger", disabled=false, testId=`mcp-remove-${i}`)
+              text "Remove"
+          if x.status == "waiting"
+            row gap="space.sm" align-items="center"
+              ButtonLink(href=x.signInUrl, variant="primary", testId=`mcp-open-${i}`)
+                text `Open ${x.name}'s sign-in`
+                text "↗" aria-hidden=true
+              Button(press=cancel(x.id), variant="quiet", disabled=false, testId=`mcp-cancel-${i}`)
+                text "Cancel"
+          if x.error != ""
+            ErrorNote(message=x.error, testId=`mcp-error-${i}`)
+      Confirm(id="confirm-server-remove", question="Remove this server?",
+        message="Your imp can no longer use it, and Imp forgets its sign-in. Your account there is untouched.",
+        label="Remove", confirm=confirmRemove, testId="mcp-remove")
+      if removeError != ""
+        ErrorNote(message=removeError, testId="mcp-remove-error")
+      column gap="space.sm" padding-top="space.md" testId="mcp-form"
+        text "Add an MCP server" class=Subheading role="heading" aria-level=3
+        input value=name input=editName placeholder="Name, such as Linear" aria-label="Name" testId="mcp-form-name"
+          padding="space.sm space.ms" border="1px solid line.strong" background-color="transparent"
+        input value=url input=editUrl placeholder="Address, such as https://mcp.linear.app/mcp" aria-label="Address"
+          testId="mcp-form-url" padding="space.sm space.ms" border="1px solid line.strong" background-color="transparent"
+        input type="password" value=key input=editKey submit=submit placeholder="Key, if the server takes one instead of a sign-in"
+          aria-label="Key" testId="mcp-form-key" padding="space.sm space.ms" border="1px solid line.strong"
+          background-color="transparent"
+        if error != ""
+          ErrorNote(message=error, testId="mcp-form-error")
+        row
+          Button(press=submit, variant="primary", disabled=(not ready or adding), testId="mcp-form-add")
+            text "Add server"

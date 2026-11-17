@@ -26,7 +26,7 @@ use SecretSettings from "./settings/secrets.contract"
 use MemorySettings from "./settings/memory.contract"
 use NotificationSettings from "./settings/notifications.contract"
 use ExperimentalSettings from "./settings/experimental.contract"
-use ConnectionsSettings from "./settings/connections.contract"
+use ConnectionsSettings, McpServerSettings from "./settings/connections.contract"
 use AssistantsSettings from "./settings/assistants.contract"
 use AppTile, Memory, Secrets, Connection, Notice, Host, Account, ChatState, Build, Update, Reply from "./host.contract"
 use repoPath, AppDirectory, directory from "./app-directory.contract"
@@ -164,6 +164,8 @@ component App
   state settingsPane = "general"
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
   state secretRound = 0
+  // Bumped when an MCP server is added, so the form starts empty again.
+  state serverRound = 0
   // Dictation into the composer: whether it is on, the browser's recognition once it has started, how many of its
   // final results are already in the draft, and why the last one stopped (a recognition's error).
   state dictating = false
@@ -232,6 +234,10 @@ component App
   mutation githubConnected as shape Reply
   mutation githubCancelled as shape Reply
   mutation githubDisconnected as shape Reply
+  mutation serverAdded as shape Reply then afterServerAdded
+  mutation serverSignedIn as shape Reply queue
+  mutation serverCancelled as shape Reply queue
+  mutation serverRemoved as shape Reply queue
   mutation backupTurnedOn as shape Reply
   mutation backupTurnedOff as shape Reply
   mutation flagChosen as shape Reply queue
@@ -315,6 +321,8 @@ component App
   derive directoryOn = account.flags.filter(f => f.key == "app-directory" and f.on).length > 0
   derive secrets = account.secrets
   derive secretError = match secretSaved { case some(r) => r.error, case none => "" }
+  derive serverError = match serverAdded { case some(r) => r.error, case none => "" }
+  derive serverRemoveError = match serverRemoved { case some(r) => r.error, case none => "" }
   derive loginError = match loginSaved { case some(r) => r.error, case none => "" }
   derive secretDeleteError = match secretDeleted { case some(r) => r.error, case none => "" }
   derive backup = account.backup
@@ -813,6 +821,19 @@ component App
     send githubDisconnected = connectionsDisconnect()
   action copyGithubCode
     copyText(github.code)
+  action addServer(name: string, url: string, key: string)
+    if not pending(serverAdded)
+      send serverAdded = connectionsAddServer(name, url, key)
+  action afterServerAdded
+    if match serverAdded { case some(r) => r.ok, case none => false }
+      serverRound = serverRound + 1
+  // The sign-in comes back to the address this page reaches the host at.
+  action signInServer(id: string)
+    send serverSignedIn = connectionsSignInServer(id, host.origin)
+  action cancelServer(id: string)
+    send serverCancelled = connectionsCancelServer(id)
+  action removeServer(id: string)
+    send serverRemoved = connectionsRemoveServer(id)
   action turnOnBackup
     send backupTurnedOn = backupTurnOn()
   action turnOffBackup
@@ -1020,6 +1041,10 @@ component App
                             busy=(pending(githubConnected) or pending(githubDisconnected) or pending(backupTurnedOn) or pending(backupTurnedOff)),
                             connect=connectGithub, cancel=cancelGithub, disconnect=disconnectGithub, copyCode=copyGithubCode,
                             turnOn=turnOnBackup, turnOff=turnOffBackup)
+                          for r in [serverRound] key=`${r}`
+                            McpServerSettings(servers=account.mcpServers, adding=pending(serverAdded), error=serverError,
+                              removeError=serverRemoveError, add=addServer, signIn=signInServer, cancel=cancelServer,
+                              remove=removeServer)
                         else if settingsPane == "assistants"
                           AssistantsSettings(apps=account.assistants, url=`${host.origin}/mcp`, copyUrl=copyMcpUrl, share=shareApp)
                         else if settingsPane == "experimental"

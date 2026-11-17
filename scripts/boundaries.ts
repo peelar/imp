@@ -24,8 +24,15 @@ export const CONTEXTS = new Map<string, Context>([
   [
     "apps",
     {
-      owns: "The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, what it reads from outside and its syncs, and the two tools the agent runs apps with",
+      owns: "The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, what it reads from outside and its syncs, and the operations the agent may run",
       uses: ["machine", "live", "datadir"],
+    },
+  ],
+  [
+    "actions",
+    {
+      owns: "The catalogue of what the imp can do outside its computer: the apps' operations and the MCP servers' tools behind one search and one run, and the rules a run follows",
+      uses: ["apps"],
     },
   ],
   [
@@ -101,7 +108,7 @@ export const CONTEXTS = new Map<string, Context>([
   [
     "connections",
     {
-      owns: "The accounts the host connects to, such as GitHub: signing in, and handing the sign-in to the vault as a key",
+      owns: "The accounts the host connects to, GitHub and the owner's MCP servers: signing in, handing the sign-in to the vault as a key, and the MCP client",
       uses: ["live", "datadir", "processes"],
     },
   ],

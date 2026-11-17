@@ -57,7 +57,7 @@ const oneLine = (value: Value | undefined, max = 90) => {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 };
 
-/** "find_app_actions" or "setDone" as "Find app actions" or "Set done". */
+/** "find_actions" or "setDone" as "Find actions" or "Set done". */
 const humanize = (name: string) => {
   const words = name
     .replaceAll("_", " ")
@@ -75,7 +75,9 @@ function describeAction(args: ToolArgs, apps: readonly AppLabel[]) {
 
   const subject = values.find((value) => isText(value) && !/^\d+$/.test(value));
 
-  const title = `${app?.name ?? oneLine(args.app)} · ${humanize(oneLine(args.action))}`;
+  // An app's action, or a connected MCP server's.
+  const owner = app?.name ?? (oneLine(args.app) || oneLine(args.server));
+  const title = `${owner} · ${humanize(oneLine(args.action))}`;
 
   return {
     title,
@@ -128,6 +130,16 @@ const KNOWN = new Map<string, readonly [string, string, string, string]>([
       "app",
     ],
   ],
+  [
+    "find_actions",
+    [
+      "Looked up actions",
+      "Couldn't look up actions",
+      "symbol:icon.search",
+      "query",
+    ],
+  ],
+  // The name before the catalogue, in conversations from then.
   [
     "find_app_actions",
     [
@@ -226,7 +238,8 @@ function browserStep(command: string) {
 
 /** What a tool call did, in words the person reads at a glance. */
 function describeTool({ name, args, apps }: ToolUse) {
-  if (name === "run_app_action") {
+  // run_app_action is run_action's name in conversations from before the catalogue.
+  if (name === "run_action" || name === "run_app_action") {
     return describeAction(args, apps);
   }
 

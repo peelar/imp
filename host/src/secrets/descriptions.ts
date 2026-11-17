@@ -31,6 +31,11 @@ export type Described = Placement & {
   readonly username: string;
   /** Whether a login has a key for one-time codes. */
   readonly otp: boolean;
+  /**
+   * The connection a key belongs to, such as "mcp:linear": only the host's own requests for it get the key, and the
+   * imp and Settings → Secrets never list it. "" for the owner's own keys and logins.
+   */
+  readonly onlyFor: string;
   readonly updated: string;
 };
 
@@ -66,7 +71,7 @@ const rulesJson = compile(
 );
 
 const refused = (error: string): Refused => ({ ok: false, error });
-const standInFor = (name: string) => `imp-secret-${name}`;
+export const standInFor = (name: string) => `imp-secret-${name}`;
 
 const envFor = (name: string) =>
   `${name.toUpperCase().replaceAll("-", "_")}_API_KEY`;
@@ -100,6 +105,7 @@ export function described(stored: StoredSecret): Described | undefined {
         site: meta.site ?? "",
         username: meta.username ?? "",
         otp: meta.otp === "yes",
+        onlyFor: meta.onlyFor ?? "",
         updated,
       }
     : undefined;
@@ -198,6 +204,10 @@ export function newKey(input: KeyInput, secrets: readonly Described[]): NewKey {
   }
 
   const existing = secrets.find((secret) => secret.name === name);
+
+  if (existing?.onlyFor) {
+    return refused(`A connection keeps ${name} itself.`);
+  }
 
   if (existing?.kind === "login") {
     return refused(`${name} is a login.`);

@@ -22,6 +22,7 @@ import {
   type KeyInput,
   newKey,
 } from "./descriptions.ts";
+import { connectionKeys } from "./connection-keys.ts";
 import { type LoginInput, newLogin, signIn, storeLogin } from "./logins.ts";
 import { secretRecords } from "./records.ts";
 import { secretsExtension } from "./tools.ts";
@@ -63,7 +64,9 @@ function egressRules(secrets: readonly Described[]): EgressRules {
     for (const { host, ...rule } of secret.rules) {
       hosts.set(host, [
         ...(hosts.get(host) ?? []),
-        { secret: secret.name, ...rule },
+        secret.onlyFor
+          ? { secret: secret.name, ...rule, onlyFor: secret.onlyFor }
+          : { secret: secret.name, ...rule },
       ]);
     }
   }
@@ -122,6 +125,8 @@ function secretList({ vault, egress, changed }: Listed) {
 
   return {
     all: () => secrets,
+    /** The owner's own secrets: the ones the imp may use and Settings → Secrets shows, not a connection's keys. */
+    owners: () => secrets.filter((secret) => secret.onlyFor === ""),
     listed: () => listed,
     reload,
     /** The vault running and the secrets read, once; a failure is shown in Settings and tried again on the next call. */
@@ -149,7 +154,7 @@ async function commandEnv({
     // Settings shows why; the command runs with the secrets read so far, which may be none.
   }
 
-  const secrets = list.all();
+  const secrets = list.owners();
 
   if (keysOf(secrets).length === 0) {
     return {};
@@ -172,6 +177,21 @@ async function commandEnv({
   }
 }
 
+/** A change to the vault's secrets, read back afterwards; a failure is the answer Settings shows. */
+const changer =
+  (list: ReturnType<typeof secretList>) =>
+  async (apply: () => Promise<void>) => {
+    try {
+      await list.load();
+      await apply();
+      await list.reload();
+
+      return ok;
+    } catch (cause) {
+      return refused(why(cause));
+    }
+  };
+
 export function openSecrets(options: SecretsOptions) {
   const { dataDir, toolsDir } = options;
   const vault = openVault({ dataDir, toolsDir });
@@ -193,7 +213,7 @@ export function openSecrets(options: SecretsOptions) {
   // The agent's side: what it may use, and how to ask for more.
   options.registry.install(
     secretsExtension({
-      secrets: list.all,
+      secrets: list.owners,
       ask: (request) => {
         records.ask(request);
         changed();
@@ -203,18 +223,7 @@ export function openSecrets(options: SecretsOptions) {
     })
   );
 
-  /** A change to the vault's secrets, read back afterwards; a failure is the answer Settings shows. */
-  const change = async (apply: () => Promise<void>) => {
-    try {
-      await list.load();
-      await apply();
-      await list.reload();
-
-      return ok;
-    } catch (cause) {
-      return refused(why(cause));
-    }
-  };
+  const change = changer(list);
 
   return {
     /** The vault running and the secrets read; throws why not. */
@@ -230,7 +239,7 @@ export function openSecrets(options: SecretsOptions) {
       secretsState({
         vault: vault.state(),
         listed: list.listed(),
-        secrets: list.all(),
+        secrets: list.owners(),
         requests: records.requests(),
         uses: records.uses(),
       }),
@@ -286,12 +295,19 @@ export function openSecrets(options: SecretsOptions) {
       await commandEnv({ list, egress, machine: options.machine }),
     /** The hosts the owner's key `name` goes on; undefined when they have no key of that name. */
     keyHosts: (name: string) =>
-      keysOf(list.all())
+      keysOf(list.owners())
         .find((secret) => secret.name === name)
         ?.rules.map((rule) => rule.host),
     /** Sends an app's request, which the app gateway checked, with the key it names (app-fetch.ts). */
     sendForApp: async (request: AppRequest) =>
       await sendAppRequest(request, egress.viaProxy),
+    /** The keys the host's own connections keep, such as an MCP server's sign-in (connection-keys.ts). */
+    ...connectionKeys({
+      vault,
+      all: list.all,
+      change,
+      viaProxy: egress.viaProxy,
+    }),
     /**
      * The environment for a program the host runs itself whose requests go through the egress proxy, so the addon
      * puts the owner's keys on them, as it does the imp's commands': the backup's git pushes with the github key.

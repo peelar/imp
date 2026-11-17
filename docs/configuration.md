@@ -40,6 +40,7 @@ Everything that is yours lives in `DATA_DIR`, on the host. Back it up, and you h
   - `backup/`: a git repository with every version of the apps' code
   - `assistants.json`: the apps you share with other assistants in Settings → Assistants, if any
   - `connections.json`: the names of the accounts you connected in Settings → Connections (their tokens are in the vault)
+  - `mcp-servers.json`: the MCP servers you added in Settings → Connections, with their addresses (their tokens are in the vault)
   - `builds/`: the web client builds the host serves
   - `vault/`: the secrets vault (OpenBao)
   - `egress/`: the egress proxy's CA, rules and password

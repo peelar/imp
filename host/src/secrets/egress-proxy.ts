@@ -39,6 +39,12 @@ export type EgressRule = {
   readonly prefix: string;
   /** Set for HTTP basic auth: the value goes in as base64 of `<basicUser>:<value>`. */
   readonly basicUser?: string | undefined;
+  /**
+   * Set for a key only the host's own requests for one connection get, such as "mcp:linear": the addon puts it only on
+   * a request the host sent naming it. With no `header`, the value replaces its stand-in where the request has it, in
+   * its headers or its body, and goes nowhere else.
+   */
+  readonly onlyFor?: string | undefined;
 };
 
 export type EgressRules = {

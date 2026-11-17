@@ -53,6 +53,10 @@ Chrome on the computer is started without the proxy, so a web page the imp opens
 
 An app's server code reads a service with your key through `app.fetch`, which the host sends: never through the computer's proxy. The app names the key in its `connections`, which you see before you save it ([Apps](apps.md#live-apps-reading-your-services)). The host sends the request through the same mitmproxy, so the addon puts the key on it and scrubs it from the answer, and adds the app's name to the use, which **Recent use** shows as `GET api.github.com/notifications · github app`. The addon trusts that name only beside a token in `DATA_DIR/egress/host-token`, which never leaves the host.
 
+## The host's own connections
+
+A key the host keeps for one of its own connections, such as an [MCP server](connections.md#where-the-tokens-are)'s sign-in, is in the vault beside your secrets, but it is not yours to use anywhere: it names its connection (`onlyFor`, such as `mcp:linear`), and the addon puts it only on a request the host sent naming that connection, with the host's token. A rule without a header puts the value only where the request holds its stand-in, in its headers or its body, as a token endpoint takes a refresh token. The imp's commands, the apps and the agent's computer never get it, Settings → Secrets does not list it, and you cannot add a secret of its name (`host/src/secrets/connection-keys.ts`).
+
 ## OpenBao, run by the host
 
 The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp Vault, which the host runs itself in `DATA_DIR/vault`. There is nothing to install or unlock: on first use the host downloads a pinned build, checks its SHA-256, and starts it (`host/src/secrets/vault.ts`, `host/src/secrets/programs.ts`). mitmproxy is fetched the same way.

@@ -1,5 +1,6 @@
-// The accounts the host connects to, for everything in Imp that uses them: GitHub, which the GitHub app reads, the
-// imp's gh and git use, and the backup pushes to. Connecting signs in once (github.ts) and hands the token to the
+// The accounts the host connects to, for everything in Imp that uses them: the MCP servers the owner adds, whose tools
+// the imp uses through its catalogue (mcp.ts), and GitHub, which the GitHub app reads, the imp's gh and git use, and
+// the backup pushes to. Connecting signs in once (github.ts) and hands the token to the
 // vault as the owner's key named github; from there the egress proxy puts it on each request, and nothing else holds
 // it. A github key the owner added in Secrets connects GitHub the same way. The host keeps only the account's name, in
 // DATA_DIR/connections.json.
@@ -12,13 +13,14 @@ import { compile, map, obj, str } from "@earendil-works/pi-schema";
 import { readKept } from "../datadir/datadir.ts";
 import type { Reply, Topics } from "../live/live.ts";
 import { githubSignIn, readAccount } from "./github.ts";
+import { type ConnectionSend, mcpServers, type ServerKeys } from "./mcp.ts";
 
 export { connectionsCalls } from "./shell.ts";
 
 export const TOPIC = "connections";
 
 /** A connection as Settings shows it. */
-export type Connection = {
+type Connection = {
   readonly id: string;
   readonly label: string;
   /** "off", "starting", "waiting" (for the person to enter `code` at `url`) or "on". */
@@ -32,7 +34,7 @@ export type Connection = {
 };
 
 /** The owner's keys in the vault, which a connection keeps its token as. */
-export type ConnectionKeys = {
+type ConnectionKeys = {
   /** Waits for the vault; throws why it is not there. */
   readonly ready: () => Promise<void>;
   readonly has: (name: string) => boolean;
@@ -46,6 +48,10 @@ export type ConnectionsOptions = {
   readonly gh?: string | undefined;
   readonly topics: Topics;
   readonly keys: ConnectionKeys;
+  /** The vault, for the MCP servers' keys, which only the host's own requests for each server get. */
+  readonly serverKeys: ServerKeys;
+  /** Sends one of the host's requests for an MCP server through the egress proxy. */
+  readonly send: ConnectionSend;
   /** A connection was disconnected, so what used it stops: the backup, for GitHub. */
   readonly disconnected: (id: string) => void;
   readonly log?: ((message: string) => void) | undefined;
@@ -98,15 +104,44 @@ async function moveOldSignIn(
   return true;
 }
 
+const logOf = (options: ConnectionsOptions) =>
+  options.log ??
+  ((line: string) => {
+    console.error(line);
+  });
+
+/** The connections: GitHub, and the MCP servers the owner added (mcp.ts). */
 export function openConnections(options: ConnectionsOptions) {
+  const github = githubConnection(options);
+
+  const servers = mcpServers({
+    file: path.join(options.dataDir, "mcp-servers.json"),
+    keys: options.serverKeys,
+    send: options.send,
+    changed: () => {
+      options.topics.changed(TOPIC);
+    },
+    log: logOf(options),
+  });
+
+  return {
+    ...github,
+    /** The MCP servers the owner added, which the imp's catalogue lists the tools of. */
+    servers,
+    /** What Settings shows of the MCP servers. */
+    serverState: servers.state,
+    close: () => {
+      github.close();
+      servers.close();
+    },
+  };
+}
+
+/** GitHub: its device code sign-in, its token kept in the vault as the github key, and the account's name. */
+function githubConnection(options: ConnectionsOptions) {
   const { keys } = options;
   const gh = options.gh ?? "gh";
-
-  const log =
-    options.log ??
-    ((line: string) => {
-      console.error(line);
-    });
+  const log = logOf(options);
 
   const logins = keptLogins(
     path.join(options.dataDir, "connections.json"),

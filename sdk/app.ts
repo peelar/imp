@@ -5,7 +5,7 @@
 //
 // - The shell's Contract calls an operation `<appId><Name>`, with its arguments in the order of `params`: the todos
 //   app's `setDone` is `todosSetDone(id, done)`. A read streams live to the screen and answers again after every write.
-// - The agent finds operations with `find_app_actions` and runs them with `run_app_action`, by name and with named
+// - The agent finds operations with `find_actions` and runs them with `run_action`, by name and with named
 //   arguments. Every operation is the agent's unless it says `agent: false`.
 
 export type Json =

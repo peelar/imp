@@ -22,6 +22,7 @@ Assume anything on the computer can be read by the agent, and by whatever manage
 - **Provider credentials stay on the host.** The E2B key and Tailscale identity never reach the computer, and nothing on it can call the provider's API.
 - **Your data stays on the host.** App databases are SQLite files on the host, and leave it only through the apps you share with other assistants. App code on the computer reaches them only through the host, one call at a time.
 - **Your secrets stay on the host.** The computer gets stand-ins. See [The secrets vault](vault.md).
+- **MCP servers are reached from the host.** Their tokens stay in the vault, the MCP client holds only stand-ins, and nothing on the computer can call a server as you. See [Connections and MCP servers](connections.md).
 - **Memory stays on the host.** It is a guarantee of the memory contract.
 - **agentd requires a token** on every connection. The token is derived from `DATA_DIR/host-secret`, which only the host has.
 - **This machine's container sees none of the host's files**, and publishes only agentd's port, on the host's loopback. It shares the machine's kernel, though, so it is a weaker wall than Imp cloud's sandbox (a virtual machine) or a computer of its own: a kernel flaw could let the agent out. Docker access is also root on the machine for the host's user. Choose Imp cloud or your own computer when that matters.
@@ -33,6 +34,7 @@ Assume anything on the computer can be read by the agent, and by whatever manage
 - **Forget a memory.** Settings lists everything the imp remembers, with a way to forget each fact.
 - **Add a secret.** The imp can ask for one, but only you type a value, and only into Settings.
 - **Operations marked `agent: false`** in an app are the screen's alone.
+- **Agree to a write to an MCP server.** What a server answers can carry instructions, so the imp reads it as data, and it runs a tool the server does not mark read-only only once you agreed to it in the chat.
 
 ## Files to protect
 

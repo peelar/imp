@@ -1,6 +1,7 @@
 // The host's one HTTP origin, on localhost only: the shell's API (/api/live/<source> streams an answer,
-// /api/call/<name> makes a change), the MCP server other assistants use the owner's apps through (/mcp), a few files of
-// the host's own, the computer's screen, and the built web client.
+// /api/call/<name> makes a change), the MCP server other assistants use the owner's apps through (/mcp), the page an
+// MCP server's sign-in comes back to (/api/connections/callback), a few files of the host's own, the computer's screen,
+// and the built web client.
 // `tailscale serve` is the gate in front of it and tells it who signed in.
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
@@ -37,6 +38,10 @@ export type HttpOptions = {
   /** The Mac installer script and the repository it downloads Imp.app from. */
   readonly macInstaller: string | undefined;
   readonly repo: string | undefined;
+  /** An MCP server's sign-in page sent the person back with these parameters: what to tell them. */
+  readonly connectionCallback: (
+    params: URLSearchParams
+  ) => Promise<{ readonly ok: boolean; readonly message: string }>;
 };
 
 type Request = {
@@ -208,6 +213,15 @@ async function serve(options: HttpOptions, request: Request) {
     await serveSource(options, request);
   } else if (method === "POST" && /^\/api\/call\/\w+$/.test(url.pathname)) {
     await serveCall(options, request);
+  } else if (method === "GET" && url.pathname === "/api/connections/callback") {
+    // Plain text, so nothing the server put in the address is ever read as a page.
+    const { ok, message } = await options.connectionCallback(url.searchParams);
+
+    res.writeHead(ok ? 200 : 400, {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    });
+    res.end(message);
   } else if (
     url.pathname.startsWith("/api/") ||
     method !== "GET" ||

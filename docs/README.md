@@ -34,6 +34,7 @@ These docs are for the people who run an Imp: how to install it, how its parts f
 - [Notifications](notifications.md): what the imp tells you while you are away, and where
 - [Memory](memory.md): what the imp remembers, and how to plug in another memory system
 - [The secrets vault](vault.md): how the imp uses your API keys without ever seeing them
+- [Connections and MCP servers](connections.md): the services the host signs in to, and how the imp uses your MCP servers
 - [Security model](security.md): who can reach your Imp, and where every credential lives
 
 **Building on Imp**

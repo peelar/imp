@@ -2,7 +2,8 @@
 // and keeps the value out of what comes back, however the response is sent. The vault is a stand-in on a unix socket,
 // and the service a local server that echoes the header the addon set; plain HTTP, so no CA is needed. An app's
 // request, which the host sends itself (src/secrets/app-fetch.ts), goes the same way over HTTPS, to a service with a
-// certificate of its own, which this mitmproxy is told not to check.
+// certificate of its own, which this mitmproxy is told not to check. A key the host keeps for one of its connections
+// (an MCP server's refresh token) goes only on the host's own requests for that connection, where its stand-in is.
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -81,9 +82,28 @@ const secure = createHttpsServer(
     cert: readFileSync(path.join(dir, "service.pem")),
   },
   (req, res) => {
-    res.end(JSON.stringify(req.headers));
+    if (req.url === "/body") {
+      let got = "";
+
+      req.setEncoding("utf-8");
+      req.on("data", (chunk: string) => {
+        got += chunk;
+      });
+      req.on("end", () => {
+        bodySeen = got;
+        res.end("ok");
+      });
+    } else {
+      res.end(JSON.stringify(req.headers));
+    }
   }
 );
+
+/** The last body the secure service's /body got, as the service saw it. */
+let bodySeen = "";
+
+/** The stand-in of a connection's key, which only the host's requests for that connection get the value for. */
+const CONNECTION_STAND_IN = "imp-secret-mcp-x-refresh";
 
 let proxy: ChildProcess | undefined;
 let proxyPort = 0;
@@ -115,9 +135,10 @@ before(async () => {
       hosts: {
         "127.0.0.1": [
           { secret: "gh", header: "Authorization", prefix: "Bearer " },
+          { secret: "mcp-x-refresh", header: "", prefix: "", onlyFor: "mcp:x" },
         ],
       },
-      standIns: { gh: STAND_IN },
+      standIns: { gh: STAND_IN, "mcp-x-refresh": CONNECTION_STAND_IN },
     })
   );
   writeFileSync(path.join(dir, "token"), "token");
@@ -296,4 +317,45 @@ test("a request without the host's token names no app", async () => {
 
   assert.equal(answer.status, 200);
   assert.equal(usedBy().at(-1), "");
+});
+
+/** A token request the host sends for a connection, with the refresh token's stand-in in its body. */
+const connectionRequest = async (label: string, token: string) => {
+  await sendAppRequest(
+    {
+      app: label,
+      url: `https://127.0.0.1:${securePort}/body`,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${CONNECTION_STAND_IN}`,
+      secret: label,
+      address: "127.0.0.1",
+    },
+    async () => ({
+      port: proxyPort,
+      ca: readFileSync(
+        path.join(dir, ".mitmproxy", "mitmproxy-ca-cert.pem"),
+        "utf-8"
+      ),
+      token,
+    })
+  );
+
+  return bodySeen;
+};
+
+test("a connection's key replaces its stand-in in the body of the host's own request for that connection", async () => {
+  assert.equal(
+    await connectionRequest("mcp:x", HOST_TOKEN),
+    `grant_type=refresh_token&refresh_token=${VALUE}`
+  );
+});
+
+test("a connection's key goes on no request but the host's own for that connection", async () => {
+  const standIn = `grant_type=refresh_token&refresh_token=${CONNECTION_STAND_IN}`;
+
+  // Another connection, a request without the host's token (as the agent's would be), and one that only names it.
+  assert.equal(await connectionRequest("mcp:other", HOST_TOKEN), standIn);
+  assert.equal(await connectionRequest("mcp:x", "not-the-host"), standIn);
+  assert.equal(await connectionRequest("", ""), standIn);
 });

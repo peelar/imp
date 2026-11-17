@@ -185,6 +185,17 @@ const crossings = [
     says: "uses machine/, which assistants/ may not",
   },
   {
+    crosses:
+      "the catalogue opening the MCP servers itself, not through the servers host.ts hands it",
+    files: [
+      [
+        "actions/actions.ts",
+        'import type { Connections } from "../connections/connections.ts";',
+      ],
+    ],
+    says: "uses connections/, which actions/ may not",
+  },
+  {
     crosses: "a context using the files that put the host together",
     files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
     says: "a context never uses the files that put the host together",

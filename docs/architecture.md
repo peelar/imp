@@ -37,7 +37,8 @@ Imp has three places where things run, and one rule about what lives where: **wh
 
 | Folder | What it owns | May use |
 | --- | --- | --- |
-| `apps/` | The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, what it reads from outside and its syncs, and the two tools the agent runs apps with | `machine`, `live`, `datadir` |
+| `apps/` | The app gateway: each app's code in a worker on the computer, its data in SQLite on the host, its versions, what it reads from outside and its syncs, and the operations the agent may run | `machine`, `live`, `datadir` |
+| `actions/` | The catalogue of what the imp can do outside its computer: the apps' operations and the MCP servers' tools behind one search and one run, and the rules a run follows | `apps` |
 | `studio/` | Making apps: previews, Save, Discard and Undo, the code the host keeps, and the web builds with the apps in them | `apps`, `live`, `datadir`, `processes` |
 | `agent/` | Who the imp is, the registry the parts install their tools and prompt sections on, and the Pi Durable harness that runs it |  |
 | `chats/` | The conversations, and the lines the host adds to a message, such as a routine's | `live` |
@@ -48,7 +49,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `computer/` | The owner's choice of computer, switching to another, their own computers on the tailnet, and the screen | `machine`, `live`, `datadir` |
 | `machine/` | The machine adapter contract, every provider's adapter, and the runtime the host installs on every machine | `processes` |
 | `backup/` | Every saved version of the apps' code, in git and pushed to GitHub with the GitHub connection | `apps`, `live`, `datadir` |
-| `connections/` | The accounts the host connects to, such as GitHub: signing in, and handing the sign-in to the vault as a key | `live`, `datadir`, `processes` |
+| `connections/` | The accounts the host connects to, GitHub and the owner's MCP servers: signing in, handing the sign-in to the vault as a key, and the MCP client | `live`, `datadir`, `processes` |
 | `account/` | The model account: the ChatGPT sign-in or an API key, their credentials, and the model the person chose | `live`, `datadir` |
 | `tricks/` | The browser tasks the imp keeps on its computer, and how it uses the web | `live` |
 | `update/` | The host's updates to the latest release |  |

@@ -30,6 +30,7 @@ shape Account
   secrets: Secrets
   backup: Backup
   connections: Connection[]
+  mcpServers: McpServer[]
   tricks: Trick[]
   routines: Routine[]
   notices: Notice[]
@@ -223,6 +224,17 @@ shape Connection
   code: string
   url: string
   login: string
+  error: string
+
+// An MCP server the owner added, whose tools the imp finds and runs: `status` is "off" (it needs a sign-in),
+// "starting", "waiting" (for the person at `signInUrl`) or "on". `tools` is how many it offers once listed, -1 before.
+shape McpServer
+  id: string
+  name: string
+  url: string
+  status: string
+  signInUrl: string
+  tools: number
   error: string
 
 // A browser task the imp recorded once and runs again without the page (agent-browser's saved flow): what it does,

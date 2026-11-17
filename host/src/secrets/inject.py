@@ -3,7 +3,9 @@ the hosts the owner's secrets are for.
 
 For each request it reads the secrets the host's rules name for that host from OpenBao, with a token that can only
 read values, and sets each one's header, replacing whatever the agent sent. A secret's stand-in anywhere else in the
-headers becomes its value too. The value is taken out of the response before the agent sees it, streamed (large)
+headers becomes its value too. A key the host keeps for one of its connections (rules with onlyFor) goes only on the
+host's own requests for that connection, and one without a header only where the request holds its stand-in, in its
+headers or its body (a refresh token is sent in the body). The value is taken out of the response before the agent sees it, streamed (large)
 responses included. A request the host sends for an app (host/src/secrets/app-fetch.ts) names the app in X-Imp-App,
 which counts only beside the host's token in X-Imp-Host; both are removed before the request goes on. Every use is
 printed
@@ -96,13 +98,31 @@ def report(flow, status, error=""):
     sys.stdout.flush()
 
 
+def carries(flow, stand_in, body):
+    """Whether the request holds the stand-in: in its headers, or, when `body`, in its body too."""
+    if not stand_in:
+        return False
+    if any(stand_in in value for value in flow.request.headers.values()):
+        return True
+    return body and stand_in.encode() in (flow.request.content or b"")
+
+
 def request(flow: http.HTTPFlow):
-    flow.metadata["imp-app"] = app_of(flow)
+    label = app_of(flow)
+    flow.metadata["imp-app"] = label
     table = rules()
-    applies = table.get("hosts", {}).get(flow.request.pretty_host.lower())
+    stand_ins = table.get("standIns", {})
+    # A key for one connection goes only on the host's requests for it; one without a header only where its stand-in is.
+    applies = [
+        rule
+        for rule in table.get("hosts", {}).get(flow.request.pretty_host.lower(), [])
+        if (not rule.get("onlyFor") or rule["onlyFor"] == label)
+        and (rule.get("header") or carries(flow, stand_ins.get(rule["secret"], ""), bool(rule.get("onlyFor"))))
+    ]
     if not applies:
         return
     used = []
+    in_body = []
     for rule in applies:
         try:
             secret = value(rule["secret"])
@@ -112,12 +132,14 @@ def request(flow: http.HTTPFlow):
             flow.response = http.Response.make(502, reason, {"content-type": "text/plain"})
             report(flow, 502, reason.strip())
             return
-        credential = secret
-        if rule.get("basicUser"):
-            credential = base64.b64encode(f"{rule['basicUser']}:{secret}".encode()).decode()
-        flow.request.headers[rule["header"]] = rule.get("prefix", "") + credential
+        if rule.get("header"):
+            credential = secret
+            if rule.get("basicUser"):
+                credential = base64.b64encode(f"{rule['basicUser']}:{secret}".encode()).decode()
+            flow.request.headers[rule["header"]] = rule.get("prefix", "") + credential
         used.append((rule["secret"], secret))
-    stand_ins = table.get("standIns", {})
+        if rule.get("onlyFor"):
+            in_body.append((rule["secret"], secret))
     for key in set(flow.request.headers.keys()):
         values = flow.request.headers.get_all(key)
         replaced = values
@@ -127,6 +149,14 @@ def request(flow: http.HTTPFlow):
                 replaced = [v.replace(stand_in, secret) for v in replaced]
         if replaced != values:
             flow.request.headers.set_all(key, replaced)
+    # The host's own request for a connection may hold a stand-in in its body, such as a refresh token.
+    content = flow.request.content or b""
+    for name, secret in in_body:
+        stand_in = stand_ins.get(name)
+        if stand_in:
+            content = content.replace(stand_in.encode(), secret.encode())
+    if content != (flow.request.content or b""):
+        flow.request.content = content
     flow.metadata["imp"] = used
 
 

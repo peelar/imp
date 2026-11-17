@@ -68,7 +68,7 @@ export default {
 - Operation names are camelCase. Every operation needs a description and `params` (`{}` for none). Param types: `string`, `number`, `integer`, `boolean`, `enum` (with `values`); `optional: true` makes one optional.
 - `app.db` is SQLite: `all`, `get`, `run`, `batch` (one transaction). Its data is the user's and stays across versions.
 - A write may return `{ ok: false, error: "why" }` to refuse; anything else counts as done.
-- The main agent (you, later, in chat) finds every operation with `find_app_actions` and runs it with `run_app_action`, so give each one a description that says what it does. Add operations only an agent needs, such as a calculation, freely. `agent: false` hides one from the agent; use it only for what must stay the user's.
+- The main agent (you, later, in chat) finds every operation with `find_actions` and runs it with `run_action`, so give each one a description that says what it does. Add operations only an agent needs, such as a calculation, freely. `agent: false` hides one from the agent; use it only for what must stay the user's.
 - An answer the screen reads must match the screen's shape exactly: return only the fields the shape declares.
 
 ## Reading a service: connections and sync

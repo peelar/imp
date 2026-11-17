@@ -7,7 +7,7 @@ An app is a folder with three files: `app.json`, a screen (`app.contract`) and s
 An app declares each thing it can do once, as an **operation** in `server.ts`: a read or a write, with a description and typed parameters. Then:
 
 - **The screen** calls an operation as `<appId><Name>`, with its arguments in order. The todos app's `setDone` is `todosSetDone(id, done)`. A read streams to the screen live and answers again after every write.
-- **The agent** finds operations with `find_app_actions` and runs them with `run_app_action`, by name, with named arguments. Its tool list stays the same whichever apps are installed.
+- **The agent** finds operations with `find_actions` and runs them with `run_action`, by name, with named arguments. The same two tools reach the tools of the [MCP servers](connections.md#mcp-servers) the owner connected, so its tool list stays the same whichever apps are installed and whichever servers are connected.
 
 - **Other assistants** on your tailnet, such as Claude Code or Cursor, use the apps you share with them in Settings → Assistants, over MCP. See [Other assistants](#other-assistants).
 
@@ -19,7 +19,7 @@ The host is also an MCP server, at `https://<your host>/mcp` over MCP's Streamab
 
 No app is shared until you turn it on in **Settings → Assistants**, which keeps your choice in `DATA_DIR/assistants.json`. Each operation of a shared app is one tool, named `<app>_<operation>`, such as `todos_add`. A read has MCP's read-only hint and a write its destructive hint. Operations marked `agent: false` and drafts are never tools: a call always reaches the saved app. The host sends MCP's `notifications/tools/list_changed` on the stream a `GET /mcp` opens whenever the tools change: when an app loads, is uninstalled, or you share it or stop sharing it.
 
-A call runs the way the imp's `run_app_action` does, so your open views update at once. What a tool answers goes to the other assistant's model, under that assistant's terms, not Imp's. Share only the apps whose data you are happy to send there. To add Imp to Claude Code:
+A call runs the way the imp's `run_action` does, so your open views update at once. What a tool answers goes to the other assistant's model, under that assistant's terms, not Imp's. Share only the apps whose data you are happy to send there. To add Imp to Claude Code:
 
 ```sh
 claude mcp add --transport http imp https://<your host>/mcp

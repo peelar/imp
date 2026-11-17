@@ -348,6 +348,29 @@ test "settings connect GitHub with a device code, then back the apps' code up to
   clock until state backup.status == "off" within 5000
   expect tree has "github-connect"
 
+test "settings add an MCP server with a key, then remove it"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  tap "settings-pane-connections"
+  expect tree has "mcp-empty"
+  type "mcp-form-name" "Sentry"
+  type "mcp-form-url" "http://mcp.sentry.dev/mcp"
+  tap "mcp-form-add"
+  clock until state serverError == "Give the server's HTTPS address, such as https://mcp.linear.app/mcp." within 20000
+  expect tree has "mcp-form-error"
+  type "mcp-form-url" "https://mcp.sentry.dev/mcp"
+  type "mcp-form-key" "sntrys_test"
+  tap "mcp-form-add"
+  clock until state account.mcpServers.0.status == "on" within 20000
+  expect text "mcp-name-0" == "Sentry"
+  expect text "mcp-status-0" == "Connected"
+  tap "mcp-remove-0"
+  tap "mcp-remove-confirm"
+  clock until state account.mcpServers.length == 0 within 5000
+  expect tree has "mcp-empty"
+
 test "Settings' Experimental tab keeps a feature flag for Imp's next start"
   request POST "/api/call/accountSignIn" []
   request POST "/api/call/appsInstall" ["github"]

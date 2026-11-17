@@ -7,6 +7,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { MutableModels } from "@earendil-works/pi-ai/models";
 import type { Registry } from "@earendil-works/pi-durable";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
+import { actionsExtension } from "./actions/actions.ts";
 import { agentRegistry, openHarness } from "./agent/agent.ts";
 import { type AppGateway, appGateway, hasAppData } from "./apps/apps.ts";
 import { openAssistants } from "./assistants/assistants.ts";
@@ -223,10 +224,17 @@ function openBackup(
   return backup;
 }
 
-/** The accounts the host connects to, whose sign-ins the vault keeps as keys: GitHub, which the backup pushes with. */
+/**
+ * The accounts the host connects to, whose sign-ins the vault keeps as keys: GitHub, which the backup pushes with, and
+ * the MCP servers, whose keys only the host's own requests for each server get.
+ */
 function openAccountConnections(
-  { options, topics }: Parts,
-  { secrets, backup }: { secrets: Secrets; backup: AppBackup }
+  { options, topics, registry }: Parts,
+  {
+    secrets,
+    backup,
+    gateway,
+  }: { secrets: Secrets; backup: AppBackup; gateway: AppGateway }
 ) {
   const connections = openConnections({
     dataDir: options.dataDir,
@@ -247,12 +255,25 @@ function openAccountConnections(
         }),
       remove: secrets.remove,
     },
+    serverKeys: {
+      ready: secrets.ready,
+      has: secrets.has,
+      standIn: secrets.standIn,
+      putFor: secrets.putFor,
+      remove: secrets.remove,
+    },
+    send: secrets.sendFor,
     disconnected: () => {
       backup.turnOff();
     },
   });
 
   connections.start();
+
+  // What the imp can do with the apps and the MCP servers, behind one search and one run.
+  registry.install(
+    actionsExtension({ apps: gateway.agent, servers: connections.servers })
+  );
 
   return connections;
 }
@@ -393,7 +414,7 @@ async function hostFlags({ dataDir, flagsKey }: HostOptions, topics: Topics) {
 
 /** The app gateway: the stored live apps, with the owner's keys. */
 function openAppGateway(
-  { options, topics, registry }: Parts,
+  { options, topics }: Parts,
   {
     stored,
     machine,
@@ -408,7 +429,6 @@ function openAppGateway(
     apps: stored.live,
     dataDir: options.dataDir,
     topics,
-    registry,
     machine,
     keyHosts: secrets.keyHosts,
     send: secrets.sendForApp,
@@ -457,6 +477,17 @@ const machineInUse = (computer: Computer) => async () => {
   return running;
 };
 
+/** The apps' code the host keeps: each app's live version and its draft. */
+const keptApps = ({ dataDir, appsDir }: HostOptions) =>
+  storedApps({
+    dataDir,
+    repoAppsDir: appsDir,
+    hasData: (id) => hasAppData(dataDir, id),
+    log: (message) => {
+      console.error(message);
+    },
+  });
+
 export async function startHost(options: HostOptions) {
   const { dataDir, version = "dev" } = options;
 
@@ -487,14 +518,7 @@ export async function startHost(options: HostOptions) {
     registry: imp(computer, memory),
   };
 
-  const stored = storedApps({
-    dataDir,
-    repoAppsDir: options.appsDir,
-    hasData: (id) => hasAppData(dataDir, id),
-    log: (message) => {
-      console.error(message);
-    },
-  });
+  const stored = keptApps(options);
 
   const machine = machineInUse(computer);
   const secrets = openOwnerSecrets(parts, machine);
@@ -503,7 +527,12 @@ export async function startHost(options: HostOptions) {
   const gateway = openAppGateway(parts, { stored, machine, secrets });
 
   const backup = openBackup(parts, gateway, secrets);
-  const connections = openAccountConnections(parts, { secrets, backup });
+
+  const connections = openAccountConnections(parts, {
+    secrets,
+    backup,
+    gateway,
+  });
 
   // Every save and undo changes the live code, which the backup keeps.
   const apps = openStudio(parts, gateway, {
@@ -552,6 +581,7 @@ export async function startHost(options: HostOptions) {
     version,
     macInstaller: options.macInstaller,
     repo: options.repo,
+    connectionCallback: connections.servers.finish,
   });
 
   console.log(

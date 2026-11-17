@@ -162,6 +162,7 @@ function shellSources(options: ShellApiOptions) {
     secrets: secrets.state(),
     backup: backup.state(),
     connections: connections.state(),
+    mcpServers: connections.serverState(),
     tricks: tricks.list(),
     routines: routines.state(),
     notices: notifications.state(),

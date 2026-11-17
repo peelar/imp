@@ -1,7 +1,7 @@
 // Other assistants: Claude Code, Cursor and any other MCP client on the owner's tailnet, using the apps the owner shares
 // with them in Settings → Assistants. Each shared app's operations are MCP tools, one per operation, such as
 // `todos_add`, served at /mcp (mcp.ts) behind the same Tailscale gate as the rest of the host. A call runs the way the
-// imp's own run_app_action does (apps/apps.ts, `agent`), so the owner's open views update at once; operations an app
+// imp's own run_action does (apps/apps.ts, `agent`), so the owner's open views update at once; operations an app
 // keeps from the agent, and drafts, are never offered. No app is shared until the owner turns it on, since what a tool
 // answers goes to the other assistant's model. The owner's choice is DATA_DIR/assistants.json.
 import { writeFileSync } from "node:fs";

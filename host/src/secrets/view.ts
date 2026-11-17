@@ -90,6 +90,17 @@ function detail(secret: Described) {
   return `${hostsOf(secret.rules)} · ${variables(secret.env)}`;
 }
 
+/** Who the host sent a request for: an app ("github"), or an MCP server's connection ("mcp:linear"). */
+function byWhom(label: string) {
+  if (label === "") {
+    return "";
+  }
+
+  return label.startsWith("mcp:")
+    ? ` · ${label.slice("mcp:".length)} MCP server`
+    : ` · ${label} app`;
+}
+
 /** One recorded use, as a row: a request it went on, or a sign-in it typed. */
 function useRow(use: RecordedUse) {
   const signIn = use.method === "sign in";
@@ -106,7 +117,7 @@ function useRow(use: RecordedUse) {
     secret: use.secret,
     what: signIn
       ? `sign in on ${use.host}`
-      : `${use.method} ${use.host}${use.path}${use.app ? ` · ${use.app} app` : ""}`,
+      : `${use.method} ${use.host}${use.path}${byWhom(use.app ?? "")}`,
     result,
     failed: use.status === 0 || use.status >= 400,
     when: ago(use.at),

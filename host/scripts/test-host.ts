@@ -77,7 +77,7 @@ const TOOL_CALLS = [
   {
     pattern: /todo: ([^"\\]+)/,
     call: (title: string) =>
-      fauxToolCall("run_app_action", {
+      fauxToolCall("run_action", {
         app: "todos",
         action: "add",
         args: { title },
