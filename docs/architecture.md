@@ -53,6 +53,7 @@ Imp has three places where things run, and one rule about what lives where: **wh
 | `tricks/` | The browser tasks the imp keeps on its computer, and how it uses the web | `live` |
 | `update/` | The host's updates to the latest release |  |
 | `flags/` | The feature flags: each one's default, deciding them from the owner's `flags.json` or Vercel Flags, and keeping the choice Settings makes for the next start | `datadir`, `live` |
+| `assistants/` | Other assistants, such as Claude Code or Cursor, using the apps the owner shares with them: the MCP server at /mcp and the owner's choice of apps | `apps`, `live`, `datadir` |
 | `live/` | Live answers: the topics a change names, and the streams that answer again when one changes |  |
 | `datadir/` | Reading back the JSON files the host keeps in its data directory, so a damaged one never stops the host |  |
 | `processes/` | The programs the host runs beside itself, killed when it exits, and the ports they take on its loopback |  |

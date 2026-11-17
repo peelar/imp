@@ -95,6 +95,7 @@ const mutations: Record<Exclude<MutationSource, 'updateRestart'>, true> = {
   backupTurnOn: true,
   backupTurnOff: true,
   flagsChoose: true,
+  assistantsShare: true,
   appsSave: true,
   appsDiscard: true,
   appsUndo: true,

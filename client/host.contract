@@ -34,8 +34,17 @@ shape Account
   routines: Routine[]
   notices: Notice[]
   flags: Flag[]
+  // The apps, and which of them the person shares with other assistants over MCP (Settings → Assistants).
+  assistants: SharedApp[]
   // Whether the onboarding still shows the person their first app, Todos: until it is installed, or turned down.
   introduceApps: bool
+
+// An app as Settings → Assistants lists it: whether other assistants, such as Claude Code, may use it.
+shape SharedApp
+  id: string
+  name: string
+  symbol: string
+  shared: bool
 
 // A feature flag, as Settings shows it: whether it is `on` now, and whether it is on after the host's `next` start,
 // which the person's choice decides.

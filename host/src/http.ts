@@ -1,5 +1,6 @@
 // The host's one HTTP origin, on localhost only: the shell's API (/api/live/<source> streams an answer,
-// /api/call/<name> makes a change), a few files of the host's own, the computer's screen, and the built web client.
+// /api/call/<name> makes a change), the MCP server other assistants use the owner's apps through (/mcp), a few files of
+// the host's own, the computer's screen, and the built web client.
 // `tailscale serve` is the gate in front of it and tells it who signed in.
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
@@ -21,6 +22,12 @@ export type HttpOptions = {
   /** The Tailscale login allowed in. Absent: everyone on the tailnet. */
   readonly owner: string | undefined;
   readonly api: ShellApi;
+  /** Answers a request to /mcp, given the address the host was reached at (assistants/assistants.ts). */
+  readonly mcp: (
+    req: IncomingMessage,
+    res: ServerResponse,
+    origin: string
+  ) => Promise<void>;
   readonly topics: Topics;
   readonly screens: ScreenSockets;
   /** The built web client to serve now, if there is one: the host builds a new one when its apps change. */
@@ -195,6 +202,8 @@ async function serve(options: HttpOptions, request: Request) {
 
   if (method === "OPTIONS") {
     send(res, 204);
+  } else if (url.pathname === "/mcp") {
+    await options.mcp(req, res, reachedAt(req, options.port));
   } else if (method === "GET" && /^\/api\/live\/\w+$/.test(url.pathname)) {
     await serveSource(options, request);
   } else if (method === "POST" && /^\/api\/call\/\w+$/.test(url.pathname)) {

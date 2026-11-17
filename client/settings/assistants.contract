@@ -1,0 +1,36 @@
+// Settings' Assistants: other assistants on the tailnet, such as Claude Code or Cursor, using the apps the person shares
+// with them, over MCP at the host's /mcp (host/src/assistants/). No app is shared until the person turns it on.
+
+use Label, Body, Lead, Mono from "../look.contract"
+use Button from "../controls.contract"
+use SharedApp from "../host.contract"
+
+component AssistantsSettings
+  props
+    apps: SharedApp[]
+    // The host's MCP address, which an assistant is given.
+    url: string
+    copyUrl: action
+    share: action
+  view
+    column testId="assistants"
+      row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
+        text "Assistants" class=Label color="ink.strong" role="heading" aria-level=2
+      column gap="space.ms" padding="space.md 0" border-bottom="1px solid line.subtle"
+        text "Claude Code, Cursor and other assistants on your tailnet can use the apps you share here, over MCP. What an app tells them goes to their model."
+          class=Body color="ink.muted"
+        row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.md" border="1px solid line.strong"
+          text url flex=1 min-width=0 class=Mono overflow-wrap="anywhere" user-select="all" testId="assistants-url"
+          Button(press=copyUrl, variant="secondary", disabled=false, testId="assistants-copy")
+            image "symbol:icon.copy" width=13 height=13 aria-hidden=true
+            text "Copy"
+        text `In Claude Code: claude mcp add --transport http imp ${url}` class=Mono color="ink.muted"
+          overflow-wrap="anywhere" user-select="all" testId="assistants-claude"
+      if apps.length == 0
+        text "No apps yet." class=Body color="ink.muted" padding="space.ms 0" testId="assistants-empty"
+      for a in apps key=a.id
+        row align-items="center" gap="space.ms" padding="space.ms 0" border-bottom="1px solid line.subtle"
+          image a.symbol width=16 height=16 aria-hidden=true
+          text a.name class=Lead flex=1 min-width=0 testId=`assistants-app-${a.id}`
+          input type="checkbox" switch checked=a.shared change=share(a.id) aria-label=`Share ${a.name}`
+            testId=`assistants-share-${a.id}`

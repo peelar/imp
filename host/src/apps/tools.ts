@@ -14,11 +14,14 @@ import type { Args, Operation } from "./protocol.ts";
 /** How many actions one search returns at most. */
 const FOUND = 20;
 
-export type AppToolsOptions = {
+/** The saved apps' operations the agent may run, which the gateway offers (apps.ts). */
+export type AgentApps = {
   /** The user's saved apps. */
   readonly apps: () => readonly AppInfo[];
   /** A saved app's operations, once it loaded; throws why it did not. */
   readonly operations: (id: string) => Promise<readonly Operation[]>;
+  /** A saved app's operations as it last loaded, without reaching the machine; undefined before it loaded. */
+  readonly known: (id: string) => readonly Operation[] | undefined;
   /** Runs an operation the agent may run, in the saved app or in its draft. */
   readonly run: (action: {
     readonly app: string;
@@ -49,7 +52,7 @@ const searchable = (app: AppInfo, operation: Operation) =>
     .toLowerCase();
 
 /** The agent's actions that match `query`, best first, and why any app could not be searched. */
-async function findActions(options: AppToolsOptions, query: string) {
+async function findActions(options: AgentApps, query: string) {
   const settled = await Promise.allSettled(
     options.apps().map(async (app) => ({
       app,
@@ -102,7 +105,7 @@ async function findActions(options: AppToolsOptions, query: string) {
   };
 }
 
-export function appTools(options: AppToolsOptions) {
+export function appTools(options: AgentApps) {
   return defineExtension({
     name: "apps",
     sections: [

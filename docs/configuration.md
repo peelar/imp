@@ -38,6 +38,7 @@ Everything that is yours lives in `DATA_DIR`, on the host. Back it up, and you h
   - `apps/`: one SQLite database per app (and per draft)
   - `code/`: the apps the imp made or changed, with their history
   - `backup/`: a git repository with every version of the apps' code
+  - `assistants.json`: the apps you share with other assistants in Settings → Assistants, if any
   - `connections.json`: the names of the accounts you connected in Settings → Connections (their tokens are in the vault)
   - `builds/`: the web client builds the host serves
   - `vault/`: the secrets vault (OpenBao)

@@ -9,6 +9,7 @@ import type { Registry } from "@earendil-works/pi-durable";
 import { RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { agentRegistry, openHarness } from "./agent/agent.ts";
 import { type AppGateway, appGateway, hasAppData } from "./apps/apps.ts";
+import { openAssistants } from "./assistants/assistants.ts";
 import { type AppBackup, appBackup, type GithubApi } from "./backup/backup.ts";
 import { openConnections } from "./connections/connections.ts";
 import { TOPIC as CHAT, openChats } from "./chats/chats.ts";
@@ -421,6 +422,32 @@ function openAppGateway(
   return gateway;
 }
 
+/** Other assistants on the tailnet, such as Claude Code, which reach the apps the owner shares with them over MCP. */
+const openOtherAssistants = (
+  { options, topics }: Parts,
+  gateway: AppGateway,
+  version: string
+) =>
+  openAssistants({
+    dataDir: options.dataDir,
+    topics,
+    apps: gateway.agent,
+    version,
+    log: (message) => {
+      console.error(message);
+    },
+  });
+
+/** Loads every app now, and what depends on them. A machine that is down is retried by the first call that needs it. */
+async function loadApps(parts: {
+  readonly gateway: AppGateway;
+  readonly studio: { readonly start: () => Promise<void> };
+  readonly tricks: { readonly refresh: () => Promise<void> };
+}) {
+  await parts.gateway.start();
+  await Promise.all([parts.studio.start(), parts.tricks.refresh()]);
+}
+
 /** The agent's machine, for something that is about to use it. */
 const machineInUse = (computer: Computer) => async () => {
   const running = await computer.machine();
@@ -492,15 +519,10 @@ export async function startHost(options: HostOptions) {
   const agent = await openAgent(parts, { gateway, secrets, account });
   const { harness, chats, routines, tricks, notifications } = agent;
 
-  // Load every app now. A machine that is down is retried by the first call that needs it.
-  const loadApps = async () => {
-    await gateway.start();
-    await Promise.all([apps.start(), tricks.refresh()]);
-  };
-
-  loadApps().catch(report("apps"));
+  loadApps({ gateway, studio: apps, tricks }).catch(report("apps"));
 
   const screens = screenSockets(computer);
+  const assistants = openOtherAssistants(parts, gateway, version);
 
   const http = await serveHttp({
     port: options.port,
@@ -517,10 +539,12 @@ export async function startHost(options: HostOptions) {
       backup,
       connections,
       flags,
+      assistants,
       studio: apps,
       gateway,
       version,
     }),
+    mcp: assistants.serve,
     topics,
     screens,
     // The newest shell the host built for its apps, else the one it shipped with.
@@ -540,6 +564,7 @@ export async function startHost(options: HostOptions) {
     idle: async () => !(await chats.busy()),
     async close() {
       screens.close();
+      assistants.close();
       http.close();
       gateway.close();
       computer.close();

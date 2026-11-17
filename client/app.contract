@@ -27,6 +27,7 @@ use MemorySettings from "./settings/memory.contract"
 use NotificationSettings from "./settings/notifications.contract"
 use ExperimentalSettings from "./settings/experimental.contract"
 use ConnectionsSettings from "./settings/connections.contract"
+use AssistantsSettings from "./settings/assistants.contract"
 use AppTile, Memory, Secrets, Connection, Notice, Host, Account, ChatState, Build, Update, Reply from "./host.contract"
 use repoPath, AppDirectory, directory from "./app-directory.contract"
 use withSpoken, Transcript, Composer from "./chat.contract"
@@ -159,7 +160,7 @@ component App
   // The app whose page shows what an app is: the first app, once the onboarding installed it, until the person
   // dismisses it.
   state guide = "" persist
-  // Settings' open section: "general", "computer", "memory", "secrets", "connections" or "experimental".
+  // Settings' open section: "general", "computer", "memory", "secrets", "connections", "assistants" or "experimental".
   state settingsPane = "general"
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
   state secretRound = 0
@@ -234,6 +235,7 @@ component App
   mutation backupTurnedOn as shape Reply
   mutation backupTurnedOff as shape Reply
   mutation flagChosen as shape Reply queue
+  mutation appShared as shape Reply queue
   mutation alertsAsked as shape NotificationStatus
   mutation listening as shape SpeechRecognitionInfo then listened
   mutation unheard as shape SpeechRecognitionInfo
@@ -817,6 +819,10 @@ component App
     send backupTurnedOff = backupTurnOff()
   action chooseFlag(key: string, on: bool)
     send flagChosen = flagsChoose(key, on)
+  action shareApp(id: string, on: bool)
+    send appShared = assistantsShare(id, on)
+  action copyMcpUrl
+    copyText(`${host.origin}/mcp`)
 
   view
     main navigationKey=`${top(nav).id}` navigate=follow key=keyDown keyup=keyUp notificationclick=openNotice testId="app" width="100%" height="100%"
@@ -984,7 +990,7 @@ component App
                         // Settings' sections, one at a time.
                         row role="group" aria-label="Settings sections" gap="space.ms" overflow-x="auto"
                           border-bottom="1px solid line.subtle" testId="settings-sections"
-                          for s in ["general", "computer", "memory", "secrets", "connections", "experimental"] key=s
+                          for s in ["general", "computer", "memory", "secrets", "connections", "assistants", "experimental"] key=s
                             button press=openSettings(s) aria-pressed=(settingsPane == s) testId=`settings-pane-${s}`
                               appearance="none" display="flex" align-items="baseline" padding="space.sm 0" margin-bottom="-1px" border="none"
                               border-bottom=(settingsPane == s ? "2px solid ink.strong" : "2px solid transparent")
@@ -1014,6 +1020,8 @@ component App
                             busy=(pending(githubConnected) or pending(githubDisconnected) or pending(backupTurnedOn) or pending(backupTurnedOff)),
                             connect=connectGithub, cancel=cancelGithub, disconnect=disconnectGithub, copyCode=copyGithubCode,
                             turnOn=turnOnBackup, turnOff=turnOffBackup)
+                        else if settingsPane == "assistants"
+                          AssistantsSettings(apps=account.assistants, url=`${host.origin}/mcp`, copyUrl=copyMcpUrl, share=shareApp)
                         else if settingsPane == "experimental"
                           ExperimentalSettings(flags=account.flags, choose=chooseFlag)
                         else

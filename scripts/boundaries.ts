@@ -134,6 +134,13 @@ export const CONTEXTS = new Map<string, Context>([
     },
   ],
   [
+    "assistants",
+    {
+      owns: "Other assistants, such as Claude Code or Cursor, using the apps the owner shares with them: the MCP server at /mcp and the owner's choice of apps",
+      uses: ["apps", "live", "datadir"],
+    },
+  ],
+  [
     "live",
     {
       owns: "Live answers: the topics a change names, and the streams that answer again when one changes",

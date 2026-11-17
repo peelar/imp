@@ -10,7 +10,7 @@ import { once } from "node:events";
 import { type RawData, WebSocket } from "ws";
 import type { Json } from "../../../sdk/app.ts";
 import type { AppData } from "./data.ts";
-import { type AppInfo, appTopic } from "./folders.ts";
+import { type AppInfo, appTopic, OPERATIONS_TOPIC } from "./folders.ts";
 import { checkManifest, type Loaded } from "./manifest.ts";
 import type { Topics } from "../live/live.ts";
 import type { Machine } from "../machine/machine.ts";
@@ -216,8 +216,9 @@ function slotAnswers({ slots, loads, data, topics, log, fetch }: SlotState) {
         return;
       }
 
-      // A new version may answer differently: refresh the app's open views.
+      // A new version may answer differently: refresh the app's open views, and what lists its operations.
       topics.changed(appTopic(app.id));
+      topics.changed(OPERATIONS_TOPIC);
     },
     loadFailed(message: Message<"loadFailed">) {
       const app = current(message);

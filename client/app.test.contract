@@ -364,6 +364,19 @@ test "Settings' Experimental tab keeps a feature flag for Imp's next start"
   clock until state account.flags.0.next == true within 5000
   expect tree missing "flag-pending-0"
 
+test "Settings' Assistants tab gives the MCP address and shares an app with other assistants"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  tap "settings-pane-assistants"
+  expect text "assistants-app-github" == "GitHub"
+  expect state account.assistants.0.shared == false
+  tap "assistants-share-github"
+  clock until state account.assistants.0.shared == true within 5000
+  tap "assistants-share-github"
+  clock until state account.assistants.0.shared == false within 5000
+
 test "the sidebar starts new chats, folds all but the latest three, and lists the imp's tricks"
   size 1280x800
   request POST "/api/call/accountSignIn" []

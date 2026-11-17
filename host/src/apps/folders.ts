@@ -27,6 +27,7 @@ const RESERVED = new Set([
   "backup",
   "connections",
   "flags",
+  "assistants",
   "tricks",
   "directory",
 ]);
@@ -80,6 +81,9 @@ export const checkSlot = (id: string) => `${id}~check`;
 
 /** The topic the app's open views listen to: anything that may change what the app answers tells it. */
 export const appTopic = (id: string) => `app:${id}`;
+
+/** The topic that changes when a version loads or stops, which may change the operations the apps offer. */
+export const OPERATIONS_TOPIC = "apps:operations";
 
 const why = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause);

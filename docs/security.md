@@ -9,13 +9,18 @@ Imp gives an agent a computer and your accounts. The design keeps one line clear
 - With `OWNER_LOGIN` set, every other login gets `403 This Imp belongs to someone else.` Without it, everyone on your tailnet gets in.
 - Writes (`POST /api/call/*`) accept JSON only, so a cross-site form can't send one without the browser asking first.
 - The computer's screen checks both the login and the page's origin, so another site you have open cannot connect to it.
+- The MCP server at `/mcp` is behind the same gate, and it turns away a browser page from any other origin.
+
+## What other assistants receive
+
+Other assistants on your tailnet, such as Claude Code or Cursor, can use the apps you share with them in Settings → Assistants, over MCP ([Apps](apps.md#other-assistants)). **This is the one way app data leaves the host:** what a shared app's tool answers goes to that assistant and to its model provider, under their terms. Nothing is shared until you turn an app on. Operations marked `agent: false` and drafts are never offered, and writes through MCP land in your apps as the imp's do.
 
 ## What the agent's computer can do
 
 Assume anything on the computer can be read by the agent, and by whatever manages to steer it. The agent has root there. So:
 
 - **Provider credentials stay on the host.** The E2B key and Tailscale identity never reach the computer, and nothing on it can call the provider's API.
-- **Your data stays on the host.** App databases are SQLite files on the host. App code on the computer reaches them only through the host, one call at a time.
+- **Your data stays on the host.** App databases are SQLite files on the host, and leave it only through the apps you share with other assistants. App code on the computer reaches them only through the host, one call at a time.
 - **Your secrets stay on the host.** The computer gets stand-ins. See [The secrets vault](vault.md).
 - **Memory stays on the host.** It is a guarantee of the memory contract.
 - **agentd requires a token** on every connection. The token is derived from `DATA_DIR/host-secret`, which only the host has.

@@ -174,6 +174,17 @@ const crossings = [
     says: "uses secrets/, which connections/ may not",
   },
   {
+    crosses:
+      "other assistants reaching the agent's machine, around the checks the app gateway makes on every call",
+    files: [
+      [
+        "assistants/assistants.ts",
+        'import type { Machine } from "../machine/machine.ts";',
+      ],
+    ],
+    says: "uses machine/, which assistants/ may not",
+  },
+  {
     crosses: "a context using the files that put the host together",
     files: [["apps/apps.ts", 'import { startHost } from "../host.ts";']],
     says: "a context never uses the files that put the host together",

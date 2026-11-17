@@ -16,10 +16,15 @@ import { bool, compile, obj, str } from "@earendil-works/pi-schema";
 import type { FetchAnswer, Json } from "../../../sdk/app.ts";
 import { checkFetch } from "./connections.ts";
 import { openAppData } from "./data.ts";
-import { type AppInfo, appTopic, draftSlot } from "./folders.ts";
+import {
+  type AppInfo,
+  appTopic,
+  draftSlot,
+  OPERATIONS_TOPIC,
+} from "./folders.ts";
 import { type AppMachine, appMachine } from "./socket.ts";
 import { appSync, SYNC_TOPIC } from "./sync.ts";
-import { appTools } from "./tools.ts";
+import { type AgentApps, appTools } from "./tools.ts";
 import { appVersions } from "./versions.ts";
 import { appWatch } from "./watch.ts";
 import type { Topics } from "../live/live.ts";
@@ -42,6 +47,10 @@ export {
 } from "./folders.ts";
 
 export type { AppFiles, AppInfo } from "./folders.ts";
+
+export { OPERATIONS_TOPIC } from "./folders.ts";
+
+export type { AgentApps } from "./tools.ts";
 
 export { SYNC_TOPIC } from "./sync.ts";
 
@@ -166,7 +175,9 @@ export function appGateway(options: GatewayOptions) {
     log,
   });
 
-  options.registry.install(agentTools(machine));
+  const agent = agentApps(machine);
+
+  options.registry.install(appTools(agent));
 
   /** Stops whatever runs in `slot`. Its data stays. */
   const uninstall = (slot: string) => {
@@ -176,6 +187,7 @@ export function appGateway(options: GatewayOptions) {
 
     if (app) {
       topics.changed(appTopic(app.id));
+      topics.changed(OPERATIONS_TOPIC);
     }
   };
 
@@ -188,6 +200,11 @@ export function appGateway(options: GatewayOptions) {
   });
 
   return {
+    /**
+     * The saved apps' operations the agent may run, and their runs: what the agent's tools and other assistants (over
+     * MCP) reach, by the same path, so a write refreshes the open views either way.
+     */
+    agent,
     /** Every app the shell or the agent can reach, saved or only a draft so far: the draft's name when it has one. */
     apps: () => shown(slots),
     /** Each app's live version and draft, which only the studio moves (versions.ts). */
@@ -235,19 +252,19 @@ export function appGateway(options: GatewayOptions) {
   };
 }
 
-/** The two tools the agent finds and runs the saved apps' operations with (tools.ts). */
-const agentTools = (machine: AppMachine) =>
-  appTools({
-    apps: () => saved(machine.slots()),
-    operations: async (id) => (await machine.loaded(id)).manifest.operations,
-    run: async ({ app, name, args, draft }) =>
-      await run(machine, {
-        slot: draft ? draftSlot(app) : app,
-        name,
-        args,
-        agent: true,
-      }),
-  });
+/** The saved apps' operations, as the agent finds and runs them (tools.ts), and other assistants over MCP. */
+const agentApps = (machine: AppMachine): AgentApps => ({
+  apps: () => saved(machine.slots()),
+  operations: async (id) => (await machine.loaded(id)).manifest.operations,
+  known: (id) => machine.known(id)?.manifest.operations,
+  run: async ({ app, name, args, draft }) =>
+    await run(machine, {
+      slot: draft ? draftSlot(app) : app,
+      name,
+      args,
+      agent: true,
+    }),
+});
 
 /** Holds the `app.fetch` of the version in `slot` to its connections, then sends it. */
 async function checkedFetch(

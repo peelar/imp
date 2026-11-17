@@ -1,10 +1,16 @@
 // What the shell reads and changes, by name. Each read is a live source and each change a call (live/live.ts); every
 // context names its own in its shell.ts, and this file puts them together. The shell's own names start with one of a
-// few words (account, chat, routines, apps, build, version, computer, memory, secrets, backup, connections, flags), which no app
+// few words (account, chat, routines, apps, build, version, computer, memory, secrets, backup, connections, flags,
+// assistants), which no app
 // may take as its id (apps/folders.ts); every other name goes to the app that owns it, such as `todosSetDone` to the
 // todos app's `setDone`.
 import type { Json } from "../../sdk/app.ts";
 import { type AppGateway, appCall, appSource, appsCalls } from "./apps/apps.ts";
+import {
+  type Assistants,
+  assistantsCalls,
+  TOPIC as ASSISTANTS,
+} from "./assistants/assistants.ts";
 import { type Chats, chatCalls, chatSource } from "./chats/chats.ts";
 import {
   TOPIC as COMPUTER,
@@ -76,6 +82,8 @@ export type ShellApiOptions = {
   readonly connections: Connections;
   /** The feature flags, for Settings: each one's state and the owner's choice for the next start. */
   readonly flags: Flags;
+  /** The apps the owner shares with other assistants over MCP, for Settings → Assistants. */
+  readonly assistants: Assistants;
   /** The app studio: drafts, saved versions and the shell's builds. */
   readonly studio: Studio;
   readonly gateway: AppGateway;
@@ -104,6 +112,7 @@ export function shellApi(options: ShellApiOptions) {
     ...backupCalls(options.backup),
     ...connectionsCalls(options.connections),
     ...flagCalls(options.flags),
+    ...assistantsCalls(options.assistants),
   ]);
 
   return {
@@ -127,6 +136,7 @@ export function shellApi(options: ShellApiOptions) {
 function shellSources(options: ShellApiOptions) {
   const {
     account,
+    assistants,
     backup,
     chats,
     connections,
@@ -156,6 +166,7 @@ function shellSources(options: ShellApiOptions) {
     routines: routines.state(),
     notices: notifications.state(),
     flags: flags.list(),
+    assistants: assistants.state(),
     introduceApps: studio.introduceApps(),
   });
 
@@ -174,6 +185,7 @@ function shellSources(options: ShellApiOptions) {
           ROUTINES,
           NOTICES,
           FLAGS,
+          ASSISTANTS,
           APPS_TOPIC,
         ],
         load: whole,
