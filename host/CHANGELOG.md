@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.15.0
+
+### Minor Changes
+
+- 38733a8: Claude Code, Cursor and other assistants on your tailnet can now use your apps over MCP, at your host's `/mcp`. Choose which apps they may use in Settings → Assistants; none are shared until you turn them on, and what a shared app answers goes to that assistant's model.
+
 ## 0.14.8
 
 ### Patch Changes
