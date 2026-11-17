@@ -144,7 +144,7 @@ export function studio(options: StudioOptions) {
   };
 
   const decisions = appDecisions({ ...versions, history, rebuildLater });
-  const installs = appInstalls({ ...versions, shipped, rebuildLater });
+  const installs = appInstalls({ ...versions, shipped, rebuildLater, log });
 
   const nameOf = (id: string) =>
     gateway.apps().find((app) => app.id === id)?.name;

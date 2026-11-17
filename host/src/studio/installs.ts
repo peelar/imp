@@ -1,5 +1,6 @@
 // The person's Install and Uninstall, apart from the decisions on a draft (decisions.ts). Install puts in an app Imp
 // ships, as the onboarding does with GitHub and the app directory with Todos; Uninstall removes any app with its data.
+import { setTimeout } from "node:timers/promises";
 import {
   APP_ID,
   type AppFiles,
@@ -19,17 +20,22 @@ export type InstallsOptions = {
   readonly appsChanged: () => void;
   /** Rebuilds the served build after the work under way, without waiting for it. */
   readonly rebuildLater: () => void;
+  readonly log: (message: string) => void;
 };
+
+/** How long Install waits for the app to load before it answers anyway. */
+const INSTALL_WAIT_MS = 5000;
 
 export function appInstalls(options: InstallsOptions) {
   const { gateway, folders, builds } = options;
 
   return {
     /**
-     * Installs an app Imp ships. The served build is rebuilt only when it is the host's: the repository's has every one.
-     * The rebuild runs after the answer, as it can take minutes (installing Exact first, on a new host): a caller that
-     * gives up on a slow answer (the Mac app's after 60 s) would never send what it does next, such as the onboarding's
-     * ask to build the first app.
+     * Installs an app Imp ships, and answers once it is in, or within a few seconds of starting to load: loading waits
+     * for the computer, and a container or cloud machine that was asleep can take a minute to start, longer than a
+     * caller waits (the Mac app gives up after 60 s, and the onboarding then never moves on). An app that fails to load
+     * later is removed again, as one that fails at once is, and the shell hears so. The served build is rebuilt only
+     * when it is the host's (the repository's has every one), after the answer: on a new host it installs Exact first.
      */
     install: async (id: string) => {
       const files = options.shipped.get(id);
@@ -44,12 +50,19 @@ export function appInstalls(options: InstallsOptions) {
 
       const app = appInfo(files, id);
 
-      try {
-        await gateway.restore(id, { app });
-      } catch (error) {
-        await gateway.restore(id, undefined);
-        throw error;
-      }
+      const loading = gateway
+        .restore(id, { app })
+        .catch(async (cause: unknown) => {
+          await gateway.restore(id, undefined);
+          folders.remove(id);
+          options.appsChanged();
+          throw cause;
+        });
+
+      const loaded = await Promise.race([
+        loading.then(() => true),
+        setTimeout(INSTALL_WAIT_MS, false),
+      ]);
 
       // An app whose server code is Imp's runs as the repository has it, so Imp's updates reach it; any other is the
       // person's.
@@ -61,6 +74,14 @@ export function appInstalls(options: InstallsOptions) {
       }
 
       options.appsChanged();
+
+      if (!loaded) {
+        loading.catch((cause: unknown) => {
+          options.log(
+            `studio: ${id} did not load, so it was removed: ${String(cause)}`
+          );
+        });
+      }
 
       if (builds.current() !== undefined) {
         options.rebuildLater();

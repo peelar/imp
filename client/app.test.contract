@@ -16,6 +16,13 @@ test "onboarding signs in with ChatGPT through a device code"
   expect text "onboarding-step" == "3 / 3"
   // One thing to do: connecting GitHub comes after, on the app's page.
   expect tree missing "github-connect"
+  // Back goes to the computer step, done as it is, and on again to the first app without changing it.
+  tap "onboarding-back"
+  expect tree has "onboarding-computer"
+  expect text "onboarding-step" == "2 / 3"
+  tap "onboarding-continue"
+  expect tree has "first-app"
+  expect text "onboarding-step" == "3 / 3"
   tap "first-app-build"
   clock until state account.introduceApps == false within 10000
   expect tree missing "onboarding"

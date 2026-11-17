@@ -153,6 +153,8 @@ component App
   // The onboarding's ask for the first app, and whether its install sends that ask to the imp ("build") or not ("skip").
   state firstAsk = "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review."
   state firstApp = ""
+  // An onboarding step the person went back to, though it is done: "model" or "computer"; "" for the step Imp is at.
+  state onboardingBack = ""
   // The app the last install was for, and the one to open once the shell lists it.
   state added = ""
   state toOpen = ""
@@ -221,10 +223,10 @@ component App
   mutation appSynced as shape Reply
   mutation appInstalled as shape Reply then afterInstall
   mutation appUninstalled as shape Reply
-  mutation computerSwitched as shape Reply
+  mutation computerSwitched as shape Reply then afterComputerChosen
   mutation computerRefreshed as shape Reply
   mutation computerRetried as shape Reply
-  mutation computerKeySaved as shape Reply
+  mutation computerKeySaved as shape Reply then afterComputerChosen
   mutation forgotten as shape Reply queue
   mutation secretSaved as shape Reply then afterSecretSaved
   mutation loginSaved as shape Reply then afterLoginSaved
@@ -277,7 +279,11 @@ component App
   derive needsComputer = signedIn and computer.status == "none"
   // Its third: the first app, until the person adds it or skips it.
   derive needsFirstApp = signedIn and not needsComputer and account.introduceApps
-  derive installError = match appInstalled { case some(r) => r.error, case none => "" }
+  derive installError = ((failed(appInstalled) and not pending(appInstalled))
+    ? "Your Imp didn't answer in time. Try again in a moment."
+    : match appInstalled { case some(r) => r.error, case none => "" })
+  // The onboarding's step on screen, 1 to 3: the one Imp is at, or an earlier one the person went back to.
+  derive onboardingStep = onboardingBack == "model" ? 1 : onboardingBack == "computer" ? 2 : needsFirstApp ? 3 : signedIn ? 2 : 1
   derive uninstallError = match appUninstalled { case some(r) => r.error, case none => "" }
   // An onboarding section waiting on something done outside Imp (a computer set up with the setup prompt, a container
   // engine started) has the host look again every few seconds, so it shows up without a click.
@@ -469,6 +475,7 @@ component App
       send signInCancelled = accountCancel()
     else
       keyForm = false
+      onboardingBack = ""
       send signInStarted = accountSignIn()
   action toggleKeyForm
     if not keyForm and signingIn
@@ -488,6 +495,7 @@ component App
     if match keyUsed { case some(r) => r.ok, case none => false }
       keyValue = ""
       keyForm = false
+      onboardingBack = ""
   action askSignOut
     showModal("confirm-signout")
   action signOut
@@ -788,6 +796,16 @@ component App
   action useOwn(device: string)
     if not (computer.kind == "own" and computer.device == device)
       send computerSwitched = computerUseOwn(device)
+  action afterComputerChosen
+    if match computerSwitched { case some(r) => r.ok, case none => false }
+      onboardingBack = ""
+    if match computerKeySaved { case some(r) => r.ok, case none => false }
+      onboardingBack = ""
+  // Back to the onboarding's step before the one on screen, and on again to where Imp is.
+  action onboardingStepBack
+    onboardingBack = onboardingStep == 3 ? "computer" : "model"
+  action onboardingContinue
+    onboardingBack = ""
   action toggleComputerChoice(next: string)
     computerChoice = computerChoice == next ? "" : next
   action refreshDevices
@@ -1210,7 +1228,16 @@ component App
               Initialled(word="Imp", size="2rem", heading=1)
               row flex=1
               if not unreachable
-                text (needsFirstApp ? "3 / 3" : signedIn ? "2 / 3" : "1 / 3") class=Label testId="onboarding-step"
+                if onboardingStep > 1 and not pending(appInstalled)
+                  button press=onboardingStepBack aria-label="Back to the previous step" testId="onboarding-back"
+                    appearance="none" cursor="pointer" display="flex" align-items="center" gap="space.xs"
+                    padding="space.xs space.sm" border="none" background-color="transparent" color="ink.muted" class=Label
+                    :hover
+                      color="ink.strong"
+                      background-color="surface.soft"
+                    image "symbol:icon.back" width=12 height=12 aria-hidden=true
+                    text "Back"
+                text `${onboardingStep} / 3` class=Label testId="onboarding-step"
             if unreachable
               column gap="space.ms" testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
                 WizardTitle(title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"),
@@ -1222,15 +1249,18 @@ component App
                     color="ink.strong" autocapitalize="none" autocorrect="off" spellcheck=false
                   Button(press=connect, variant="primary", disabled=(hostDraft.trim() == ""), testId="host-connect-button")
                     text "Connect"
-            else if needsFirstApp
+            else if needsFirstApp and onboardingBack == ""
               FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=pending(appInstalled), error=installError,
                 build=buildFirstApp, skip=skipFirstApp, still=still)
-            else if signedIn
+            else if signedIn and onboardingBack != "model"
               ComputerWizard(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),
                 error=(keyError != "" ? keyError : switchError),
                 useContainer=useContainer, setCloudKey=setCloudKey, useOwn=useOwn,
                 copyPrompt=copySetupPrompt, choice=computerChoice, toggle=toggleComputerChoice,
                 still=still)
+              if not needsComputer
+                WizardButton(label=`Keep ${computer.name}`, press=onboardingContinue, testId="onboarding-continue",
+                  primary=false, disabled=(pending(computerSwitched) or pending(computerKeySaved)))
             else
               column gap="space.ms" animation=(still ? "none" : "rise 260ms ease-out both")
                 image "assets/art/workshop.jpg" alt="An engraving of a workshop: a person at a desk among machines"
@@ -1273,4 +1303,7 @@ component App
                       text apiKeyError color="ink.danger" class=Body testId="key-error"
                     WizardButton(label=(pending(keyUsed) ? "Checking…" : "Connect"), press=useKey, testId="key-use",
                       primary=true, disabled=(pending(keyUsed) or keyBase.trim() == "" or keyValue.trim() == "" or keyModel.trim() == ""))
+                if signedIn
+                  WizardButton(label="Keep the model you have", press=onboardingContinue, testId="onboarding-continue",
+                    primary=false, disabled=pending(keyUsed))
 
