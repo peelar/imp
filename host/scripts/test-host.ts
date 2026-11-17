@@ -14,8 +14,13 @@
 // Beside it, on TEST_API_PORT (default 8799), a server that speaks OpenAI's Chat Completions API, for the API key
 // sign-in: it takes the key "test-key" and the model "fake-model", and answers every message "Hello from the API."
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { createServer, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { tmpdir } from "node:os";
+import { text as bodyOf } from "node:stream/consumers";
 import path from "node:path";
 import { createModels, type Provider } from "@earendil-works/pi-ai/models";
 import {
@@ -328,8 +333,17 @@ const json = (res: ServerResponse, status: number, value: ApiAnswer) =>
 const chunk = ({ usage, ...choice }: Chunk) =>
   `data: ${JSON.stringify({ id: "chatcmpl-1", object: "chat.completion.chunk", created: 0, model: "fake-model", choices: [{ index: 0, ...choice }], usage })}\n\n`;
 
-const api = createServer((req, res) => {
-  req.resume();
+/** The API's answer: it says when the request carried an image, so a test sees images reach an API key's model. */
+const reply = (request: string) =>
+  request.includes('"image_url"')
+    ? [chunk({ delta: { role: "assistant", content: "I see an image." } })]
+    : [
+        chunk({ delta: { role: "assistant", content: "Hello from " } }),
+        chunk({ delta: { content: "the API." } }),
+      ];
+
+async function serveApi(req: IncomingMessage, res: ServerResponse) {
+  const request = await bodyOf(req);
 
   if (req.headers.authorization !== "Bearer test-key") {
     json(res, 401, { error: { message: "Incorrect API key provided." } });
@@ -339,8 +353,7 @@ const api = createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.end(
       [
-        chunk({ delta: { role: "assistant", content: "Hello from " } }),
-        chunk({ delta: { content: "the API." } }),
+        ...reply(request),
         chunk({
           delta: {},
           finish_reason: "stop",
@@ -352,6 +365,12 @@ const api = createServer((req, res) => {
   } else {
     json(res, 404, { error: { message: "Not found." } });
   }
+}
+
+const api = createServer((req, res) => {
+  serveApi(req, res).catch((cause: unknown) => {
+    json(res, 500, { error: { message: String(cause) } });
+  });
 });
 
 api.listen(Number(process.env.TEST_API_PORT ?? 8799), "127.0.0.1");

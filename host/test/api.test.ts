@@ -224,6 +224,18 @@ test("an API key the API refuses is not kept; one it takes runs the imp until th
   );
 
   assert.deepEqual(messages.at(-1)?.text, "Hello from the API.");
+
+  // An image reaches the API's model too.
+  const image = { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" };
+
+  assert.deepEqual(
+    await call("chatSend", ["What is this?", "", [image]]),
+    done
+  );
+  await until(
+    "chat",
+    settledChat((all) => all.at(-1)?.text === "I see an image.")
+  );
   assert.deepEqual(await call("chatNew", []), done);
   assert.deepEqual(await call("accountSignOut", []), done);
   assert.equal((await until("account", withStatus("signedOut")))?.kind, "");
