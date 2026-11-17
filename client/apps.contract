@@ -88,31 +88,34 @@ component AppPage
           testId="uninstall")
       scroll id=`${id}-screen` flex=1 min-height=0
         if not draft and (guide or needs != "")
-          column padding="space.lg space.lg space.xs" max-width="measure.note"
-            Callout(tone="accent", testId="app-card")
-              if guide
-                row gap="space.sm" align-items="flex-start" testId="app-guide"
-                  column flex=1 min-width=0 gap="space.xs"
-                    text "Your first app" class=Label color="AccentColor" role="heading" aria-level=2
-                    text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
-                      class=Body
-                  button press=dismissGuide aria-label="Close" title="Close" testId="app-guide-dismiss" appearance="none"
-                    width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
-                    border="none" background-color="transparent" color="ink.muted"
-                    :hover
-                      color="ink.strong"
-                    image "symbol:icon.close" width=11 height=11 aria-hidden=true
-              if needs == "github"
-                column testId="app-needs"
-                  GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
-                    copyCode=copyGithubCode, note="This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile.",
-                    prefix="app-")
-              else if needs != ""
-                column gap="space.sm" align-items="flex-start" testId="app-needs"
-                  text `This app reads with your ${needs} key: add it, and the app fills in.` class=Body color="ink.muted"
-                  Button(press=openSettings("secrets"), variant="accent", disabled=false, testId="app-needs-settings")
-                    text "Add it in Settings"
-                    text "→" aria-hidden=true
+          // In the apps' own column (docs/building-apps.md): measure.page wide, centered, inside space.page, so the card
+          // lines up with the app's screen under it.
+          column padding="space.lg space.page space.xs"
+            column width="100%" max-width="measure.page" margin="0 auto"
+              Callout(tone="accent", testId="app-card")
+                if guide
+                  row gap="space.sm" align-items="flex-start" testId="app-guide"
+                    column flex=1 min-width=0 gap="space.xs"
+                      text "Your first app" class=Label color="AccentColor" role="heading" aria-level=2
+                      text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
+                        class=Body
+                    button press=dismissGuide aria-label="Close" title="Close" testId="app-guide-dismiss" appearance="none"
+                      width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
+                      border="none" background-color="transparent" color="ink.muted"
+                      :hover
+                        color="ink.strong"
+                      image "symbol:icon.close" width=11 height=11 aria-hidden=true
+                if needs == "github"
+                  column testId="app-needs"
+                    GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
+                      copyCode=copyGithubCode, note="This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile.",
+                      prefix="app-")
+                else if needs != ""
+                  column gap="space.sm" align-items="flex-start" testId="app-needs"
+                    text `This app reads with your ${needs} key: add it, and the app fills in.` class=Body color="ink.muted"
+                    Button(press=openSettings("secrets"), variant="accent", disabled=false, testId="app-needs-settings")
+                      text "Add it in Settings"
+                      text "→" aria-hidden=true
         children
 
 // One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.

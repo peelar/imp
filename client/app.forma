@@ -53,6 +53,8 @@ theme
   space.lg = 24px
   space.xl = 32px
   space.xxl = 48px
+  // An app's page edge: the apps' column (docs/building-apps.md) is measure.page wide inside it, centered.
+  space.page = 20px
 
   // Widths: how wide a column of reading runs, so lines stay short enough to read.
   measure.form = 28rem

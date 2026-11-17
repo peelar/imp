@@ -22,9 +22,9 @@ Colours are named by what they do, not by what they look like:
 
 The type scale has one token per role, `type.display.xl` through `type.code`. Screens use it through the text styles, not directly.
 
-Spacing sits on a 4px grid: `space.xxs` (2px), `xs` (4), `sm` (8), `ms` (12), `md` (16), `lg` (24), `xl` (32) and `xxl` (48). Use the tokens for `gap`, `padding` and `margin`, such as `padding="space.sm space.md"`.
+Spacing sits on a 4px grid: `space.xxs` (2px), `xs` (4), `sm` (8), `ms` (12), `md` (16), `lg` (24), `xl` (32) and `xxl` (48), and `space.page` (20), an app's page edge. Use the tokens for `gap`, `padding` and `margin`, such as `padding="space.sm space.md"`.
 
-Widths: `measure.form` for a form, `measure.note` for a note or card, and `measure.page` for a page of reading.
+Widths: `measure.form` for a form, `measure.note` for a note or card, and `measure.page` for a page of reading. An app's column is `measure.page` wide inside `space.page`, centered, and what the shell puts above an app's screen sits in the same column.
 
 ## Text styles
 
