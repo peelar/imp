@@ -1,38 +1,31 @@
-// An installed app in the shell: its tab, and its page around the app's own screen (apps/<id>/app.contract), with
-// the bar that says what it reads and offers Save, Discard and Undo for a draft, and Uninstall; and the onboarding's
-// step that installs the first app.
+// An installed app in the shell: its tab; its controls in its page's one bar, beside its title; its page around the
+// app's own screen (apps/<id>/app.contract); the dialog that manages it; and the onboarding's step that installs the
+// first app.
 
-use Label, Body, Small, Heading, Lead, rise from "./look.contract"
-use Button, DialogButton, Callout from "./controls.contract"
+use Label, Body, Small, Heading, Lead, Title, Control, rise from "./look.contract"
+use Button, DialogButton, ButtonLink, Callout, ErrorNote from "./controls.contract"
 use KeyBadge, Confirm from "./parts.contract"
 use WizardTitle, WizardButton from "./onboarding.contract"
-use Connection from "./host.contract"
+use Connection, AppTile from "./host.contract"
 use GithubSignIn from "./settings/connections.contract"
 
-// An app's page: the shell's bar above the app's own screen, which the app cannot draw over. While the app shows a
-// preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
-// Otherwise it says how the app's sync went, with Sync now, after a save offers to undo it, and offers to uninstall it.
-// Above the app's screen, a card: what an app is, above the first one the onboarding installed, until the person
-// closes it (`guide`); and while the app waits for a key (`needs`), GitHub's sign-in right there, or for another key a
-// button to Settings, which adds it.
+// An app's page, under the page's one bar (AppBar), around the app's own screen, which the app cannot draw over.
+// Above the screen, a card: what an app is, above the first one the onboarding installed, until the person closes it
+// (`guide`); while the app waits for a key (`needs`), GitHub's sign-in right there, or for another key a button to
+// Settings, which adds it; and while a preview shows, what that version reads from outside, and, where this window
+// runs a build of its own (`behind`: the Mac app, which carries its screens and never loads the host's), that it
+// shows the new version's data on the screen it has, with a link to the page in the browser, which has the new one.
 // Waiting is setup still to do, not a failure: the bar says nothing of the sync until the key is there.
 component AppPage
   props
     id: string
     name: string
     draft: bool
-    undo: string
     reads: string
-    sync: string
-    save: action
-    discard: action
-    undoSave: action
-    syncNow: action
-    uninstall: action
-    uninstallError: string
+    behind: bool
+    origin: string
     guide: bool
     dismissGuide: action
-    keys: bool
     needs: string
     openSettings: action
     github: Connection
@@ -43,56 +36,24 @@ component AppPage
   slot
   view
     column flex=1 min-height=0
-      if draft
-        // The preview's own surface, in the accent: its two buttons are drawn in white on it rather than as Buttons.
-        row testId="preview-bar" align-items="center" gap="space.ms" padding="space.sm space.md"
-          background-color="fill.preview" color="ink.on-fill" flex-wrap="wrap"
-          text "Preview" class=Label color="ink.on-fill"
-          column flex=1 min-width="12rem" gap="space.xxs"
-            text "A new version, on a copy of your data. Nothing you do here is kept." class=Body
-            if reads != ""
-              text reads class=Small opacity=0.85 testId="preview-reads"
-          button press=discard(id) testId="preview-discard" padding="space.sm space.ms" border="1px solid ink.on-fill"
-            background-color="transparent" color="ink.on-fill"
-            text "Discard" class=Label color="inherit"
-          button press=save(id) aria-keyshortcuts="Meta+S" testId="preview-save" padding="space.sm space.ms"
-            border="1px solid ink.on-fill" background-color="ink.on-fill" color="fill.preview" position="relative"
-            text "Save" class=Label color="inherit"
-            if keys
-              KeyBadge(chord="Meta+S", at="end")
-      else
-        // Under the page's header, in line with its title.
-        row padding="space.sm space.lg" border-bottom="1px solid line.subtle"
-          row width="100%" align-items="center" gap="space.ms"
-            if sync != ""
-              row flex=1 min-width=0 align-items="center" gap="space.sm" testId="sync-bar"
-                text sync class=Small color=(sync.startsWith("Sync failing") ? "ink.danger" : "ink.muted")
-                  min-width=0 overflow-wrap="anywhere" testId="sync-status"
-                Button(press=syncNow(id), variant="quiet", disabled=(sync == "Syncing…"), testId="sync-now")
-                  text "Sync now"
-            else if uninstallError != ""
-              text uninstallError class=Small color="ink.danger" flex=1 min-width=0 overflow-wrap="anywhere"
-                testId="uninstall-error"
-            else
-              row flex=1
-            if undo != ""
-              DialogButton(dialog=`undo-${id}`, variant="secondary", testId="undo-save")
-                text (undo == "remove" ? "Undo: remove app" : "Undo last save")
-            DialogButton(dialog=`uninstall-${id}`, variant="quiet-danger", testId="uninstall")
-              text "Uninstall"
-        Confirm(id=`undo-${id}`, question="Undo the last save?",
-          message=(undo == "remove" ? "This removes the app and its data." : undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays."),
-          label="Undo", confirm=undoSave(id), testId="undo")
-        Confirm(id=`uninstall-${id}`, question=`Uninstall ${name}?`,
-          message="Are you sure you want to delete the app and all its data?", label="Uninstall", confirm=uninstall(id),
-          testId="uninstall")
       scroll id=`${id}-screen` flex=1 min-height=0
-        if not draft and (guide or needs != "")
+        if (draft and (reads != "" or behind)) or (not draft and (guide or needs != ""))
           // In the apps' own column (docs/building-apps.md): measure.page wide, centered, inside space.page, so the card
           // lines up with the app's screen under it.
           column padding="space.lg space.page space.xs"
             column width="100%" max-width="measure.page" margin="0 auto"
               Callout(tone="accent", testId="app-card")
+                if draft
+                  column gap="space.sm" align-items="flex-start" testId="preview-note"
+                    if reads != ""
+                      text reads class=Body testId="preview-reads"
+                    if behind
+                      text "This window carries Imp's own screens: it shows the new version's data, not its screen. Try the new version in your browser before you save it."
+                        class=Body color="ink.muted"
+                      row
+                        ButtonLink(href=`${origin}/${id}`, variant="accent", testId="preview-open")
+                          text "Open in browser"
+                          text "→" aria-hidden=true
                 if guide
                   row gap="space.sm" align-items="flex-start" testId="app-guide"
                     column flex=1 min-width=0 gap="space.xs"
@@ -117,6 +78,120 @@ component AppPage
                       text "Add it in Settings"
                       text "→" aria-hidden=true
         children
+
+// A symbol-only control in an app's bar, as tall as the page header's other controls (New chat, the drawer).
+component BarSymbol
+  props
+    symbol: string
+    label: string
+    press: action
+    testId: string
+  view
+    button press=press aria-label=label title=label testId=testId appearance="none" width=32 height=32 min-width=32
+      padding=0 display="flex" align-items="center" justify-content="center" flex-shrink=0 box-sizing="border-box"
+      border="1px solid line.strong" background-color="transparent" color="ink.strong"
+      :hover
+        background-color="surface.soft"
+      image symbol width=15 height=15 aria-hidden=true
+
+// BarSymbol for a control that opens a dialog (a Confirm, or ManageApp) by its id.
+component BarDialogSymbol
+  props
+    symbol: string
+    label: string
+    dialog: string
+    testId: string
+  view
+    button commandfor=dialog command="show-modal" aria-label=label title=label testId=testId appearance="none"
+      width=32 height=32 min-width=32 padding=0 display="flex" align-items="center" justify-content="center"
+      flex-shrink=0 box-sizing="border-box" border="1px solid line.strong" background-color="transparent"
+      color="ink.strong"
+      :hover
+        background-color="surface.soft"
+      image symbol width=15 height=15 aria-hidden=true
+
+// An app's controls, in its page's one bar beside its title. Every control is 32 tall and square-cornered, in a row.
+// While the app shows a preview of a new version, the bar says so beside the title, and offers Back, to the saved
+// version (Discard), and Save. Otherwise Back undoes the last save, while there is one, and on a wide window the bar
+// says how the app's sync went. Manage opens what is done less often: Sync now and Uninstall.
+component AppBar
+  props
+    app: AppTile
+    wide: bool
+    keys: bool
+    save: action
+    discard: action
+    undoSave: action
+    syncNow: action
+    uninstall: action
+    uninstallError: string
+  view
+    row flex=1 min-width=0 align-items="center" gap="space.sm" testId="app-bar"
+      if app.draft
+        row gap="space.sm" align-items="center" flex-shrink=0 testId="preview-bar"
+          row width=6 height=6 background-color="AccentColor" aria-hidden=true
+          text "Preview" class=Label color="AccentColor"
+      row flex=1 min-width=0 justify-content="flex-end"
+        if wide and not app.draft and app.sync != "" and app.needs == ""
+          text app.sync class=Small color=(app.sync.startsWith("Sync failing") ? "ink.danger" : "ink.muted")
+            white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0 testId="sync-bar"
+      if app.draft
+        BarSymbol(symbol="symbol:icon.back", label="Back to the saved version", press=discard(app.id),
+          testId="preview-discard")
+        button press=save(app.id) aria-keyshortcuts="Meta+S" testId="preview-save" position="relative" flex-shrink=0
+          height=32 box-sizing="border-box" padding="0 space.ms" display="flex" align-items="center"
+          border="1px solid AccentColor" background-color="AccentColor" color="ink.on-fill"
+          :hover
+            opacity=0.9
+          text "Save" class=Control color="inherit"
+          if keys
+            KeyBadge(chord="Meta+S", at="end")
+      else if app.undo != ""
+        BarDialogSymbol(symbol="symbol:icon.back",
+          label=(app.undo == "remove" ? "Undo the save: remove the app" : "Back to the version before the last save"),
+          dialog=`undo-${app.id}`, testId="undo-save")
+      BarDialogSymbol(symbol="symbol:icon.settings", label=`Manage ${app.name}`, dialog=`manage-${app.id}`,
+        testId="app-manage")
+    Confirm(id=`undo-${app.id}`, question="Undo the last save?",
+      message=(app.undo == "remove" ? "This removes the app and its data." : app.undo == "data" ? "The app goes back to its previous version, and its data to how it was before that save: changes since are lost." : "The app goes back to its previous version. Its data stays."),
+      label="Undo", confirm=undoSave(app.id), testId="undo")
+    ManageApp(app=app, syncNow=syncNow, uninstallError=uninstallError)
+    Confirm(id=`uninstall-${app.id}`, question=`Uninstall ${app.name}?`,
+      message="Are you sure you want to delete the app and all its data?", label="Uninstall", confirm=uninstall(app.id),
+      testId="uninstall")
+
+// What is done with an app less often than using it, in a dialog in Confirm's look: what it is, how its sync went with
+// Sync now, and Uninstall, which asks first.
+component ManageApp
+  props
+    app: AppTile
+    syncNow: action
+    uninstallError: string
+  view
+    dialog id=`manage-${app.id}` aria-label=`Manage ${app.name}` width="min(26rem, calc(100vw - 32px))"
+      box-sizing="border-box" padding=0 border="1px solid ink.strong" border-radius=0 background-color="surface.page"
+      color="ink.strong" box-shadow="none" testId="manage"
+      column gap="space.sm" padding="space.lg space.lg 0"
+        text `Manage ${app.name}` class=Title role="heading" aria-level=2
+        text app.description class=Body color="ink.muted"
+      if app.sync != "" and app.needs == ""
+        row align-items="center" gap="space.sm" margin="space.md space.lg 0" padding="space.sm 0"
+          border-top="1px solid line.subtle" border-bottom="1px solid line.subtle"
+          text app.sync class=Small color=(app.sync.startsWith("Sync failing") ? "ink.danger" : "ink.muted") flex=1
+            min-width=0 overflow-wrap="anywhere" testId="sync-status"
+          Button(press=syncNow(app.id), variant="quiet", disabled=(app.sync == "Syncing…"), testId="sync-now")
+            text "Sync now"
+      if uninstallError != ""
+        column padding="space.md space.lg 0"
+          ErrorNote(message=uninstallError, testId="uninstall-error")
+      row justify-content="space-between" align-items="center" gap="space.sm" padding="space.md space.lg space.lg"
+        DialogButton(dialog=`uninstall-${app.id}`, variant="quiet-danger", testId="uninstall")
+          text "Uninstall"
+        button commandfor=`manage-${app.id}` command="close" testId="manage-close" padding="space.sm space.ms"
+          border="1px solid line.strong" border-radius=0 background-color="transparent" color="ink.strong"
+          :hover
+            background-color="surface.soft"
+          text "Done" class=Label color="inherit"
 
 // One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
 component AppTab

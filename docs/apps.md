@@ -42,7 +42,7 @@ An app can read your services and keep a copy current in its database ([Build an
 The host runs an app's `sync` on its live version only, never on a draft:
 
 - when you open the app's tab and its copy is due,
-- when you press **Sync now** on the app's bar,
+- when you press **Sync now** in the app's **Manage** dialog (the gear in its page's bar),
 - on schedule, while the host is connected to the computer, and
 - when a URL the sync watches changed.
 
@@ -64,11 +64,11 @@ The bar says how the last sync went ("Synced 3 min ago", or "Sync failing for 20
 
 3. **You try it**
 
-   The app's tab shows the new version as a preview, on a copy of your data, with **Save** and **Discard**. Open pages reload into it by themselves.
+   The app's tab shows the new version as a preview, on a copy of your data. The page's bar says **Preview** beside the app's name and offers **Save**, and **Back** (←), which discards the preview and goes back to the saved version. Open pages reload into the new version as soon as the host serves it. The Mac app carries its own screens and can't load a new one: there the preview shows the new version's data on the screen it has, and a note offers to open the page in your browser, which shows the new screen.
 
 4. **Only you save**
 
-   Save makes the draft live and keeps the version before it. **Undo** restores it for 48 hours.
+   Save makes the draft live and keeps the version before it. **Undo**, the back arrow in the bar after a save, restores it for 48 hours.
 
 On disk, under `DATA_DIR/code/<id>/`:
 
@@ -87,7 +87,7 @@ On a wide window an app's page has the chat beside it, and the imp is told which
 
 No app runs until it is installed. A new host has none until the onboarding installs GitHub.
 
-**Uninstall**, on the bar of every app's page, asks "Are you sure you want to delete the app and all its data?" and then removes the app: its worker, its live version and draft, Undo's history and its database (`host/src/studio/installs.ts`). Its git backup keeps its code. The host leaves `DATA_DIR/code/<id>/uninstalled` behind, which says the app stays out. The shell stops listing the app at once, and its screen leaves the shell's build the next time the host builds it.
+**Uninstall**, in the **Manage** dialog that the gear in every app's page bar opens, asks "Are you sure you want to delete the app and all its data?" and then removes the app: its worker, its live version and draft, Undo's history and its database (`host/src/studio/installs.ts`). Its git backup keeps its code. The host leaves `DATA_DIR/code/<id>/uninstalled` behind, which says the app stays out. The shell stops listing the app at once, and its screen leaves the shell's build the next time the host builds it.
 
 **Install** puts in an app Imp ships, from `client/apps/`, without the imp: the onboarding installs GitHub this way, and the **App directory** Todos. To have an uninstalled app again, install it again, or ask the imp: `app_code` writes an app Imp ships that you don't have as Imp ships it, and you save its preview like any app's.
 

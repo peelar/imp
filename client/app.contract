@@ -35,7 +35,7 @@ use KeyBadge, Initialled, numbered, Confirm, SettingsPage from "./parts.contract
 use RoutineList, RoutineBar from "./routines.contract"
 use TrickList from "./tricks.contract"
 use ComputerSettings, ComputerScreen, ComputerWizard from "./computer.contract"
-use AppPage, AppTab, FirstAppWizard from "./apps.contract"
+use AppPage, AppBar, AppTab, FirstAppWizard from "./apps.contract"
 use Sidebar from "./sidebar.contract"
 use WizardTitle, WizardFold, KeyField, WizardButton from "./onboarding.contract"
 
@@ -307,6 +307,9 @@ component App
   // The host serves a newer build (an app was added, previewed, saved or undone): relaunch into it. Only where the host
   // served this shell: the Mac app relaunches into the build it carries, which would be stale again, forever.
   derive stale = host.served and build.id != "" and build.id != builtVersion()
+  // A page the host did not serve (the Mac app) runs on the screens it carries: a preview there shows the new
+  // version's data on the screen this build has, and the page says so.
+  derive behind = not host.served and build.id != "" and build.id != builtVersion()
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
   // Imp is opening: the host has not said whether it is set up yet, or it is and the chat has not arrived.
@@ -336,6 +339,10 @@ component App
   derive canNotify = alerts.available and alerts.state == "granted"
   derive waiting = routines.filter(r => r.unread).length + secrets.requests.length
 
+  // A new build (a preview, above all) loads at once, not at the next reconnect: until it does, the page shows the
+  // draft's bar over the screen of the version before.
+  task relaunchStale when stale
+    after(1, relaunchNow)
   task appearance mount
     after(1, applyScheme)
   task heal mount
@@ -419,6 +426,8 @@ component App
     if draft.trim() == ""
       draft = unsent
     unsent = ""
+  action relaunchNow
+    relaunch()
   action reconnect
     if hostLost
       refresh host
@@ -885,7 +894,12 @@ component App
                             KeyBadge(chord="Control+Meta+S", at="end")
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
                       Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
-                      row flex=1
+                      // An app's page has one bar: its controls sit in the header, beside its title.
+                      for a in apps.filter(a => a.id == e.name) key=a.id
+                        AppBar(app=a, wide=wide, keys=keys, save=saveApp, discard=discardApp, undoSave=undoApp,
+                          syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError)
+                      if not apps.map(a => a.id).includes(e.name)
+                        row flex=1
                       // A new release of the Mac app is ready: it waits for the person to restart, never quits Imp.
                       if update.version != ""
                         button press=restartToUpdate disabled=pending(restarting) testId=`update-restart-${e.name}`
@@ -904,7 +918,7 @@ component App
                             animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
                           text "Imp at work" class=Label color="ink.strong"
                       // A narrow header gives the date's place to a ready update.
-                      else if not wide and update.version == ""
+                      else if not wide and update.version == "" and not apps.map(a => a.id).includes(e.name)
                         text formatDate(shown, time.utcOffset, "medium") class=Label
                       // New chat from any page; on a wide window the sidebar has it.
                       if not wide
@@ -1061,10 +1075,10 @@ component App
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=openSettings("computer"))
                   // <apps:screens>
                   if e.name == "github"
-                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), undo=undoKind("github", apps), reads=readsOf("github", apps), sync=syncOf("github", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "github"), dismissGuide=dismissGuide, keys=keys, needs=needsOf("github", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
+                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), reads=readsOf("github", apps), behind=behind, origin=host.origin, guide=(guide == "github"), dismissGuide=dismissGuide, needs=needsOf("github", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       GithubScreen(inbox=githubReadInbox, done=githubDoDone, snooze=githubDoSnooze, restore=githubDoRestore)
                   if e.name == "todos"
-                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), undo=undoKind("todos", apps), reads=readsOf("todos", apps), sync=syncOf("todos", apps), save=saveApp, discard=discardApp, undoSave=undoApp, syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError, guide=(guide == "todos"), dismissGuide=dismissGuide, keys=keys, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
+                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), reads=readsOf("todos", apps), behind=behind, origin=host.origin, guide=(guide == "todos"), dismissGuide=dismissGuide, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The tabs, in a bar along the bottom: on a wide window under the page, between the sidebar and the chat's

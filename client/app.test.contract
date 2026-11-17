@@ -30,7 +30,7 @@ test "onboarding signs in with ChatGPT through a device code"
   expect tree missing "sync-bar"
   tap "app-guide-dismiss"
   expect tree missing "app-guide"
-  expect tree has "uninstall"
+  expect tree has "app-manage"
   tap "app-github-connect"
   clock until state github.status == "waiting" within 5000
   expect text "app-github-code" == "TEST-5678"
@@ -715,6 +715,7 @@ test "an app is uninstalled with its data only once the person confirms it"
   clock until state account.status == "signedIn" within 5000
   tap "tab-todos"
   clock until state todosReadList.length == 1 within 5000
+  tap "app-manage"
   tap "uninstall"
   tap "uninstall-cancel"
   clock settle
