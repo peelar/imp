@@ -9,9 +9,9 @@
 # The host rebuilds the web client whenever the imp previews an app, so a checkout needs what the client builds with:
 # Exact at the commit in client/exact-rev, the Rust toolchains Exact pins, and Bun. This installs Bun and rustup when
 # they are missing, puts Exact where client/exact.mjs and the host look for it (../../../tools/exact from client/, or
-# EXACT), installs what Exact's web build reads (Exact's own `setup` adds the native platforms' tools, which `mac`
-# runs), installs pnpm when it is missing and the workspaces' dependencies alongside, and builds the web client into
-# client/dist.
+# EXACT), installs what Exact's web build reads (Exact's `setup --platform web`; its plain `setup`, which `mac` runs,
+# adds the native platforms' tools), installs pnpm when it is missing and the workspaces' dependencies alongside, and
+# builds the web client into client/dist.
 # Only Node 24+ and git must be there first. Run it again after a pull: it moves Exact to a new pin and rebuilds.
 set -eu
 
@@ -92,18 +92,19 @@ if [ "$(git -C "$exact" rev-parse HEAD 2>/dev/null)" != "$rev" ]; then
 fi
 cd "$exact"
 bun install --frozen-lockfile
-if [ "$platform" != macos ]; then
-	# What the web build reads, as Exact's setup installs it: the stable toolchain its rust-toolchain.toml pins, the
-	# nightly that builds the web's wasm (scripts/cargo-check.mjs), the crates it builds offline, and the Chromium its
-	# tests drive. Exact's setup also builds tools for GPU modules, games and native TypeScript, which Imp's web
-	# client does not use.
+if [ "$platform" = exact ]; then
+	# What the web build reads: the stable toolchain Exact's rust-toolchain.toml pins, the nightly that builds the web's
+	# wasm (scripts/cargo-check.mjs) and the crates it builds offline. Not Exact's `setup --platform web`, which also
+	# installs the Chromium its tests drive, which an installed host does not run.
 	nightly=$(sed -n "s/^export const WEB_TOOLCHAIN = '\(.*\)';$/\1/p" scripts/cargo-check.mjs)
 	[ -n "$nightly" ] || fail "no WEB_TOOLCHAIN in $exact/scripts/cargo-check.mjs: Exact moved it, so update this script"
 	rustup toolchain install
 	rustup toolchain install "$nightly" --profile minimal -c rust-src -c llvm-tools -t wasm32-unknown-unknown
 	cargo fetch --locked -q
-	# The Chromium is for tests, which an installed host does not run.
-	[ "$platform" = exact ] || [ -n "${CHROME:-}" ] || bun node_modules/playwright-core/cli.js install chromium chromium-headless-shell
+elif [ "$platform" = web ]; then
+	# Exact's own web setup: the toolchains, wasm-bindgen, Binaryen, the crates and Chromium, everything its check below
+	# asks for, without the native platforms' tools.
+	bun scripts/exact.mjs setup --platform web
 else
 	bun scripts/exact.mjs setup
 fi
