@@ -415,7 +415,9 @@ export async function openChats(options: ChatsOptions) {
       });
 
       const open = index.list.find((c) => c.id === index.current);
+      const working = new Set(await conversations.working());
 
+      // Each with whether the imp is at work in it, so the sidebar can show a chat still running after the person left.
       const listed = (archived: boolean) =>
         index.list
           .filter(
@@ -423,7 +425,11 @@ export async function openChats(options: ChatsOptions) {
               c.title !== "" && !c.routine && (c.archived === true) === archived
           )
           .toSorted((a, b) => b.updated - a.updated)
-          .map(({ id, title }) => ({ id: String(id), title }));
+          .map(({ id, title }) => ({
+            id: String(id),
+            title,
+            working: working.has(String(id)),
+          }));
 
       return {
         ...shown,

@@ -67,10 +67,11 @@ shape ChatMessage
   failed: bool
 
 // While the assistant writes, its partial answer is the last message, with id "live".
-// A conversation in the sidebar, named by its first message.
+// A conversation in the sidebar, named by its first message; `working` while the imp is at work in it.
 shape ChatSummary
   id: string
   title: string
+  working: bool
 
 // The open conversation (`current`, with its rows in `messages`) and every one with something said in it, the most
 // recently written in first. `routine` names the routine whose conversation is open ("" for a chat); the routines'

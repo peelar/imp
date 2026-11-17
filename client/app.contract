@@ -1118,7 +1118,7 @@ component App
               routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, archive=archiveChat, touch=(media.pointer == "coarse"),
                 archived=chat.archived, archivedOpen=archivedOpen, toggleArchived=toggleArchived, restore=restoreChat, openRoutines=openRoutines,
               openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard,
-              directory=directoryOn)
+              directory=directoryOn, still=still)
             // As tall as the tab bar beside it, so their top lines meet.
             column height="3.5rem" box-sizing="border-box" justify-content="center" padding="0 space.sm"
               border-top="1px solid line.subtle"
@@ -1194,7 +1194,7 @@ component App
                 tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, archive=archiveChat, touch=(media.pointer == "coarse"),
                 archived=chat.archived, archivedOpen=archivedOpen, toggleArchived=toggleArchived, restore=restoreChat,
                 openRoutines=openRoutines, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder,
-                keyboard=keyboard, directory=directoryOn)
+                keyboard=keyboard, directory=directoryOn, still=still)
             button press=toggleDrawer aria-label="Close" aria-keyshortcuts="Escape" testId="drawer-close" appearance="none"
               flex=1 border="none"
               background-color="ink.strong" opacity=0.25

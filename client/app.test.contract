@@ -505,6 +505,21 @@ test "pointing at a chat in the sidebar shows Archive, which folds the chat unde
   expect text "conversations-archived" == "−Archived (1)"
   expect state chat.messages.0.text == "Third new chat"
 
+test "a chat the imp is still at work in keeps a mark in the sidebar after the person moves on"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "Build me an app, run: sleep 3"
+  tap "send"
+  clock until state chat.busy == true within 5000
+  tap "chat-new"
+  clock until state chat.messages.length == 0 within 5000
+  clock until state chat.conversations.0.working == true within 5000
+  expect tree has "conversation-working-0"
+  clock until state chat.conversations.0.working == false within 15000
+  expect tree missing "conversation-working-0"
+
 test "on a narrow window the conversations and tricks open as a drawer"
   size 390x844
   request POST "/api/call/accountSignIn" []

@@ -256,6 +256,40 @@ test("Archive moves a chat to Archived, archiving the open one opens a new chat,
   );
 });
 
+test("the sidebar's list says which chats the imp is still at work in, also after the person moved to another", async () => {
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.deepEqual(
+    await call("chatSend", ["Keep at it, run: sleep 3", ""]),
+    done
+  );
+  assert.deepEqual(await call("chatNew", []), done);
+
+  const entry = (answer: Json) =>
+    isRow(answer)
+      ? rows(answer.conversations).find(
+          (c) => c.title === "Keep at it, run: sleep 3"
+        )
+      : undefined;
+
+  const running = await until("chat", (answer) =>
+    entry(answer)?.working === true ? answer : undefined
+  );
+
+  // The open chat is the new, empty one, and the others listed are idle.
+  assert.ok(isRow(running));
+  assert.equal(running.busy, false);
+  assert.deepEqual(
+    rows(running.conversations)
+      .filter((c) => c.working === true)
+      .map((c) => c.title),
+    ["Keep at it, run: sleep 3"]
+  );
+
+  await until("chat", (answer) =>
+    entry(answer)?.working === false ? answer : undefined
+  );
+});
+
 test("beside an app opens the latest chat started beside it, or a new chat until there is one, also after a restart", async () => {
   assert.deepEqual(await call("appsInstall", ["todos"]), done);
 

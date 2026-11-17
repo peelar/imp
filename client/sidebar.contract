@@ -1,7 +1,7 @@
 // The sidebar: its places (Chat, the apps, the computer, Routines, Tricks, App directory), New chat and the
 // conversations.
 
-use Label, Key, Body, Mono from "./look.contract"
+use Label, pulse, Key, Body, Mono from "./look.contract"
 use ChatSummary, Routine from "./host.contract"
 
 // A place in the sidebar the chat tab opens: its symbol, its name, a mark in `mark`'s colour ("" for none) and how
@@ -28,15 +28,17 @@ component PlaceEntry
       if count > 0
         text `${count}` class=Label testId=`${id}-count`
 
-// One conversation in the sidebar, by its first message. Pointing at it shows its one action, Archive under Recent and
-// Restore under Archived, over the end of its title, so the title does not move; a touch screen, where nothing is
-// pointed at, always shows it.
+// One conversation in the sidebar, by its first message, with a pulsing mark after it while the imp is at work in it.
+// Pointing at it shows its one action, Archive under Recent and Restore under Archived, at the end of the row on the
+// row's own background, so the title does not move; a touch screen, where nothing is pointed at, always shows it.
 component ChatEntry
   props
     prefix: string
     index: number
     id: string
     title: string
+    working: bool
+    still: bool
     selected: bool
     touch: bool
     show: action
@@ -50,13 +52,17 @@ component ChatEntry
     row hover=hover position="relative" align-items="center" min-width=0 testId=`${prefix}conversation-row-${index}`
       background-color=(selected or hovered ? "surface.soft" : "transparent")
       button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
-        flex=1 padding="space.sm space.sm" border="none" text-align="start" color="ink.strong" min-width=0
-        background-color="transparent"
-        text title class=Body flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+        flex=1 align-items="center" gap="space.sm" padding=(hovered or touch ? "space.sm space.xl space.sm space.sm" : "space.sm space.sm")
+        border="none" text-align="start" color="ink.strong" min-width=0 background-color="transparent"
+        text title class=Body min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+        if working
+          row width=6 height=6 min-width=6 background-color="AccentColor" aria-label="Imp at work"
+            testId=`${prefix}conversation-working-${index}` animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
+      // Archive sits on the row's background, which the title's hover wash spans beneath it, so the row reads as one.
       if hovered or touch
         button press=act(id) aria-label=`${verb} ${title}` title=verb testId=`${prefix}conversation-${verb.toLowerCase()}-${index}`
           appearance="none" position="absolute" top=0 bottom=0 right=0 display="flex" align-items="center"
-          justify-content="center" padding="0 space.sm" border="none" background-color="surface.soft" color="ink.muted"
+          justify-content="center" padding="0 space.sm" border="none" background-color="transparent" color="ink.muted"
           :hover
             color="ink.strong"
           image (verb == "Archive" ? "symbol:icon.archive" : "symbol:icon.restore") width=14 height=14 aria-hidden=true
@@ -92,6 +98,8 @@ component Sidebar
     keyboard: bool
     // Whether the app directory's feature flag is on.
     directory: bool
+    // Reduced motion: the working mark holds still.
+    still: bool
   // A routine at work shows cobalt on the Routines entry, else one with a run the person has not read shows ink.
   derive routineMark = routines.filter(r => r.running).length > 0 ? "AccentColor" : routines.filter(r => r.unread).length > 0 ? "ink.strong" : ""
   view
@@ -122,7 +130,7 @@ component Sidebar
           column gap="space.xxs" padding="space.ms space.sm space.md"
             text "Recent" class=Label padding="0 space.sm space.xs"
             for c, i in conversations.slice(0, 3) key=c.id
-              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
+              ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, working=c.working, still=still, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
             if conversations.length > 3
               button press=toggleOlder aria-expanded=olderOpen testId=`${prefix}conversations-older` appearance="none"
                 display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm" margin-top="space.xs" border="none"
@@ -133,7 +141,7 @@ component Sidebar
                 text (olderOpen ? "Hide older" : `Older (${conversations.length - 3})`) class=Label color="inherit"
               if olderOpen
                 for c, i in conversations.slice(3) key=c.id
-                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
+                  ChatEntry(prefix=prefix, index=(i + 3), id=c.id, title=c.title, working=c.working, still=still, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
       // Archived chats, pinned to the bottom edge of the conversations and folded until opened: a chat
       // opened here can be read and written in, and Restore puts it back under Recent. Open, the list scrolls on its own
       // past a third of the window, so Recent keeps its room.
@@ -150,5 +158,5 @@ component Sidebar
             scroll max-height="33vh"
               column gap="space.xxs" padding-bottom="space.xs"
                 for c, i in archived key=c.id
-                  ChatEntry(prefix=`${prefix}archived-`, index=i, id=c.id, title=c.title,
+                  ChatEntry(prefix=`${prefix}archived-`, index=i, id=c.id, title=c.title, working=c.working, still=still,
                     selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Restore", act=restore)
