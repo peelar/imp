@@ -69,6 +69,8 @@ export { SYNC_TOPIC } from "./sync.ts";
 
 export { hasAppData } from "./data.ts";
 
+export { paramsSchema } from "./manifest.ts";
+
 export { appCall, appSource, appsCalls } from "./shell.ts";
 
 // The messages between the host, agentd and each app's worker, for host/machine/ (types only).

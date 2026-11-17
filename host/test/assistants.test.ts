@@ -187,7 +187,6 @@ test("a shared app's operations are tools with hints, and only those the agent m
       inputSchema: {
         type: "object",
         properties: {},
-        required: [],
         additionalProperties: false,
       },
       annotations: { readOnlyHint: true, destructiveHint: false },

@@ -70,7 +70,7 @@ icons
   // Every icon is Phosphor's (phosphor-icons.com, MIT), regular weight, copied from @phosphor-icons/core's
   // assets/regular/<name>.svg with its fill set to #000; Apple draws the SF Symbol named beside it. Add new ones the
   // same way, and draw none from Exact's built-in roles, so the shell keeps one set.
-  icon.imp = icon(sf "face.smiling", svg "icons/imp.svg")
+  icon.imp = icon(svg "icons/imp.svg")
   icon.add = icon(sf "plus", svg "icons/add.svg")
   icon.alert = icon(sf "exclamationmark.circle", svg "icons/alert.svg")
   icon.archive = icon(sf "archivebox", svg "icons/archive.svg")

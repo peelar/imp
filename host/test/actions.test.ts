@@ -29,7 +29,10 @@ const extension = actionsExtension({
         name: "add",
         kind: "write",
         description: "Add a todo.",
-        params: { title: { type: "string" } },
+        params: {
+          title: { type: "string" },
+          notes: { type: "string", optional: true },
+        },
         agent: true,
       },
     ],
@@ -80,6 +83,14 @@ test("one search finds an app's operations and a server's tools, by their words"
     await execute("find_actions", { query: "add todo" }),
     /\\"app\\":\\"todos\\"/
   );
+});
+
+test("an app's action says which of its params are required, as JSON Schema does", async () => {
+  const found = await execute("find_actions", { query: "add todo" });
+
+  // Without the list, the imp took `notes` for optional, and the run was refused.
+  assert.match(found, /\\"required\\":\[\\"title\\"\]/);
+  assert.match(found, /\\"notes\\":\{\\"type\\":\\"string\\"\}/);
 });
 
 test("a server's write runs only once the imp says the user agreed", async () => {

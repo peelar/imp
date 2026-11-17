@@ -7,12 +7,13 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { arr, compile, lit, obj, str } from "@earendil-works/pi-schema";
-import type { Json, Param } from "../../../sdk/app.ts";
+import type { Json } from "../../../sdk/app.ts";
 import {
   type AgentApps,
   type AppInfo,
   type Operation,
   OPERATIONS_TOPIC,
+  paramsSchema,
 } from "../apps/apps.ts";
 import { readKept } from "../datadir/datadir.ts";
 import type { Topics } from "../live/live.ts";
@@ -47,39 +48,17 @@ const chosenFile = compile(obj({ apps: arr(str()) }));
 const INSTRUCTIONS =
   "These tools are the user's own apps in Imp, one tool per action, named <app>_<action>. A read only answers; a write changes the user's data, and they see the change at once.";
 
-/** A param as JSON Schema. */
-const property = (param: Param): Json => {
-  const described = param.description ? { description: param.description } : {};
-
-  return param.type === "enum"
-    ? { type: "string", enum: [...param.values], ...described }
-    : { type: param.type, ...described };
-};
-
 /** An app's operation as an MCP tool. */
-const tool = (app: AppInfo, operation: Operation): Tool => {
-  const params = Object.entries(operation.params);
-
-  return {
-    name: `${app.id}_${operation.name}`,
-    title: `${app.name}: ${operation.name}`,
-    description: `${app.name}: ${operation.description}`,
-    inputSchema: {
-      type: "object",
-      properties: Object.fromEntries(
-        params.map(([name, param]) => [name, property(param)])
-      ),
-      required: params.flatMap(([name, param]) =>
-        param.optional ? [] : [name]
-      ),
-      additionalProperties: false,
-    },
-    annotations: {
-      readOnlyHint: operation.kind === "read",
-      destructiveHint: operation.kind === "write",
-    },
-  };
-};
+const tool = (app: AppInfo, operation: Operation): Tool => ({
+  name: `${app.id}_${operation.name}`,
+  title: `${app.name}: ${operation.name}`,
+  description: `${app.name}: ${operation.description}`,
+  inputSchema: paramsSchema(operation.params),
+  annotations: {
+    readOnlyHint: operation.kind === "read",
+    destructiveHint: operation.kind === "write",
+  },
+});
 
 const isText = (value: Json): value is string => typeof value === "string";
 

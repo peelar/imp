@@ -18,7 +18,8 @@ import {
   unknown,
   type Validator,
 } from "@earendil-works/pi-schema";
-import type { Param } from "../../../sdk/app.ts";
+import { isJsonValue } from "@earendil-works/chord/json";
+import type { Json, Param } from "../../../sdk/app.ts";
 import { checkConnections, checkEvery, checkWatch } from "./connections.ts";
 import type {
   Manifest,
@@ -200,6 +201,17 @@ function paramProblem(value: ReportedOperation["params"]) {
   }
 
   return "description must be a text and optional true or false, and it takes nothing else";
+}
+
+/**
+ * An operation's params as the JSON Schema of the object that carries them, with the required ones listed, as the imp
+ * and other assistants read them.
+ */
+export function paramsSchema(params: Operation["params"]): Json {
+  const schema = obj(parameters(params));
+
+  // A schema the builders made is plain JSON; this says so to the types.
+  return isJsonValue(schema) ? schema : {};
 }
 
 /** The arguments an operation takes, as the properties of the object that carries them. */

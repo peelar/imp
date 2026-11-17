@@ -136,9 +136,15 @@ export function studio(options: StudioOptions) {
   const versions = { gateway, folders, builds, imp, appsChanged };
   const preview = appPreview({ ...versions, workspace });
   const decisions = appDecisions({ ...versions, history });
-  const installs = appInstalls({ ...versions, shipped });
-
   const serial = oneAtATime();
+
+  const rebuildLater = () => {
+    serial(builds.rebuild).catch((cause: unknown) => {
+      log(`studio: rebuilding the shell failed: ${String(cause)}`);
+    });
+  };
+
+  const installs = appInstalls({ ...versions, shipped, rebuildLater });
 
   const nameOf = (id: string) =>
     gateway.apps().find((app) => app.id === id)?.name;

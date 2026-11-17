@@ -17,13 +17,20 @@ export type InstallsOptions = {
   readonly shipped: ReadonlyMap<string, AppFiles>;
   /** Tells the open shells that the apps changed. */
   readonly appsChanged: () => void;
+  /** Rebuilds the served build after the work under way, without waiting for it. */
+  readonly rebuildLater: () => void;
 };
 
 export function appInstalls(options: InstallsOptions) {
   const { gateway, folders, builds } = options;
 
   return {
-    /** Installs an app Imp ships. The served build is rebuilt only when it is the host's: the repository's has every one. */
+    /**
+     * Installs an app Imp ships. The served build is rebuilt only when it is the host's: the repository's has every one.
+     * The rebuild runs after the answer, as it can take minutes (installing Exact first, on a new host): a caller that
+     * gives up on a slow answer (the Mac app's after 60 s) would never send what it does next, such as the onboarding's
+     * ask to build the first app.
+     */
     install: async (id: string) => {
       const files = options.shipped.get(id);
 
@@ -56,7 +63,7 @@ export function appInstalls(options: InstallsOptions) {
       options.appsChanged();
 
       if (builds.current() !== undefined) {
-        await builds.rebuild();
+        options.rebuildLater();
       }
     },
     /**

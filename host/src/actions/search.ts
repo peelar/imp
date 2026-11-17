@@ -1,7 +1,7 @@
 // find_actions' search: every app's operations the imp may run and every connected server's tools, matched by the
 // words of the query against their names, descriptions and params, best first.
 import type { Json } from "../../../sdk/app.ts";
-import type { Operation } from "../apps/apps.ts";
+import { paramsSchema } from "../apps/apps.ts";
 import type { ActionsOptions } from "./actions.ts";
 
 /** How many actions one search returns at most. */
@@ -18,7 +18,7 @@ type FoundAction =
       readonly action: string;
       readonly kind: string;
       readonly description: string;
-      readonly params: Operation["params"];
+      readonly params: Json;
     }
   | {
       readonly server: string;
@@ -49,7 +49,7 @@ async function appActions({ apps }: ActionsOptions) {
                   action: name,
                   kind,
                   description,
-                  params,
+                  params: paramsSchema(params),
                 },
                 words: [
                   app.id,

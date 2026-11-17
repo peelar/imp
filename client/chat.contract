@@ -114,7 +114,8 @@ component Composer
             padding=(compact ? "space.ms space.ms space.xs" : "space.ms space.md space.xs") border="none" background-color="transparent"
             outline="none" resize="none" class=Lead
             color="ink.strong"
-          row align-items="center" gap="space.xs" padding="space.xs space.xs space.xs"
+          // The same inset left and right as the field's text, so the model and send line up with it.
+          row align-items="center" gap="space.xs" padding=(compact ? "space.xs space.ms" : "space.xs space.md")
             if models.length > 1
               select value=model change=chooseModel aria-label="Model" testId=`${prefix}model` min-width=0
                 max-width=(compact ? "9rem" : "12rem") height=32 border="none" background-color="transparent"
