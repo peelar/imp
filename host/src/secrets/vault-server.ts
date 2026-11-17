@@ -14,14 +14,13 @@ import {
   type Validator,
 } from "@earendil-works/pi-schema";
 import type { Json } from "../../../sdk/app.ts";
-import { killOnExit, lastLines } from "../processes/processes.ts";
-import { tool } from "./programs.ts";
+import { killOnExit, lastLines, tool } from "../processes/processes.ts";
 import { prepare, type VaultFiles, vaultFiles } from "./vault-files.ts";
 
 export type VaultServerOptions = {
   /** DATA_DIR/vault. */
   readonly dir: string;
-  /** Where downloaded programs are kept (programs.ts). */
+  /** Where downloaded programs are kept (processes/programs.ts). */
   readonly toolsDir: string;
 };
 

@@ -23,8 +23,8 @@ import {
   freePort,
   killOnExit,
   lastLines,
+  tool,
 } from "../processes/processes.ts";
-import { tool } from "./programs.ts";
 import type { Vault } from "./vault.ts";
 
 const ADDON = path.join(import.meta.dirname, "inject.py");

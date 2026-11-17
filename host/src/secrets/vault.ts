@@ -30,7 +30,7 @@ export type StoredSecret = {
 
 export type VaultOptions = {
   readonly dataDir: string;
-  /** Where downloaded programs are kept (programs.ts). */
+  /** Where downloaded programs are kept (processes/programs.ts). */
   readonly toolsDir: string;
 };
 

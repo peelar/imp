@@ -1,5 +1,7 @@
 // The programs the host runs beside itself, which it downloads the first time it needs them: OpenBao (the vault for
-// the owner's secrets, vault.ts) and mitmproxy (which puts them on the agent's requests, egress.ts). Each is pinned to
+// the owner's secrets, secrets/vault.ts), mitmproxy (which puts them on the agent's requests, secrets/egress.ts) and
+// the GitHub CLI (which Connect GitHub signs in with, connections/github.ts). The host runs each from where it put it,
+// so none depends on the PATH a service manager starts the host with. Each is pinned to
 // one release and checked against its SHA-256 before it is unpacked, so a host runs exactly these builds wherever it
 // came from: a release, a checkout, or a test.
 import { execFile } from "node:child_process";
@@ -49,6 +51,13 @@ const mitm = (arch: string, sha256: string, path = "mitmdump"): Build => ({
   path,
 });
 
+// gh's macOS builds are zip files, which macOS's tar (bsdtar) unpacks as it does a tarball.
+const gh = (build: string, sha256: string): Build => ({
+  url: `https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_${build}`,
+  sha256,
+  path: `gh_2.104.0_${build.replace(/\.(tar\.gz|zip)$/, "")}/bin/gh`,
+});
+
 const APP_MITMDUMP = "mitmproxy.app/Contents/MacOS/mitmdump";
 
 const TOOLS = {
@@ -93,6 +102,27 @@ const TOOLS = {
         "macos-arm64",
         "9b7f7a8e3fd1b1544089c937c579ef1f0f503f0ea598c25bda9eab077c735b93",
         APP_MITMDUMP
+      ),
+    },
+  },
+  gh: {
+    version: "2.104.0",
+    builds: {
+      "linux-x64": gh(
+        "linux_amd64.tar.gz",
+        "98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e"
+      ),
+      "linux-arm64": gh(
+        "linux_arm64.tar.gz",
+        "cb34cefc6f4e77b90731374a2b737516bb8f3033c6ca46aa949e5344f68069e3"
+      ),
+      "darwin-x64": gh(
+        "macOS_amd64.zip",
+        "a8c2a708dbae89dc7c05ba7b0beafc95bd8d09ab4a3505467b77d32ebf364dc6"
+      ),
+      "darwin-arm64": gh(
+        "macOS_arm64.zip",
+        "23b12706219b9892e44236f988444a24adcf29284e16b35e03ba5b863fb6eb8e"
       ),
     },
   },
@@ -166,7 +196,7 @@ async function install(home: string, build: Build) {
   const staging = `${home}.partial-${randomUUID()}`;
 
   mkdirSync(staging, { recursive: true });
-  const file = path.join(staging, "archive.tar.gz");
+  const file = path.join(staging, "archive");
 
   try {
     writeFileSync(file, archive);

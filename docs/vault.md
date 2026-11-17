@@ -59,7 +59,7 @@ A key the host keeps for one of its own connections, such as an [MCP server](con
 
 ## OpenBao, run by the host
 
-The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp Vault, which the host runs itself in `DATA_DIR/vault`. There is nothing to install or unlock: on first use the host downloads a pinned build, checks its SHA-256, and starts it (`host/src/secrets/vault.ts`, `host/src/secrets/programs.ts`). mitmproxy is fetched the same way.
+The vault is [OpenBao](https://openbao.org), the open-source fork of HashiCorp Vault, which the host runs itself in `DATA_DIR/vault`. There is nothing to install or unlock: on first use the host downloads a pinned build, checks its SHA-256, and starts it (`host/src/secrets/vault.ts`, `host/src/processes/programs.ts`). mitmproxy, and the GitHub CLI that Connect GitHub signs in with, are fetched the same way.
 
 |  |  |
 | --- | --- |

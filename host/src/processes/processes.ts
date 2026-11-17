@@ -1,9 +1,11 @@
-// The programs the host runs beside itself (agentd on this computer, ssh tunnels, OpenBao, mitmproxy) and the ports
-// they take on this computer's loopback. Each program is killed when the host exits: Node runs exit listeners only on
+// The programs the host runs beside itself (agentd on this computer, ssh tunnels, OpenBao, mitmproxy, gh), the pinned
+// builds it downloads of some of them (programs.ts), and the ports they take on this computer's loopback. Each program is killed when the host exits: Node runs exit listeners only on
 // a clean exit, so an interrupt or a termination signal exits the host cleanly first. This is the one place that
 // listens for the host's exit.
 import type { ChildProcess } from "node:child_process";
 import { connect, createServer, type AddressInfo } from "node:net";
+
+export { tool } from "./programs.ts";
 
 const children = new Set<ChildProcess>();
 

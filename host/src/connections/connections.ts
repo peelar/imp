@@ -12,7 +12,8 @@ import path from "node:path";
 import { compile, map, obj, str } from "@earendil-works/pi-schema";
 import { readKept } from "../datadir/datadir.ts";
 import type { Reply, Topics } from "../live/live.ts";
-import { githubSignIn, readAccount } from "./github.ts";
+import { tool } from "../processes/processes.ts";
+import { type Gh, githubSignIn, readAccount } from "./github.ts";
 import { type ConnectionSend, mcpServers, type ServerKeys } from "./mcp.ts";
 
 export { connectionsCalls } from "./shell.ts";
@@ -44,7 +45,9 @@ type ConnectionKeys = {
 
 export type ConnectionsOptions = {
   readonly dataDir: string;
-  /** The GitHub CLI the sign-in runs. Default: gh on PATH. */
+  /** Where the programs the host downloads are kept, the GitHub CLI the sign-in runs among them. */
+  readonly toolsDir: string;
+  /** The GitHub CLI the sign-in runs instead, such as a test's stand-in. Default: the pinned gh in `toolsDir`. */
   readonly gh?: string | undefined;
   readonly topics: Topics;
   readonly keys: ConnectionKeys;
@@ -82,7 +85,7 @@ function keptLogins(file: string, log: (line: string) => void) {
 
 /** Moves the backup's sign-in from before connections, in DATA_DIR/gh, into the vault, and deletes its folder. */
 async function moveOldSignIn(
-  { dataDir, gh, keys }: { dataDir: string; gh: string; keys: ConnectionKeys },
+  { dataDir, gh, keys }: { dataDir: string; gh: Gh; keys: ConnectionKeys },
   keep: (token: string, login: string) => Promise<void>
 ) {
   const old = path.join(dataDir, "gh");
@@ -140,7 +143,8 @@ export function openConnections(options: ConnectionsOptions) {
 /** GitHub: its device code sign-in, its token kept in the vault as the github key, and the account's name. */
 function githubConnection(options: ConnectionsOptions) {
   const { keys } = options;
-  const gh = options.gh ?? "gh";
+  const { gh: stand, toolsDir } = options;
+  const gh: Gh = async () => stand ?? (await tool(toolsDir, "gh"));
   const log = logOf(options);
 
   const logins = keptLogins(

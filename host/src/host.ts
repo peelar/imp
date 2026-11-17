@@ -85,9 +85,9 @@ export type HostOptions = {
   readonly flagsKey?: string | undefined;
   /** The tailscale CLI the host reads the tailnet with. Default: tailscale on PATH. */
   readonly tailscale?: string | undefined;
-  /** Where the programs the host downloads are kept (secrets/programs.ts). Default: DATA_DIR/tools. */
+  /** Where the programs the host downloads are kept (processes/programs.ts). Default: DATA_DIR/tools. */
   readonly toolsDir?: string | undefined;
-  /** The GitHub CLI that Connect GitHub signs in with (connections/connections.ts). Default: gh on PATH. */
+  /** The GitHub CLI that Connect GitHub signs in with (connections/connections.ts). Default: a pinned gh in toolsDir. */
   readonly gh?: string | undefined;
   /** GitHub's REST API as the backup reaches it. Default: api.github.com, with the github key the proxy puts on. */
   readonly github?: GithubApi | undefined;
@@ -238,6 +238,7 @@ function openAccountConnections(
 ) {
   const connections = openConnections({
     dataDir: options.dataDir,
+    toolsDir: options.toolsDir ?? path.join(options.dataDir, "tools"),
     gh: options.gh,
     topics,
     keys: {

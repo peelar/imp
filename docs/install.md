@@ -1,6 +1,6 @@
 # Install the host
 
-The host runs on one machine you keep on: a home server, a spare Mac, a small VM. It needs Linux with systemd, or macOS, plus Node 24 or newer and [Tailscale](https://tailscale.com).
+The host runs on one machine you keep on: a home server, a spare Mac, a small VM. It needs Linux with systemd, or macOS, plus Node 24 or newer and [Tailscale](https://tailscale.com). The vault and the GitHub CLI that Connect GitHub signs in with, it downloads itself.
 
 1. **Run the installer**
 
