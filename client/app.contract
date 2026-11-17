@@ -243,7 +243,7 @@ component App
   // Wide enough for the three columns: the sidebar (the imp's pages and conversations), the page above the bar of apps,
   // and the chat beside every page but the chat's own (where its column stays, empty, so no page moves when another
   // opens). Narrower windows have a tab bar and a drawer instead.
-  derive wide = media.width >= 1100
+  derive wide = media.width >= 1280
   derive docked = wide and nav.tab != "chat"
   // The ⌘ chords are the app's in the Mac app (and an installed desktop app), where no browser takes them first: only
   // there does the screen hint at them.
