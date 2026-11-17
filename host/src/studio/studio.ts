@@ -135,7 +135,6 @@ export function studio(options: StudioOptions) {
   // What a preview and a decision both change: the code, the shell's build and the apps the shell lists.
   const versions = { gateway, folders, builds, imp, appsChanged };
   const preview = appPreview({ ...versions, workspace });
-  const decisions = appDecisions({ ...versions, history });
   const serial = oneAtATime();
 
   const rebuildLater = () => {
@@ -144,6 +143,7 @@ export function studio(options: StudioOptions) {
     });
   };
 
+  const decisions = appDecisions({ ...versions, history, rebuildLater });
   const installs = appInstalls({ ...versions, shipped, rebuildLater });
 
   const nameOf = (id: string) =>

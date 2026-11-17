@@ -1,7 +1,6 @@
 // The person's side of making an app: only they save. Save makes the draft live and keeps the version before it,
 // Discard drops the draft, and Undo restores the version the last save replaced.
 import { appInfo, readAppFiles, type AppGateway } from "../apps/apps.ts";
-import type { ShellBuilds } from "./builds.ts";
 import { type CodeFolders, type ImpServers, withImpServer } from "./code.ts";
 import type { VersionHistory } from "./history.ts";
 
@@ -9,15 +8,19 @@ export type DecisionsOptions = {
   readonly gateway: AppGateway;
   readonly folders: CodeFolders;
   readonly history: VersionHistory;
-  readonly builds: ShellBuilds;
   /** The apps whose server code is Imp's (code.ts): Undo brings back their screen, with Imp's server code. */
   readonly imp: ImpServers;
   /** Tells the open shells that the apps changed. */
   readonly appsChanged: () => void;
+  /**
+   * Rebuilds the served build after the work under way, without waiting for it: a build can outlast a caller that
+   * gives up on a slow answer (the Mac app's after 60 s), and open pages relaunch once the new build is served.
+   */
+  readonly rebuildLater: () => void;
 };
 
 export function appDecisions(options: DecisionsOptions) {
-  const { gateway, folders, history, builds } = options;
+  const { gateway, folders, history } = options;
 
   const dropDraft = (id: string) => {
     gateway.dropDraft(id);
@@ -55,7 +58,7 @@ export function appDecisions(options: DecisionsOptions) {
 
     dropDraft(id);
     options.appsChanged();
-    await builds.rebuild();
+    options.rebuildLater();
   }
 
   async function undo(id: string) {
@@ -92,7 +95,7 @@ export function appDecisions(options: DecisionsOptions) {
     }
 
     options.appsChanged();
-    await builds.rebuild();
+    options.rebuildLater();
   }
 
   return {
