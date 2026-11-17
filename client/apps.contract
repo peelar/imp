@@ -13,7 +13,8 @@ use GithubSignIn from "./settings/connections.contract"
 // preview of a new version, the bar says so, says what the version reads from outside, and offers Save and Discard.
 // Otherwise it says how the app's sync went, with Sync now, after a save offers to undo it, and offers to uninstall it.
 // Above the app's screen, a card: what an app is, above the first one the onboarding installed, until the person
-// dismisses it (`guide`); and while the app waits for a key (`needs`), a button to the place in Settings that adds it.
+// closes it (`guide`); and while the app waits for a key (`needs`), GitHub's sign-in right there, or for another key a
+// button to Settings, which adds it.
 // Waiting is setup still to do, not a failure: the bar says nothing of the sync until the key is there.
 component AppPage
   props
@@ -34,6 +35,11 @@ component AppPage
     keys: bool
     needs: string
     openSettings: action
+    github: Connection
+    githubBusy: bool
+    connectGithub: action
+    cancelGithub: action
+    copyGithubCode: action
   slot
   view
     column flex=1 min-height=0
@@ -85,23 +91,28 @@ component AppPage
           column padding="space.lg space.lg space.xs" max-width="measure.note"
             Callout(tone="accent", testId="app-card")
               if guide
-                column gap="space.xs" testId="app-guide"
-                  text "Your first app" class=Label color="AccentColor" role="heading" aria-level=2
-                  text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
-                    class=Body
-              if needs != ""
+                row gap="space.sm" align-items="flex-start" testId="app-guide"
+                  column flex=1 min-width=0 gap="space.xs"
+                    text "Your first app" class=Label color="AccentColor" role="heading" aria-level=2
+                    text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
+                      class=Body
+                  button press=dismissGuide aria-label="Close" title="Close" testId="app-guide-dismiss" appearance="none"
+                    width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
+                    border="none" background-color="transparent" color="ink.muted"
+                    :hover
+                      color="ink.strong"
+                    image "symbol:icon.close" width=11 height=11 aria-hidden=true
+              if needs == "github"
+                column testId="app-needs"
+                  GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
+                    copyCode=copyGithubCode, note="This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile.",
+                    prefix="app-")
+              else if needs != ""
                 column gap="space.sm" align-items="flex-start" testId="app-needs"
-                  text (needs == "github" ? "This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile."
-                    : `This app reads with your ${needs} key: add it, and the app fills in.`)
-                    class=Body color="ink.muted"
-                  Button(press=openSettings(needs == "github" ? "connections" : "secrets"), variant="accent",
-                    disabled=false, testId="app-needs-settings")
-                    text (needs == "github" ? "Connect GitHub in Settings" : "Add it in Settings")
+                  text `This app reads with your ${needs} key: add it, and the app fills in.` class=Body color="ink.muted"
+                  Button(press=openSettings("secrets"), variant="accent", disabled=false, testId="app-needs-settings")
+                    text "Add it in Settings"
                     text "→" aria-hidden=true
-              if guide
-                row
-                  Button(press=dismissGuide, variant="quiet", disabled=false, testId="app-guide-dismiss")
-                    text "Got it"
         children
 
 // One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
@@ -134,7 +145,7 @@ component AppTab
 
 // The onboarding's last step: the first app. The person describes the GitHub app they want, and the imp builds it
 // over Imp's GitHub app, which reads GitHub for it, while they watch; or they skip, and have Imp's as it ships.
-// Connecting GitHub is offered here but never required: a sign-in still waiting carries on to the app's page.
+// One thing to do here: connecting GitHub comes after, on the app's page, while the imp builds.
 component FirstAppWizard
   props
     ask: string
@@ -144,11 +155,6 @@ component FirstAppWizard
     build: action
     skip: action
     still: bool
-    github: Connection
-    githubBusy: bool
-    connectGithub: action
-    cancelGithub: action
-    copyGithubCode: action
   view
     column gap="space.md" testId="first-app" animation=(still ? "none" : "rise 260ms ease-out both")
       WizardTitle(title="Build your first app", note="Say what you want to see. Your imp builds it while you watch.")
@@ -161,12 +167,6 @@ component FirstAppWizard
           text "GitHub" class=Heading
           text "Imp reads your review requests, your pull requests, what's assigned to you and your notifications. Your app shows what you choose."
             class=Body color="ink.muted"
-      if github.status == "on"
-        text (github.login == "" ? "GitHub is connected." : `Connected as @${github.login}.`) class=Body
-          testId="first-app-connected"
-      else
-        GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
-          copyCode=copyGithubCode, note="Connect now, or later: your imp builds the app either way.", prefix="first-app-", quiet=true)
       textarea value=ask input=edit rows=4 aria-label="The app you want" testId="first-app-ask"
         padding="space.ms space.ms" border="1px solid line.strong" background-color="transparent" outline="none"
         resize="vertical" class=Lead color="ink.strong"
