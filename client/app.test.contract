@@ -140,11 +140,10 @@ test "an image attached to a message shows in the box, can be taken off, and rea
   type "composer" "What is on this?"
   tap "send"
   expect state attachments.length == 0
+  clock until state chat.messages.1.text == "I see image/png." within 10000
   clock until state chat.busy == false within 10000
-  clock until state chat.messages.length == 2 within 5000
   expect state chat.messages.0.text == "What is on this?"
   expect state chat.messages.0.images.length == 1
-  expect state chat.messages.1.text == "I see image/png."
 
 test "on a wide window the chat sits beside an open app, and what it is asked there lands in the app"
   size 1280x800
