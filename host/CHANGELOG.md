@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.14.5
+
+### Patch Changes
+
+- 1f098b2: On a wide window the sidebar is now as wide as the chat beside an app, and New chat is an ordinary entry at the top of it, beside Home, Routines and Tricks, instead of a boxed button. ⌘N still starts one.
+
 ## 0.14.4
 
 ### Patch Changes
