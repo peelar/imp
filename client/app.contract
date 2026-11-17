@@ -908,7 +908,7 @@ component App
       // While the host has not said yet whether Imp is set up, or the home page has not arrived: the mark alone, so
       // neither the onboarding nor the last conversation flashes first.
       if opening
-        column flex=1 align-items="center" justify-content="center" gap="space.md" role="status" aria-label="Opening Imp"
+        row flex=1 align-items="center" justify-content="center" gap="space.md" role="status" aria-label="Opening Imp"
           testId="opening" animation=(still ? "none" : "rise 400ms ease-out both")
           image "symbol:icon.imp" width=44 height=44 aria-hidden=true
             animation=(still ? "none" : "pulse 1.6s ease-in-out infinite")
