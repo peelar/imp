@@ -1,5 +1,16 @@
 # @imp/host
 
+## 0.17.0
+
+### Minor Changes
+
+- aaa1774: You can send your imp images. Attach up to four to a message with the image button beside the message box, paste a screenshot into it, or drop images on it. The imp sees them with your words, and the chat shows them above what you wrote.
+
+### Patch Changes
+
+- 8de3e41: On a Mac, the host now finds Tailscale when you set up Your Computer, including the Tailscale app's own CLI. Before, it said "the tailscale command is missing" even with Tailscale installed. Run the installer again to pick up the fix.
+- d9c9ce4: While Imp is opening, the mark and the name now sit side by side on one line.
+
 ## 0.16.3
 
 ### Patch Changes
