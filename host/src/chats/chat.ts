@@ -242,6 +242,10 @@ function browserStep(command: string) {
       };
 }
 
+/** Whether a tool call drives the browser on the computer's screen. */
+const drivesBrowser = (name: string, { command }: ToolArgs) =>
+  name === "bash" && isText(command) && /\bagent-browser\b/.test(command);
+
 /** What a tool call did, in words the person reads at a glance. */
 function describeTool({ name, args, apps }: ToolUse) {
   // run_app_action is run_action's name in conversations from before the catalogue.
@@ -251,7 +255,7 @@ function describeTool({ name, args, apps }: ToolUse) {
 
   const { command } = args;
 
-  if (name === "bash" && isText(command) && /\bagent-browser\b/.test(command)) {
+  if (drivesBrowser(name, args) && isText(command)) {
     return browserStep(command);
   }
 
@@ -357,7 +361,10 @@ export async function entryImage(
   return message?.role === "user" ? imagesIn(message.content)[nth] : undefined;
 }
 
-/** The transcript's rows for the conversation's entries, oldest first. */
+/**
+ * The transcript's rows for the conversation's entries, oldest first, and whether the last step since the person's last
+ * message drove the browser.
+ */
 function transcript(
   entries: readonly EntryRecord[],
   apps: readonly AppLabel[],
@@ -365,8 +372,9 @@ function transcript(
 ) {
   // A tool result names its call; the call, in the assistant message before it, holds the arguments.
   const calls: Calls = new Map();
+  let browsed = false;
 
-  return entries.flatMap((entry): ChatMessage[] => {
+  const rows = entries.flatMap((entry): ChatMessage[] => {
     const [message] = entry.model ?? [];
     const id = String(entry.id);
 
@@ -377,19 +385,36 @@ function transcript(
         imagePath(conversation, entry.id, index)
       );
 
+      browsed = false;
+
       return [row(id, "user", { text, images })];
     }
 
     if (entry.kind === "pi.assistant" && message?.role === "assistant") {
+      const asked = message.content.flatMap((part) =>
+        part.type === "toolCall"
+          ? [drivesBrowser(part.name, part.arguments)]
+          : []
+      );
+
+      // A browser step counts from when the agent asks for it, so the screen shows while the step runs.
+      if (asked.length > 0) {
+        browsed = asked.includes(true);
+      }
+
       return assistantRows(id, message, calls);
     }
 
     if (entry.kind === "pi.tool-result" && message?.role === "toolResult") {
       const call = calls.get(message.toolCallId);
+      const name = message.toolName || (call?.name ?? "tool");
+      const args = call?.args ?? {};
+
+      browsed = drivesBrowser(name, args);
 
       const { title, failedTitle, detail, icon } = describeTool({
-        name: message.toolName || (call?.name ?? "tool"),
-        args: call?.args ?? {},
+        name,
+        args,
         apps,
       });
 
@@ -412,6 +437,8 @@ function transcript(
 
     return [];
   });
+
+  return { rows, browsed };
 }
 
 export type ConversationOptions = {
@@ -436,7 +463,10 @@ export async function liveState(
   };
 }
 
-/** The conversation's transcript, with the reply on the way, and whether the agent works in it. */
+/**
+ * The conversation's transcript, with the reply on the way, whether the agent works in it, and whether it is using the
+ * browser: at work, with a browser step its latest, so the shell shows the computer's screen as it works.
+ */
 export async function conversationState(options: ConversationOptions) {
   const { harness, conversation, apps, context } = options;
 
@@ -447,7 +477,11 @@ export async function conversationState(options: ConversationOptions) {
     context
   );
 
-  const messages = transcript(page.items.toReversed(), apps, conversation.id);
+  const { rows: messages, browsed } = transcript(
+    page.items.toReversed(),
+    apps,
+    conversation.id
+  );
 
   const { busy, streaming } = await liveState(
     harness,
@@ -463,7 +497,7 @@ export async function conversationState(options: ConversationOptions) {
     messages.push(row("thinking", "thinking", {}));
   }
 
-  return { messages, busy };
+  return { messages, busy, browsing: busy && browsed };
 }
 
 /** What the person's first message in a conversation says, on one line, to name it in the sidebar. */

@@ -81,6 +81,8 @@ shape ChatSummary
 shape ChatState
   messages: ChatMessage[]
   busy: bool
+  // At work with a browser step its latest: the shell shows the computer's screen above the composer.
+  browsing: bool
   current: string
   routine: string
   conversations: ChatSummary[]

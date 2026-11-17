@@ -3,9 +3,10 @@
 // run in real workers, a GitHub CLI (fake-gh.ts) whose sign-in approves itself, and a GitHub API (fake-github.ts) whose
 // repositories are folders in the data directory. When the
 // user asks to add "todo: <title>", the model runs the todos app's add action, then says "Done."; "remember: <fact>",
-// "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for an api key: <hosts> | <header> | <prefix>", "ask for a login: <site>", "sign in: <login>",
-// "run: <command>" and "save routine: <name> | <cron> | <instruction>" make it call the memory's, the studio's, the
-// secrets', the shell's and the routines' tools the same way, and "reply: <words>" makes it answer those words. Its
+// "app code: <id>", "preview app: <id>", "ask for a key: <service>", "ask for an api key: <hosts> | <header> | <prefix>",
+// "ask for a login: <site>", "sign in: <login>", "run: <command>" (with " | then run: <command>" for each step after
+// it) and "save routine: <name> | <cron> | <instruction>" make it call the memory's, the studio's, the secrets', the
+// shell's and the routines' tools the same way, and "reply: <words>" makes it answer those words. Its
 // The model is "faux-1", with "faux-2" to fall back on: "refuse: <model>" (or "all") makes that model refuse as
 // ChatGPT refuses one the account's plan does not cover, and "which model?" answers the one that took it. Its
 // agent-browser knows two tricks. TEST_DATA_DIR names
@@ -92,7 +93,10 @@ const TOOL_CALLS = [
   },
   {
     pattern: /run: ([^"\\]+)/,
-    call: (command: string) => fauxToolCall("bash", { command }),
+    call: (commands: string) =>
+      fauxToolCall("bash", {
+        command: commands.split(" | then run: ")[0] ?? "",
+      }),
   },
   {
     pattern: /todo: ([^"\\]+)/,
@@ -160,6 +164,40 @@ function modelChoice(text: string, model: string) {
     : undefined;
 }
 
+/**
+ * What the model says once a tool answered: the next command of a "run: <command> | then run: <command>" turn, else
+ * "Done.", or what a command printed when it printed a secret's stand-in, so the test checks the agent saw no more.
+ */
+function afterTool(
+  context: Parameters<FauxResponseFactory>[0],
+  answer: string
+) {
+  const asked = context.messages.findLast(({ role }) => role === "user");
+
+  const [, commands = ""] =
+    /run: ([^"\\]+)/.exec(isText(asked?.content) ? asked.content : "") ?? [];
+
+  const answered = context.messages
+    .slice(asked ? context.messages.indexOf(asked) : 0)
+    .filter(({ role }) => role === "toolResult").length;
+
+  // A message after the last tool's answer (one the host adds to the turn) starts no step of its own.
+  const next =
+    answered === 0
+      ? undefined
+      : commands.split(" | then run: ").at(answered)?.trim();
+
+  if (next !== undefined) {
+    return fauxAssistantMessage(fauxToolCall("bash", { command: next }), {
+      stopReason: "toolUse",
+    });
+  }
+
+  const [seen] = /imp-secret-[a-z0-9-]+/.exec(answer) ?? [];
+
+  return fauxAssistantMessage(seen ? `I see ${seen}.` : "Done.");
+}
+
 // The model that is asked comes last, after the request's options and the provider's state.
 const answer: FauxResponseFactory = (context, ...rest) => {
   const { 2: model } = rest;
@@ -168,11 +206,7 @@ const answer: FauxResponseFactory = (context, ...rest) => {
   const last = context.messages.findLast(({ role }) => role !== "system");
 
   if (last?.role === "toolResult") {
-    // What a command printed, when it printed a secret's stand-in: the test checks the agent saw no more than that.
-    const [seen] =
-      /imp-secret-[a-z0-9-]+/.exec(JSON.stringify(last.content)) ?? [];
-
-    return fauxAssistantMessage(seen ? `I see ${seen}.` : "Done.");
+    return afterTool(context, JSON.stringify(last.content));
   }
 
   const text = isText(last?.content)

@@ -233,6 +233,26 @@ test "the computer's screen opens in its own tab, beside the chat on a wide wind
   tap "computer-open-screen"
   expect tree has "computer-frame"
 
+test "while the imp uses the browser the chat shows the computer's screen, which opens the Computer tab"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  clock until state computer.status == "ready" within 10000
+  // The browser step runs long enough to be seen; the test model takes a few seconds to ask for it.
+  type "composer" "run: sleep 15; agent-browser open example.com"
+  tap "send"
+  clock until state chat.browsing == true within 20000
+  expect tree has "screen-preview-frame"
+  tap "screen-preview-open"
+  expect state nav.tab == "computer"
+  expect tree has "computer-frame"
+  expect tree missing "screen-preview"
+  clock until state chat.busy == false within 30000
+  tap "tab-github"
+  expect tree has "chat-panel"
+  expect tree missing "screen-preview"
+
 test "what the imp is asked to remember shows in Settings, reaches its prompt, and can be forgotten"
   request POST "/api/call/accountSignIn" []
   request POST "/api/call/appsInstall" ["github"]

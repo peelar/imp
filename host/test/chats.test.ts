@@ -129,6 +129,48 @@ test("the transcript says what the imp did in the browser in words, not as a com
   assert.deepEqual(await commandRow("ls -la"), ["Ran a command", "ls -la"]);
 });
 
+// The shell shows the computer's screen above the composer while `browsing`: at work, with a browser step the latest.
+test("the chat says the imp is browsing while its latest step drives the browser, and not once it moves on", async () => {
+  /** A chat state of the turn for `message` while the imp works, with `titles` its activity rows and `browsing`. */
+  const reaches = async (
+    message: string,
+    titles: readonly string[],
+    browsing: boolean
+  ) =>
+    await until("chat", (answer) => {
+      const all = isRow(answer) ? rows(answer.messages) : [];
+      const asked = all.findLastIndex((m) => m.text === message);
+      const steps = all.slice(asked + 1).filter((m) => m.role === "activity");
+
+      return isRow(answer) &&
+        answer.busy === true &&
+        answer.browsing === browsing &&
+        asked !== -1 &&
+        JSON.stringify(steps.map((m) => m.title)) === JSON.stringify(titles)
+        ? answer
+        : undefined;
+    });
+
+  const idle = async () =>
+    await until("chat", (answer) =>
+      isRow(answer) && answer.busy === false ? answer : undefined
+    );
+
+  // The browser step runs for two seconds: the screen shows from when the imp asks for it, before it answers.
+  const browse = "run: sleep 2; agent-browser open example.com";
+
+  assert.deepEqual(await call("chatSend", [browse, ""]), done);
+  await reaches(browse, [], true);
+  assert.equal((await idle()).browsing, false);
+
+  // A step after the browser's, while it runs, is not browsing, though a browser step came before it.
+  const moveOn = "run: agent-browser open example.com | then run: sleep 2";
+
+  assert.deepEqual(await call("chatSend", [moveOn, ""]), done);
+  await reaches(moveOn, ["Couldn't open a page"], false);
+  await idle();
+});
+
 test("New chat opens an empty conversation, which the sidebar lists once something is said in it", async () => {
   const start = await until(
     "chat",

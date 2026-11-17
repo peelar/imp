@@ -1,7 +1,7 @@
 // The computer: its screen, its Settings, and the onboarding's choice of computer (Imp cloud, a container on this
 // machine, or a computer of yours on the tailnet).
 
-use Label, rise, Body, Control, Heading, Lead, Mono, Small, Subheading, Title from "./look.contract"
+use Label, rise, pulse, Body, Control, Heading, Lead, Mono, Small, Subheading, Title from "./look.contract"
 use Button from "./controls.contract"
 use Computer from "./host.contract"
 use WizardTitle, WizardFold from "./onboarding.contract"
@@ -50,6 +50,29 @@ component ComputerScreen
               :hover
                 background-color="surface.soft"
               text "Open Settings" class=Label color="inherit"
+
+// The computer's screen while the imp uses the browser, above the composer: watched only, so the composer keeps the
+// keyboard; a press opens the Computer tab, to watch it large or take over.
+component ScreenPreview
+  props
+    src: string
+    open: action
+    compact: bool
+    still: bool
+  view
+    row justify-content="center" padding=(compact ? "space.xs space.ms 0" : "space.xs space.md 0") testId="screen-preview"
+      column width="100%" max-width="measure.page" border="1px solid line.strong" position="relative"
+        animation=(still ? "none" : "rise 220ms ease-out both")
+        row align-items="center" gap="space.sm" padding="space.xs space.sm" border-bottom="1px solid line.subtle"
+          row width=6 height=6 background-color="AccentColor" aria-hidden=true
+            animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
+          text "Using the browser" class=Label flex=1 min-width=0
+          text "Watch ↗" class=Label color="ink.strong"
+        iframe src=src title="Your imp's browser" tabindex=-1 testId="screen-preview-frame" width="100%"
+          aspect-ratio="16 / 10" max-height=(compact ? "14rem" : "22rem") border="none" pointer-events="none"
+        // Over the whole preview, so the frame takes no clicks and the press opens the Computer tab.
+        button press=open aria-label="Watch your imp use the browser" testId="screen-preview-open" position="absolute"
+          inset=0 padding=0 border="none" background-color="transparent" cursor="pointer"
 
 // Where the agent works: the machine now, Imp cloud's sizes, and the computers on the person's tailnet with the two
 // things to do once so one of them can be chosen.

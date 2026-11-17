@@ -3,7 +3,8 @@
      live `computer` source. Served by screen.ts at /computer/screen. The shell's Computer tab embeds it as
      /computer/screen?embed, shows it only while the computer is ready, and draws the name and status itself: the
      embedded page has no header and opens no stream of its own, because the shell's streams already use five of the six
-     connections a browser opens to a host over HTTP/1.1. -->
+     connections a browser opens to a host over HTTP/1.1. The chat's preview opens it as /computer/screen?embed&view,
+     which only watches. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -55,6 +56,8 @@
 	#message { font: 400 1.75rem/1.2 "Instrument Serif", Georgia, serif; max-width: 30rem; }
 	#detail { color: #9b9b97; max-width: 34rem; overflow-wrap: anywhere; }
 	body.embedded header { display: none; }
+	body.watching #message { font-size: 1.125rem; }
+	body.watching #detail { font-size: 0.8125rem; }
 	@media (max-width: 560px) { #fullscreen { display: none; } h1 { font-size: 1.25rem; } }
 </style>
 </head>
@@ -79,6 +82,9 @@
 	const scheme = new URLSearchParams(location.search).get("scheme");
 	if (scheme === "light" || scheme === "dark") document.documentElement.style.colorScheme = scheme;
 	const embedded = new URLSearchParams(location.search).has("embed");
+	// The chat's preview of the screen (?view) only watches: it takes no keys or clicks.
+	const watching = new URLSearchParams(location.search).has("view");
+	document.body.classList.toggle("watching", watching);
 	document.body.classList.toggle("embedded", embedded);
 	const socket = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/computer/screen`;
 	let rfb;
@@ -117,6 +123,7 @@
 		show(`Connecting to ${computer.name || "your imp's computer"}…`);
 		rfb = new RFB($("screen"), socket);
 		rfb.scaleViewport = true;
+		rfb.viewOnly = watching;
 		rfb.background = "#1b1b1a";
 		rfb.addEventListener("connect", () => {
 			connected = true;

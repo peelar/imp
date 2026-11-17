@@ -34,7 +34,7 @@ use withSpoken, Transcript, Composer from "./chat.contract"
 use KeyBadge, Initialled, numbered, Confirm, SettingsPage from "./parts.contract"
 use RoutineList, RoutineBar from "./routines.contract"
 use TrickList from "./tricks.contract"
-use ComputerSettings, ComputerScreen, ComputerWizard from "./computer.contract"
+use ComputerSettings, ComputerScreen, ComputerWizard, ScreenPreview from "./computer.contract"
 use AppPage, AppBar, AppTab, FirstAppWizard from "./apps.contract"
 use Sidebar from "./sidebar.contract"
 use WizardTitle, WizardFold, KeyField, WizardButton from "./onboarding.contract"
@@ -335,6 +335,9 @@ component App
   derive opening = (not unreachable and (account.status == "" or account.status == "checking"
     or (signedIn and not needsComputer and chat.current == "")))
   derive computer = account.computer
+  // The computer's screen above the composer while the imp uses the browser, on every page but the Computer tab, which
+  // shows it already. Its frame connects to the screen only while it shows.
+  derive previewing = chat.browsing and computer.status == "ready" and nav.tab != "computer"
   derive memory = account.memory
   derive tricks = account.tricks
   derive routines = account.routines
@@ -1075,6 +1078,9 @@ component App
                           for q, k in secrets.requests key=q.id
                             SecretAsk(request=q, prefix="", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
                               error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
+                    if previewing and nav.tab == "chat"
+                      ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
+                        compact=false, still=still)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
                       canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
@@ -1224,6 +1230,9 @@ component App
                   for q, k in secrets.requests key=q.id
                     SecretAsk(request=q, prefix="side-", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
                       error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
+            if previewing
+              ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
+                compact=true, still=still)
             Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
