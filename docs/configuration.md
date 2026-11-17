@@ -17,7 +17,7 @@ Almost everything is set up in the app. The few settings outside it are environm
 | `IMP_HOME` | set by the installer | The installed host's home. Only an installed host updates itself. |
 | `FLAGS` | none | A Vercel Flags SDK key, to decide [feature flags](#feature-flags) in a Vercel project. Without one, the host decides them alone. |
 | `EXACT` | `tools/exact` beside the checkout | The Exact checkout the host builds the web client with, when the imp previews an app. |
-| `TAILSCALE` | `tailscale` on `PATH` | The Tailscale CLI the host reads the tailnet with. |
+| `TAILSCALE` | the CLI the installer found | The Tailscale CLI the host reads the tailnet with. The installer sets it to the `tailscale` on its `PATH`, or the Mac app's CLI, because the service does not see your shell's `PATH`. |
 
 After you edit `~/.imp/env`, restart the service: `systemctl --user restart imp` on Linux, or `launchctl kickstart -k gui/$(id -u)/dev.imp.host` on macOS.
 

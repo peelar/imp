@@ -27,6 +27,11 @@ NODE=$(command -v node) || fail "needs Node 24 or newer on PATH (https://nodejs.
 major=$("$NODE" -p 'process.versions.node.split(".")[0]')
 [ "$major" -ge 24 ] || fail "needs Node 24 or newer; $NODE is $("$NODE" --version)"
 
+# The Tailscale CLI, found here because the service does not see this shell's PATH: launchd gives it only the system's
+# own folders, and the Mac app keeps its CLI inside the app. Empty when Tailscale is missing.
+ts=$(command -v tailscale || true)
+[ -n "$ts" ] || [ ! -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] || ts=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+
 tag=${IMP_VERSION:-}
 if [ -z "$tag" ]; then
 	# GitHub sends /releases/latest on to the latest release's tag page; that address names the tag.
@@ -70,6 +75,10 @@ EOF
 	chmod 600 "$IMP_HOME/env"
 fi
 
+# The service's Tailscale CLI, unless `env` names another.
+tailscale_setting=""
+[ -z "$ts" ] || tailscale_setting="export TAILSCALE=\"\${TAILSCALE:-$ts}\""
+
 # What the service runs: the settings, then the current release's host. A restart after an update starts the release
 # `current` links to by then.
 cat > "$IMP_HOME/run.sh" <<EOF
@@ -78,6 +87,7 @@ set -a
 . "$IMP_HOME/env"
 set +a
 export IMP_HOME="$IMP_HOME" IMP_REPO="$REPO" DATA_DIR="$IMP_HOME/data"
+$tailscale_setting
 exec "$NODE" "$IMP_HOME/current/host/src/server.ts"
 EOF
 chmod +x "$IMP_HOME/run.sh"
@@ -153,8 +163,6 @@ port=${port:-8787}
 # what is in the way.
 serve_on_tailnet() {
 	url="" note=""
-	ts=$(command -v tailscale || true)
-	[ -n "$ts" ] || [ ! -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] || ts=/Applications/Tailscale.app/Contents/MacOS/Tailscale
 	if [ -z "$ts" ]; then
 		note="Install Tailscale on this machine and sign in (https://tailscale.com/download), then run this again."
 		return
