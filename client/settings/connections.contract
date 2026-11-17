@@ -86,6 +86,7 @@ component GithubSignIn
         column gap="space.sm" testId=`${prefix}github-waiting`
           Step(number="01", title="Open GitHub's sign-in page")
           link href=github.url testId=`${prefix}github-open` display="flex" align-items="center" justify-content="center"
+            cursor="pointer"
             gap="space.sm" padding="space.ms space.md" border="1px solid AccentColor" background-color="AccentColor"
             color="ink.on-fill" class=ControlLarge text-decoration-line="none"
             text "Open GitHub"

@@ -61,6 +61,7 @@ component AppPage
                       text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
                         class=Body
                     button press=dismissGuide aria-label="Close" title="Close" testId="app-guide-dismiss" appearance="none"
+                      cursor="pointer"
                       width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
                       border="none" background-color="transparent" color="ink.muted"
                       :hover
@@ -88,6 +89,7 @@ component BarSymbol
     testId: string
   view
     button press=press aria-label=label title=label testId=testId appearance="none" width=32 height=32 min-width=32
+      cursor="pointer"
       padding=0 display="flex" align-items="center" justify-content="center" flex-shrink=0 box-sizing="border-box"
       border="1px solid line.strong" background-color="transparent" color="ink.strong"
       :hover
@@ -103,6 +105,7 @@ component BarDialogSymbol
     testId: string
   view
     button commandfor=dialog command="show-modal" aria-label=label title=label testId=testId appearance="none"
+      cursor="pointer"
       width=32 height=32 min-width=32 padding=0 display="flex" align-items="center" justify-content="center"
       flex-shrink=0 box-sizing="border-box" border="1px solid line.strong" background-color="transparent"
       color="ink.strong"
@@ -139,6 +142,7 @@ component AppBar
         BarSymbol(symbol="symbol:icon.back", label="Back to the saved version", press=discard(app.id),
           testId="preview-discard")
         button press=save(app.id) aria-keyshortcuts="Meta+S" testId="preview-save" position="relative" flex-shrink=0
+          cursor="pointer"
           height=32 box-sizing="border-box" padding="0 space.ms" display="flex" align-items="center"
           border="1px solid AccentColor" background-color="AccentColor" color="ink.on-fill"
           :hover
@@ -188,6 +192,7 @@ component ManageApp
         DialogButton(dialog=`uninstall-${app.id}`, variant="quiet-danger", testId="uninstall")
           text "Uninstall"
         button commandfor=`manage-${app.id}` command="close" testId="manage-close" padding="space.sm space.ms"
+          cursor="pointer"
           border="1px solid line.strong" border-radius=0 background-color="transparent" color="ink.strong"
           :hover
             background-color="surface.soft"
@@ -207,6 +212,7 @@ component AppTab
     press: action
   view
     button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
+      cursor="pointer"
       aria-keyshortcuts=chord aria-label=label title=label testId=`${prefix}tab-${name}` appearance="none"
       display=(shown ? "flex" : "none") flex-direction="column" align-items="center" justify-content="center"
       position="relative" box-sizing="border-box" flex="1 1 0" max-width="7rem" gap="space.xs" min-width=0 padding=0

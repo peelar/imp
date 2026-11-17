@@ -24,3 +24,4 @@ component ExperimentalSettings
                 text (f.next ? "On after Imp restarts" : "Off after Imp restarts") class=Label color="AccentColor"
                   padding-top="space.xs" testId=`flag-pending-${i}`
             input type="checkbox" switch checked=f.next change=choose(f.key) aria-label=f.label testId=`flag-${f.key}`
+              cursor="pointer"

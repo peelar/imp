@@ -45,6 +45,7 @@ component ComputerScreen
             color="ink.muted" class=Body max-width="measure.note" overflow-wrap="anywhere"
           if computer.status == "none" or computer.status == "failed"
             button press=setUp testId="computer-set-up" padding="space.sm space.ms" border="1px solid line.strong"
+              cursor="pointer"
               background-color="transparent" color="ink.strong"
               :hover
                 background-color="surface.soft"
@@ -112,6 +113,7 @@ component ComputerSettings
             row role="radiogroup" aria-label="Imp cloud size"
               for z, i in computer.sizes key=z.id
                 button role="radio" aria-checked=(computer.kind == "cloud" and computer.size == z.id) press=useCloud(z.id)
+                  cursor=(not computer.cloudAvailable or switching ? "default" : "pointer")
                   disabled=(not computer.cloudAvailable or switching) flex=1 testId=`computer-size-${z.id}`
                   padding="space.sm space.xs" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
                   background-color=(computer.kind == "cloud" and computer.size == z.id ? "ink.strong" : "transparent")
@@ -123,6 +125,7 @@ component ComputerSettings
         SettingsSection(title="Your computer", aside="", asideTestId="", note="A Linux machine on your tailnet.", testId="")
           for d in computer.devices key=d.id
             button press=useOwn(d.id) disabled=(d.problem != "" or switching)
+              cursor=(d.problem != "" or switching ? "default" : "pointer")
               aria-pressed=(computer.kind == "own" and computer.device == d.id) testId=`computer-device-${d.name}`
               display="flex" align-items="center" gap="space.ms" padding="space.ms 0" background-color="transparent" border="none"
               border-bottom="1px solid line.subtle" text-align="start" color="ink.strong"
@@ -181,6 +184,7 @@ component SetupPrompt
     column border="1px solid line.strong" testId="computer-setup-prompt"
       row align-items="center"
         button press=toggle aria-expanded=open testId="computer-setup-prompt-toggle" flex=1 display="flex"
+          cursor="pointer"
           align-items="center" gap="space.sm" padding="space.sm space.ms" border="none" background-color="transparent" color="ink.muted"
           text-align="start"
           :hover
@@ -211,6 +215,7 @@ component FoundComputer
     testId: string
   view
     button press=press disabled=disabled testId=testId display="flex" align-items="center" gap="space.ms"
+      cursor=(disabled ? "default" : "pointer")
       padding="space.sm space.sm space.sm space.ms" border="none" background-color="surface.soft" color="ink.strong"
       text-align="start"
       :hover
@@ -247,6 +252,7 @@ component ComputerWizard
         row gap="space.xs" align-items="baseline" class=Body color="ink.muted"
           text "Paste a key from"
           link href="https://e2b.dev/dashboard" testId="computer-cloud-key-link" color="ink.strong"
+            cursor="pointer"
             text "e2b.dev/dashboard"
           text "."
         row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.ms" border="1px solid line.strong"
@@ -275,6 +281,7 @@ component ComputerWizard
             text "Skip, use a container here"
       else
         button press=toggle("container") aria-expanded=(choice == "container") testId="computer-skip"
+          cursor="pointer"
           align-self="flex-start" padding="space.xs 0" border="none" background-color="transparent" color="ink.muted"
           :hover
             color="ink.strong"

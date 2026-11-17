@@ -118,6 +118,7 @@ component Composer
           row align-items="center" gap="space.xs" padding=(compact ? "space.xs space.ms" : "space.xs space.md")
             if models.length > 1
               select value=model change=chooseModel aria-label="Model" testId=`${prefix}model` min-width=0
+                cursor="pointer"
                 max-width=(compact ? "9rem" : "12rem") height=32 border="none" background-color="transparent"
                 color="ink.muted" class=Small
                 for m in models key=m
@@ -125,6 +126,7 @@ component Composer
             row flex=1
             if canDictate or dictating
               button press=dictate retainFocus=true aria-pressed=dictating
+                cursor="pointer"
                 aria-label=(dictating ? "Stop dictating" : "Dictate") testId=`${prefix}dictate` width=34 height=34
                 min-width=34 padding=0 border="none" display="flex" align-items="center" justify-content="center"
                 background-color=(dictating ? "danger.soft" : "transparent")
@@ -132,6 +134,7 @@ component Composer
                 image "symbol:icon.microphone" width=16 height=16
             if busy and said == ""
               button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
+                cursor=(stopping ? "default" : "pointer")
                 width=34 height=34 min-width=34 padding=0 border="none" background-color="ink.strong"
                 color="surface.page" display="flex" align-items="center" justify-content="center" position="relative"
                 image "symbol:icon.stop" width=12 height=12
@@ -139,6 +142,7 @@ component Composer
                   KeyBadge(chord="Meta+.", at="end")
             else
               button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
+                cursor=(said == "" or sending ? "default" : "pointer")
                 testId=`${prefix}send` width=34 height=34 min-width=34 padding=0 border="none"
                 background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
                 justify-content="center" transition="background-color 120ms ease"

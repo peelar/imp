@@ -886,6 +886,7 @@ component App
                       height=(wide ? "3.25rem" : "auto") box-sizing="border-box" padding=(wide ? "0" : "space.ms 0 space.ms")
                       if ["chat", "routines", "tricks", "directory"].includes(e.name) and not wide
                         button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
+                          cursor="pointer"
                           aria-keyshortcuts="Control+Meta+S" testId="drawer-toggle" appearance="none" width=32 height=32
                           padding=0 display="flex" align-items="center" justify-content="center"
                           border="1px solid line.strong" background-color="transparent" color="ink.strong" position="relative"
@@ -903,6 +904,7 @@ component App
                       // A new release of the Mac app is ready: it waits for the person to restart, never quits Imp.
                       if update.version != ""
                         button press=restartToUpdate disabled=pending(restarting) testId=`update-restart-${e.name}`
+                          cursor=(pending(restarting) ? "default" : "pointer")
                           aria-label=`Restart Imp to update to ${update.version}` display="flex" align-items="center" gap="space.sm"
                           padding="space.sm space.ms" border="none" background-color="AccentColor" color="ink.on-fill"
                           class=Label
@@ -923,6 +925,7 @@ component App
                       // New chat from any page; on a wide window the sidebar has it.
                       if not wide
                         button press=newChat aria-label="New chat" aria-keyshortcuts="Meta+N" testId=`new-chat-${e.name}`
+                          cursor="pointer"
                           appearance="none" width=32 height=32 padding=0 display="flex" align-items="center"
                           justify-content="center" border="1px solid line.strong" background-color="transparent"
                           color="ink.strong" position="relative"
@@ -961,6 +964,7 @@ component App
                               text `No. ${numbered(apps.length + (computer.status == "none" ? 0 : 1))}` class=Label
                             for a in apps key=a.id
                               button press=pick(a.id) display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
+                                cursor="pointer"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId=`app-${a.id}`
                                 transition="background-color 120ms ease"
@@ -975,6 +979,7 @@ component App
                             // The imp's computer, as an app: its screen, to watch the imp work or take over.
                             if computer.status != "none"
                               button press=pick("computer") display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
+                                cursor="pointer"
                                 background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                                 text-align="start" color="ink.strong" testId="app-computer"
                                 transition="background-color 120ms ease"
@@ -988,6 +993,7 @@ component App
                                   text `${computer.name}. Watch your imp work, or take over.` class=Body
                                     color="ink.muted" line-clamp=1
                             button press=startApp display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
+                              cursor="pointer"
                               background-color="transparent" border="none" border-bottom="1px solid line.subtle"
                               text-align="start" color="ink.strong" testId="app-new"
                               transition="background-color 120ms ease"
@@ -1005,6 +1011,7 @@ component App
                               // The todos ones only while Todos is installed.
                               for s in (apps.map(a => a.id).includes("todos") ? ["Add todo: Buy flowers", "What's on my todo list?"] : []).concat(["Build me an app that tracks my runs"]) key=s
                                 button press=suggest(s) disabled=pending(sent) padding="space.sm space.ms"
+                                  cursor=(pending(sent) ? "default" : "pointer")
                                   background-color="transparent" border="1px solid line.strong" color="ink.strong"
                                   class=Body transition="border-color 120ms ease, background-color 120ms ease"
                                   testId=`suggest-${s.length}`
@@ -1026,6 +1033,7 @@ component App
                           border-bottom="1px solid line.subtle" testId="settings-sections"
                           for s in ["general", "computer", "memory", "secrets", "connections", "assistants", "experimental"] key=s
                             button press=openSettings(s) aria-pressed=(settingsPane == s) testId=`settings-pane-${s}`
+                              cursor="pointer"
                               appearance="none" display="flex" align-items="baseline" padding="space.sm 0" margin-bottom="-1px" border="none"
                               border-bottom=(settingsPane == s ? "2px solid ink.strong" : "2px solid transparent")
                               background-color="transparent" color=(settingsPane == s ? "ink.strong" : "ink.muted")
@@ -1098,6 +1106,7 @@ component App
             column height="3.5rem" box-sizing="border-box" justify-content="center" padding="0 space.sm"
               border-top="1px solid line.subtle"
               button press=pick("settings") aria-pressed=(nav.tab == "settings") aria-keyshortcuts="Meta+,"
+                cursor="pointer"
                 testId="tab-settings" appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
                 border="none" text-align="start" color="ink.strong"
                 background-color=(nav.tab == "settings" ? "surface.soft" : "transparent")
@@ -1138,6 +1147,7 @@ component App
                   animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
               row flex=1
               button press=pick("chat") aria-label="Open the full chat" testId="chat-expand" appearance="none"
+                cursor="pointer"
                 width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
                 border="none" background-color="transparent" color="ink.muted"
                 :hover
@@ -1171,6 +1181,7 @@ component App
                 openRoutines=openRoutines, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder,
                 keyboard=keyboard, directory=directoryOn, still=still)
             button press=toggleDrawer aria-label="Close" aria-keyshortcuts="Escape" testId="drawer-close" appearance="none"
+              cursor="pointer"
               flex=1 border="none"
               background-color="ink.strong" opacity=0.25
         // The masthead above everything on a wide window: the wordmark and the day.
@@ -1178,6 +1189,7 @@ component App
           row position="absolute" top=0 left=0 right=0 height="3.25rem" box-sizing="border-box" align-items="center"
             padding="0 space.md" border-bottom="1px solid line.subtle" background-color="surface.page"
             button press=goHome aria-label="Imp, home" testId="home-logo" appearance="none" display="flex"
+              cursor="pointer"
               align-items="center" gap="space.sm" padding="space.xs space.xs" margin-left="-6px" border="none"
               background-color="transparent" color="ink.strong"
               :hover
@@ -1238,6 +1250,7 @@ component App
                           image "symbol:icon.copy" width=13 height=13 aria-hidden=true
                           text "Copy"
                       link href=account.url testId="signin-open" display="flex" align-items="center"
+                        cursor="pointer"
                         justify-content="center" gap="space.sm" padding="space.ms space.md" background-color="AccentColor"
                         color="ink.on-fill" class=Mono
                         text-transform="uppercase" text-decoration-line="none"

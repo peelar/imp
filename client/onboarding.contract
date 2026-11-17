@@ -23,6 +23,7 @@ component WizardButton
     disabled: bool
   view
     button press=press disabled=disabled testId=testId display="flex" align-items="center"
+      cursor=(disabled ? "default" : "pointer")
       justify-content="space-between" gap="space.sm" padding="space.ms space.md" class=ControlLarge
 
       border=(primary ? "1px solid AccentColor" : "1px solid line.strong")
@@ -49,6 +50,7 @@ component WizardFold
   view
     column
       button press=press disabled=disabled aria-expanded=open testId=testId display="flex" align-items="center"
+        cursor=(disabled ? "default" : "pointer")
         justify-content="space-between" gap="space.sm" padding="space.ms space.md" class=ControlLarge
 
         border=(primary ? "1px solid AccentColor" : "1px solid line.strong")

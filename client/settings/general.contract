@@ -44,6 +44,7 @@ component GeneralSettings
         row role="radiogroup" aria-label="Appearance" padding="space.ms 0" border-bottom="1px solid line.subtle"
           for s, i in ["system", "light", "dark"] key=s
             button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
+              cursor="pointer"
               padding="space.sm 0" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
               background-color=(scheme == s ? "ink.strong" : "transparent")
               color=(scheme == s ? "surface.page" : "ink.strong")

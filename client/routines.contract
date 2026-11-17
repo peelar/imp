@@ -24,6 +24,7 @@ component RoutineList
           color="ink.muted" class=Lead max-width="measure.note"
         row
           button press=ask testId="routine-new" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
+            cursor="pointer"
             border="1px solid ink.strong" background-color="ink.strong" color="surface.page"
             image "symbol:icon.add" width=12 height=12 aria-hidden=true
             text "Ask for a routine" class=Label color="inherit"
@@ -36,6 +37,7 @@ component RoutineList
               class=Body font-style="italic" color="ink.muted" padding="space.ms 0" testId="routines-empty"
           for r, i in routines key=r.id
             button press=open(r.id) testId=`routine-${i}` display="flex" align-items="center" gap="space.ms" padding="space.ms 0"
+              cursor="pointer"
               background-color="transparent" border="none" border-bottom="1px solid line.subtle" text-align="start"
               color="ink.strong" transition="background-color 120ms ease"
               :hover
@@ -77,6 +79,7 @@ component RoutineBar
             flex=1 min-width="10rem" testId="routine-last"
           row gap="space.sm"
             button press=run(routine.id) disabled=(busy or routine.running or routine.asked) aria-keyshortcuts="Meta+R"
+              cursor=(busy or routine.running or routine.asked ? "default" : "pointer")
               testId="routine-run" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
               border="1px solid ink.strong" background-color="ink.strong" color="surface.page" position="relative"
               image "symbol:icon.play" width=12 height=12 aria-hidden=true
@@ -86,6 +89,7 @@ component RoutineBar
             Button(press=pause(routine.id, not routine.paused), variant="secondary", disabled=busy, testId="routine-pause")
               text (routine.paused ? "Resume" : "Pause")
             button press=remove disabled=busy testId="routine-delete" padding="space.sm space.sm" border="1px solid line.strong"
+              cursor=(busy ? "default" : "pointer")
               background-color="transparent" color="ink.danger"
               :hover
                 background-color="danger.soft"

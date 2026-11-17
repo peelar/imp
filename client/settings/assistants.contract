@@ -33,4 +33,4 @@ component AssistantsSettings
             image a.symbol width=16 height=16 aria-hidden=true
             text a.name class=Lead flex=1 min-width=0 testId=`assistants-app-${a.id}`
             input type="checkbox" switch checked=a.shared change=share(a.id) aria-label=`Share ${a.name}`
-              testId=`assistants-share-${a.id}`
+              testId=`assistants-share-${a.id}` cursor="pointer"

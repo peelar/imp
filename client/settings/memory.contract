@@ -36,6 +36,7 @@ component MemorySettings
                 if m.kind != ""
                   text m.kind class=Label
                 button press=askForget(m.id, m.title) aria-label=`Forget everything about ${aboutTitle(m.title)}` testId=`memory-forget-${j}`
+                  cursor="pointer"
                   appearance="none" padding="space.xs 0" border="none" background-color="transparent" color="ink.muted"
                   :hover
                     color="ink.danger"
@@ -46,6 +47,7 @@ component MemorySettings
                   text f flex=1 min-width=0 class=Body overflow-wrap="break-word"
                     testId=`memory-fact-${j}-${i}`
                   button press=forget(m.id, f) aria-label=`Forget: ${f}` testId=`memory-forget-${j}-${i}` appearance="none"
+                    cursor="pointer"
                     width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
                     border="none" background-color="transparent" color="ink.faint"
                     :hover

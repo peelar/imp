@@ -31,6 +31,7 @@ component Button
   view
     if variant == "primary" or variant == "danger"
       button press=press disabled=disabled testId=testId
+        cursor=(disabled ? "default" : "pointer")
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -46,6 +47,7 @@ component Button
         children
     else if variant == "secondary"
       button press=press disabled=disabled testId=testId
+        cursor=(disabled ? "default" : "pointer")
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -60,6 +62,7 @@ component Button
         children
     else if variant == "accent"
       button press=press disabled=disabled testId=testId
+        cursor=(disabled ? "default" : "pointer")
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -74,6 +77,7 @@ component Button
         children
     else if variant == "quiet-danger"
       button press=press disabled=disabled testId=testId
+        cursor=(disabled ? "default" : "pointer")
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -87,6 +91,7 @@ component Button
         children
     else
       button press=press disabled=disabled testId=testId
+        cursor=(disabled ? "default" : "pointer")
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -109,6 +114,7 @@ component DialogButton
   view
     if variant == "primary" or variant == "danger"
       button commandfor=dialog command="show-modal" testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -120,6 +126,7 @@ component DialogButton
         children
     else if variant == "secondary"
       button commandfor=dialog command="show-modal" testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -131,6 +138,7 @@ component DialogButton
         children
     else if variant == "accent"
       button commandfor=dialog command="show-modal" testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -142,6 +150,7 @@ component DialogButton
         children
     else if variant == "quiet-danger"
       button commandfor=dialog command="show-modal" testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -153,6 +162,7 @@ component DialogButton
         children
     else
       button commandfor=dialog command="show-modal" testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -173,6 +183,7 @@ component ButtonLink
   view
     if variant == "primary" or variant == "danger"
       link href=href testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -184,6 +195,7 @@ component ButtonLink
         children
     else if variant == "secondary"
       link href=href testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -195,6 +207,7 @@ component ButtonLink
         children
     else if variant == "accent"
       link href=href testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -206,6 +219,7 @@ component ButtonLink
         children
     else if variant == "quiet-danger"
       link href=href testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)
@@ -217,6 +231,7 @@ component ButtonLink
         children
     else
       link href=href testId=testId
+        cursor="pointer"
         position="relative" display="flex" align-items="center" justify-content="center" gap="space.xs" flex-shrink=0
         padding=(boxed(variant) ? "space.sm space.ms" : "space.xs 0") border-width="1px"
         border-style=(boxed(variant) ? "solid" : "none") border-color=buttonLine(variant)

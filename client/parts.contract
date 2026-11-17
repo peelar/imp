@@ -52,11 +52,13 @@ component Confirm
         text message class=Body color="ink.muted"
       row justify-content="flex-end" gap="space.sm" padding="space.md space.lg space.lg"
         button commandfor=id command="close" testId=`${testId}-cancel` padding="space.sm space.ms" border="1px solid line.strong"
+          cursor="pointer"
           border-radius=0 background-color="transparent" color="ink.strong"
           :hover
             background-color="surface.soft"
           text "Cancel" class=Label color="inherit"
         button press=confirm commandfor=id command="close" destructive=true testId=`${testId}-confirm` padding="space.sm space.ms"
+          cursor="pointer"
           border="1px solid ink.danger" border-radius=0 background-color="ink.danger" color="ink.on-fill"
           :hover
             opacity=0.9

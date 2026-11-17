@@ -106,6 +106,7 @@ component AppDirectory
                   white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
               if installed.map(x => x.id).includes(a.id)
                 button press=open(a.id) aria-label=`Open ${a.name}` testId=`directory-open-${a.id}` padding="space.sm space.ms"
+                  cursor="pointer"
                   border="1px solid line.strong" background-color="transparent" color="ink.strong" class=Control
                     
                   :hover
@@ -113,6 +114,7 @@ component AppDirectory
                   text "Open"
               else
                 button press=installEntry(a) disabled=(sending or adding)
+                  cursor=(sending or adding ? "default" : "pointer")
                   aria-label=`Install ${a.name}` testId=`directory-install-${a.id}`
                   padding="space.sm space.ms" border="1px solid AccentColor" background-color="transparent" color="AccentColor"
                   class=Control    

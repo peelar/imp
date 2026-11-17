@@ -16,6 +16,7 @@ component Check
     toggle: action
   view
     button role="checkbox" aria-checked=todo.done aria-label=todo.title press=toggle(todo.id, not todo.done)
+      cursor="pointer"
       testId=`todo-done-${todo.id}` width=20 height=20 min-width=20 padding=0
       display="flex" align-items="center" justify-content="center"
       border=(todo.done ? "1px solid ink.strong" : "1px solid line.strong")
@@ -35,6 +36,7 @@ component RowButton
     press: action
   view
     button press=press aria-label=label title=label testId=testId appearance="none" width=28 height=28 min-width=28
+      cursor="pointer"
       padding=0 display="flex" align-items="center" justify-content="center" border="none"
       background-color="transparent" color="ink.faint"
       :hover
@@ -67,6 +69,7 @@ component TodoRow
           border="1px solid line.strong" background-color="transparent" outline="none" font-family="family.text"
           font-size="1.0625rem" color="ink.strong"
         button press=saveEdit disabled=(editDraft.trim() == "") testId=`todo-rename-save-${todo.id}` padding="6px 10px"
+          cursor=(editDraft.trim() == "" ? "default" : "pointer")
           border="none" background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.6875rem"
           letter-spacing="0.1em" text-transform="uppercase"
           :disabled
@@ -74,6 +77,7 @@ component TodoRow
             color="ink.faint"
           text "Save"
         button press=cancelEdit testId=`todo-rename-cancel-${todo.id}` padding="6px 4px" border="none"
+          cursor="pointer"
           background-color="transparent" color="ink.muted" font-family="family.mono" font-size="0.6875rem"
           letter-spacing="0.1em" text-transform="uppercase"
           :hover
@@ -132,6 +136,7 @@ component Screen
           flex=1 min-width=0 testId="todo-draft" border="none" background-color="transparent" outline="none"
           padding="8px 0" font-family="family.text" font-size="1.0625rem" color="ink.strong"
         button press=addDraft disabled=(draft.trim() == "") testId="todo-add" padding="9px 14px" border="none"
+          cursor=(draft.trim() == "" ? "default" : "pointer")
           background-color="AccentColor" color="ink.on-fill" font-family="family.mono" font-size="0.75rem"
           font-weight=500 letter-spacing="0.1em" text-transform="uppercase"
           :disabled

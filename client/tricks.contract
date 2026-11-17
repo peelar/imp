@@ -24,6 +24,7 @@ component TrickList
               class=Body font-style="italic" color="ink.muted" padding="space.ms 0" testId="tricks-empty"
           for k, i in tricks key=k.name
             button press=use(k.title) testId=`trick-${i}` display="flex" align-items="center" gap="space.ms" padding="space.ms 0"
+              cursor="pointer"
               background-color="transparent" border="none" border-bottom="1px solid line.subtle" text-align="start"
               color="ink.strong" transition="background-color 120ms ease"
               :hover

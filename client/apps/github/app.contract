@@ -58,6 +58,7 @@ component RowButton
     press: action
   view
     button press=press aria-label=label title=label testId=testId appearance="none" width=30 height=30 min-width=30
+      cursor="pointer"
       padding=0 display="flex" align-items="center" justify-content="center" border="none"
       background-color="transparent" color="ink.faint"
       :hover
@@ -73,6 +74,7 @@ component FilterButton
     press: action
   view
     button press=press aria-pressed=current testId=`github-filter-${filter}` appearance="none" padding="7px 10px"
+      cursor="pointer"
       display="flex" align-items="baseline" gap=6 border=(current ? "1px solid ink.strong" : "1px solid line.subtle")
       background-color=(current ? "ink.strong" : "transparent") color=(current ? "surface.page" : "ink.muted")
       :hover
@@ -97,6 +99,7 @@ component ItemRow
           text "Draft" class=Label color="ink.faint"
       column flex=1 min-width=0 gap=5
         link href=item.url color="ink.strong" text-decoration-line="none" font-size="1.0625rem" line-height=1.35
+          cursor="pointer"
           overflow-wrap="break-word"
           :hover
             color="AccentColor"
