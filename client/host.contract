@@ -65,6 +65,8 @@ shape ChatMessage
   detail: string
   icon: string
   failed: bool
+  // The images the person sent with the message, each the host's path for it (/api/image/…).
+  images: string[]
 
 // While the assistant writes, its partial answer is the last message, with id "live".
 // A conversation in the sidebar, named by its first message; `working` while the imp is at work in it.

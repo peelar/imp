@@ -54,14 +54,97 @@ async function updateRestart(storage: Storage): Promise<{ ok: boolean; error: st
   return { ok: true, error: '' };
 }
 
+// Images attached to a message. A picked file arrives in app:/tmp/picked, a dropped or pasted one as a doc: path;
+// each is shrunk once, when attached, into UPLOADS, which the composer shows and chatSend reads back. 2048 px on the
+// longer side is the most OpenAI's models look at, and 3.5 MB keeps the base64 well under the host's 5 MB.
+const UPLOADS = 'app:/tmp/upload';
+const SHRINK = { maxDimension: 2048, maxBytes: 3_500_000 };
+const TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
+let uploads = 0;
+
+const typeOf = (path: string) => TYPES[path.split('.').at(-1)?.toLowerCase() ?? ''] ?? '';
+
+// One attached file as an image the model takes, in UPLOADS. A PNG stays one, so a screenshot's text stays sharp; any
+// other picture becomes a JPEG. A host that cannot encode images (Linux, Windows) sends the original when it fits.
+// The file is named by `seed`, the shell's clock (a data source has none), and a count, so a later page's files never
+// take an earlier one's name and show its picture.
+async function shrink(storage: Storage, from: string, seed: number): Promise<string> {
+  const type = typeOf(from);
+  if (!type) throw new Error('not an image');
+  const name = `${UPLOADS}/${seed}-${uploads++}`;
+  let source = from;
+  if (from.startsWith('doc:')) {
+    source = `${name}-source.${from.split('.').at(-1)}`;
+    await storage.fs.copyFile(from, source);
+  }
+  const png = type === 'image/png';
+  try {
+    const out = await storage.fs.compressImage(source, `${name}.${png ? 'png' : 'jpg'}`, {
+      ...SHRINK,
+      type: png ? 'image/png' : 'image/jpeg',
+    });
+    return out.path;
+  } catch (error) {
+    const { size } = await storage.fs.stat(source);
+    if ((error as { code?: string }).code === 'unsupported' && size <= SHRINK.maxBytes && !type.startsWith('image/hei'))
+      return source;
+    throw error;
+  }
+}
+
+async function chatAttach(storage: Storage, paths: string[], room: number, seed: number): Promise<{ paths: string[]; error: string }> {
+  await storage.fs.mkdir(UPLOADS);
+  const made: string[] = [];
+  let left = 0;
+  for (const path of paths) {
+    if (made.length >= room) break;
+    try {
+      made.push(await shrink(storage, path, seed));
+    } catch {
+      left++;
+    }
+  }
+  const over = paths.length - made.length - left;
+  const error = left > 0
+    ? `${left === 1 ? 'One file' : `${left} files`} couldn't be attached: Imp takes PNG, JPEG, GIF, WebP and HEIC images.`
+    : over > 0 ? 'A message takes up to four images.' : '';
+  return { paths: made, error };
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+// The message, the app open beside the chat, and the attached images as the model takes them.
+async function chatSend(storage: Storage, args: unknown[]) {
+  const [message, beside, attached] = args;
+  const images = [];
+  for (const path of Array.isArray(attached) ? attached.map(String) : []) {
+    const data = base64(new Uint8Array(await storage.fs.readFile(path)));
+    images.push({ type: 'image', data, mimeType: typeOf(path) });
+  }
+  return call('chatSend', [message, beside, images]);
+}
+
 // Any origin, because the host's address is the person's (their tailnet name, later one they type on a phone). The
-// microphone and speech recognition are the composer's dictation; notifications tell the person what needs them.
+// microphone and speech recognition are the composer's dictation; notifications tell the person what needs them. The
+// files are the images attached to a message.
 export const grants =
-  `net.fetch https:\nnet.fetch http:\ndevice.microphone purpose.microphone\ndevice.speech-recognition purpose.dictation\ndevice.notifications purpose.notifications\nfs.read ${UPDATE}\nfs.write ${RESTART}`;
+  `net.fetch https:\nnet.fetch http:\ndevice.microphone purpose.microphone\ndevice.speech-recognition purpose.dictation\ndevice.notifications purpose.notifications\nfs.read ${UPDATE}\nfs.write ${RESTART}\nfs.read app:/tmp\nfs.write app:/tmp\nfs.read doc:/`;
 
 // Every write the shell sends to the host. Typed against the compiled plan, so adding or removing a mutation without
-// listing it here fails the build. A restart for an update stays on this device.
-const mutations: Record<Exclude<MutationSource, 'updateRestart'>, true> = {
+// listing it here fails the build. A restart for an update, and attaching an image, stay on this device.
+const mutations: Record<Exclude<MutationSource, 'updateRestart' | 'chatAttach'>, true> = {
   accountSignIn: true,
   accountCancel: true,
   accountUseKey: true,
@@ -135,6 +218,8 @@ export const answer: Answer = (source, args, _store, storage) => {
   if (source === 'hostOrigin') return hostOrigin(String(args[0] ?? ''));
   if (source === 'updateReady') return updateReady(storage);
   if (source === 'updateRestart') return updateRestart(storage);
+  if (source === 'chatAttach') return chatAttach(storage, (args[0] as unknown[]).map(String), Number(args[1]), Number(args[2]));
+  if (source === 'chatSend') return chatSend(storage, args);
   if (isMutation(source)) return call(source, args);
   if (!API) throw new Error(`The host's address is not known yet, so ${source} cannot open.`);
   return fetch(`${API}/api/live/${source}?args=${encodeURIComponent(JSON.stringify(args))}`, {

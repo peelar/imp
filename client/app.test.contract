@@ -122,6 +122,30 @@ test "the assistant adds a todo that the open Todos app shows at once"
   clock until state todosReadList.0.title == "Book train to Kraków" within 5000
   expect text "todo-1" == "Book train to Kraków"
 
+// The test model answers an image with its type (scripts/test-host.ts), so its answer says the image reached it.
+test "an image attached to a message shows in the box, can be taken off, and reaches the imp above the words"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  tap "attach"
+  pick "images" "fixtures/screenshot.png"
+  clock until state attachments.length == 1 within 5000
+  expect tree has "attachments"
+  tap "detach"
+  expect state attachments.length == 0
+  expect tree missing "attachments"
+  tap "attach"
+  pick "images" "fixtures/screenshot.png"
+  clock until state attachments.length == 1 within 5000
+  type "composer" "What is on this?"
+  tap "send"
+  expect state attachments.length == 0
+  clock until state chat.busy == false within 10000
+  clock until state chat.messages.length == 2 within 5000
+  expect state chat.messages.0.text == "What is on this?"
+  expect state chat.messages.0.images.length == 1
+  expect state chat.messages.1.text == "I see image/png."
+
 test "on a wide window the chat sits beside an open app, and what it is asked there lands in the app"
   size 1280x800
   request POST "/api/call/accountSignIn" []

@@ -88,6 +88,7 @@ icons
   icon.expand = icon(sf "arrow.up.left.and.arrow.down.right", svg "icons/expand.svg")
   icon.github = icon(sf "chevron.left.forwardslash.chevron.right", svg "icons/github.svg")
   icon.home = icon(sf "house", svg "icons/home.svg")
+  icon.image = icon(sf "photo", svg "icons/image.svg")
   icon.layers = icon(sf "square.grid.2x2", svg "icons/layers.svg")
   icon.link = icon(sf "link", svg "icons/link.svg")
   icon.lock = icon(sf "lock", svg "icons/lock.svg")

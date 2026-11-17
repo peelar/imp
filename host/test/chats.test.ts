@@ -7,6 +7,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../sdk/app.ts";
 import {
+  base,
   call,
   dataDir,
   done,
@@ -347,6 +348,83 @@ test("beside an app opens the latest chat started beside it, or a new chat until
       )
     ).messages[0]?.text,
     "About my todos"
+  );
+});
+
+// A 2×1 PNG: one red pixel, one blue.
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABAQMAAADO7O3JAAAABlBMVEX/AAAAAP9sof2OAAAACklEQVQI12NwAAAAQgBBg7nsrQAAAABJRU5ErkJggg==";
+
+const image = (mimeType: string) => ({ type: "image", data: PNG, mimeType });
+
+test("an image sent with a message reaches the model, and its row links the host's copy of it", async () => {
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.deepEqual(
+    await call("chatSend", ["What is on this?", "", [image("image/png")]]),
+    done
+  );
+
+  const { messages } = await until(
+    "chat",
+    chatsWhen((c) => c.messages.at(-1)?.role === "assistant")
+  );
+
+  const [person, answer] = messages;
+
+  assert.equal(person?.text, "What is on this?");
+  assert.equal(answer?.text, "I see image/png.");
+
+  const [link] = Array.isArray(person?.images) ? person.images : [];
+
+  assert.ok(isText(link));
+  assert.match(link, /^\/api\/image\/\d+\/\d+\/0$/);
+
+  const served = await fetch(`${base}${link}`);
+
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get("content-type"), "image/png");
+  assert.deepEqual(
+    Buffer.from(await served.arrayBuffer()),
+    Buffer.from(PNG, "base64")
+  );
+  // The message has one image, and the host serves no other.
+  assert.equal((await fetch(`${base}${link.replace(/0$/, "1")}`)).status, 404);
+});
+
+test("an image needs no words, and names its chat; images the model cannot take are refused", async () => {
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.deepEqual(
+    await call("chatSend", ["", "", [image("image/jpeg")]]),
+    done
+  );
+
+  const sent = await until(
+    "chat",
+    chatsWhen((c) => c.messages.at(-1)?.role === "assistant")
+  );
+
+  assert.equal(sent.list[0]?.title, "An image");
+  assert.equal(sent.messages[0]?.text, "");
+
+  const why = refused(
+    "Imp takes up to 4 PNG, JPEG, GIF or WebP images of at most 5 MB each."
+  );
+
+  assert.deepEqual(
+    await call("chatSend", ["Look", "", [image("image/svg+xml")]]),
+    why
+  );
+  assert.deepEqual(
+    await call("chatSend", [
+      "Look",
+      "",
+      Array.from({ length: 5 }, () => image("image/png")),
+    ]),
+    why
+  );
+  assert.deepEqual(
+    await call("chatSend", ["", "", []]),
+    refused("Write a message first.")
   );
 });
 

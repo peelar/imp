@@ -24,9 +24,11 @@ import {
   opt,
   str,
 } from "@earendil-works/pi-schema";
+import type { ImageContent } from "@earendil-works/pi-ai";
 import {
   type AppLabel,
   conversationState,
+  entryImage,
   lastFailed,
   lastReply,
   firstWords,
@@ -191,6 +193,30 @@ type Shared = {
   readonly save: () => void;
   readonly conversation: (id: Id) => Promise<Conversation>;
 };
+
+/** What the person sent, as the model reads it: the images follow the words, so it reads what they said first. */
+const personInput = (words: string, images: readonly ImageContent[]) =>
+  images.length > 0
+    ? [...(words ? [{ type: "text" as const, text: words }] : []), ...images]
+    : words;
+
+/** The images the person sent, which the transcript shows from the host (http.ts serves them). */
+function sentImages({ options, index, conversation }: Shared) {
+  return {
+    /** The `nth` image the person sent in message `entry` of conversation `id`; undefined when there is none. */
+    async image(id: string, entry: number, nth: number) {
+      const kept = index.list.find((c) => String(c.id) === id);
+
+      return kept
+        ? await entryImage(
+            await conversation(kept.id),
+            { entry, nth },
+            options.context
+          )
+        : undefined;
+    },
+  };
+}
 
 /** The conversations routines run in (routines/routines.ts): made, renamed and dropped with their routine, and run in. */
 function routineConversations({ options, index, save, conversation }: Shared) {
@@ -466,11 +492,16 @@ export async function openChats(options: ChatsOptions) {
      * The person writes in the open conversation, from the chat page or beside `app`; its first message names it in
      * the sidebar, and the first app it is written beside is the one it sits beside from then on.
      */
-    async submit(text: string, app: AppLabel | undefined) {
+    async submit(
+      text: string,
+      app: AppLabel | undefined,
+      images: readonly ImageContent[] = []
+    ) {
       const shown = index.list.find((c) => c.id === index.current);
 
       if (shown) {
-        shown.title ||= titleOf(text);
+        shown.title ||=
+          titleOf(text) || (images.length > 1 ? "Images" : "An image");
         shown.updated = Date.now();
 
         if (app) {
@@ -485,7 +516,7 @@ export async function openChats(options: ChatsOptions) {
       await home.submit(
         {
           type: "input",
-          content: withAppContext(text, app),
+          content: personInput(withAppContext(text, app), images),
           whenBusy: "steer",
         },
         context
@@ -496,6 +527,7 @@ export async function openChats(options: ChatsOptions) {
     },
     ...sidebarChats({ options, index, save, conversation }),
     ...routineConversations({ options, index, save, conversation }),
+    ...sentImages({ options, index, save, conversation }),
     /** The model or machine changed: every conversation in use runs with it from its next start. */
     configure: conversations.configure,
     close: conversations.close,

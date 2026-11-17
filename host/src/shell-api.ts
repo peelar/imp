@@ -126,6 +126,9 @@ export function shellApi(options: ShellApiOptions) {
 
       return call ? await call(args) : undefined;
     },
+    /** An image the person sent in a chat, by the path its transcript row names (chats' `imagePath`). */
+    image: async (conversation: string, entry: number, nth: number) =>
+      await chats.image(conversation, entry, nth),
   };
 }
 

@@ -220,6 +220,7 @@ export const said = (role: string, text: string) => ({
   detail: "",
   icon: "",
   failed: false,
+  images: [],
 });
 
 /** A chat answer once the agent is between turns and `accept` takes its messages. */

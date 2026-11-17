@@ -76,6 +76,12 @@ shape Time
   epochAtZero: number
   utcOffset: number
 
+// What the data module made of files attached to a message (app.ts, `chatAttach`): an app file for each image, shrunk
+// to what the model takes, and why any were left out ("" when none were).
+shape Attached
+  paths: string[]
+  error: string
+
 // <apps:version>
 fn builtVersion(): string = "repo"
 // </apps:version>
@@ -131,6 +137,11 @@ component App
   state draft = ""
   // What the last send carried, until the host takes it: a send that never reaches the host puts it back in the box.
   state unsent = ""
+  // The images going with the next message, as app files (app.ts, `chatAttach`), and the last send's.
+  state attachments: string[] = []
+  state unsentImages: string[] = []
+  // What a message the shell writes itself (a suggestion, an install, the first app) attaches: nothing.
+  derive noImages = attachments.slice(0, 0)
   state scheme = "system" persist
   state now = 0
   // The sidebar's conversations past the latest three are folded until this opens them.
@@ -209,6 +220,7 @@ component App
   mutation signedOut as shape Reply
   mutation modelChosen as shape Reply
   mutation sent as shape Reply then toEnd
+  mutation attached as shape Attached queue then addAttached
   mutation stopped as shape Reply
   mutation chatChanged as shape Reply
   mutation openedHome as shape Reply then land
@@ -303,7 +315,8 @@ component App
   derive canDictate = speech.available and speech.state != "denied" and (micDirect or speech.inputs.includes("track"))
   derive interimHeard = match heard.interim { case some(i) => i.alternatives.slice(0, 1).map(a => a.transcript).join("").trim(), case none => "" }
   derive dictationError = dictationTrouble(match failure(listening) { case some(f) => f.code, case none => dictationEnd })
-  derive composerError = sendError != "" ? sendError : dictationError
+  derive attachError = failed(attached) ? "That image couldn't be attached." : match attached { case some(a) => a.error, case none => "" }
+  derive composerError = sendError != "" ? sendError : attachError != "" ? attachError : dictationError
   // A live stream that ended (the host restarted, the network dropped) is opened again.
   derive hostLost = match failure(host) { case some(f) => true, case none => false }
   derive accountLost = match failure(account) { case some(f) => true, case none => false }
@@ -366,7 +379,7 @@ component App
     change(dictationOff)
   task micRefused when failed(micOpened) key=true
     change(dictationOff)
-  task putBack when sendLost and unsent != ""
+  task putBack when sendLost and (unsent != "" or unsentImages.length > 0)
     after(1, restoreUnsent)
   task revealKeys when keyboard and metaAlone and not keysShown
     after(400, showKeys)
@@ -429,9 +442,23 @@ component App
     if match restarting { case some(r) => r.ok, case none => false }
       close()
   action restoreUnsent
-    if draft.trim() == ""
+    if draft.trim() == "" and attachments.length == 0
       draft = unsent
+      attachments = unsentImages
     unsent = ""
+    unsentImages = []
+  // Files attached to the next message: the data module makes an image of each, up to four in all.
+  action attach(paths: string[])
+    if paths.length > 0
+      send attached = chatAttach(paths, 4 - attachments.length, shown)
+  action addAttached
+    match attached
+      case some(a)
+        attachments = attachments.concat(a.paths).slice(0, 4)
+      case none
+        attachments = attachments
+  action detach(path: string)
+    attachments = attachments.filter(p => p != path)
   action relaunchNow
     relaunch()
   action reconnect
@@ -512,10 +539,12 @@ component App
   // Sending while dictating sends the words heard so far, the unsure ones too, and ends the dictation.
   action post(where: string)
     let message = withSpoken(draft, interimHeard).trim()
-    if message != "" and not pending(sent)
-      send sent = chatSend(message, where == "side-" ? nav.tab : "")
+    if (message != "" or attachments.length > 0) and not pending(sent) and not pending(attached)
+      send sent = chatSend(message, where == "side-" ? nav.tab : "", attachments)
       unsent = message
+      unsentImages = attachments
       draft = ""
+      attachments = []
       if dictating
         hush()
     if where == "side-"
@@ -591,7 +620,7 @@ component App
     closeMic()
   action suggest(text: string)
     if not pending(sent)
-      send sent = chatSend(text, "")
+      send sent = chatSend(text, "", noImages)
       unsent = text
   action startApp
     draft = "Build me an app that "
@@ -690,7 +719,7 @@ component App
   action installApp(repo: string)
     if not pending(sent)
       nav = select(nav, "chat")
-      send sent = chatSend(installAsk(repo), "")
+      send sent = chatSend(installAsk(repo), "", noImages)
       unsent = ""
   action toggleOlder
     olderOpen = not olderOpen
@@ -747,7 +776,7 @@ component App
       if firstApp != ""
         guide = added
       if firstApp == "build"
-        send sent = chatSend(firstAsk.trim(), wide ? added : "")
+        send sent = chatSend(firstAsk.trim(), wide ? added : "", noImages)
       if firstApp == "build" and not wide
         nav = select(nav, "chat")
       else
@@ -1038,11 +1067,12 @@ component App
                                     background-color="surface.soft"
                                   text s
                     else
-                      Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still)
+                      Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
                     Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
                       canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
-                      model=account.model, models=account.models, chooseModel=chooseModel)
+                      model=account.model, models=account.models, chooseModel=chooseModel,
+                      attachments=attachments, attaching=pending(attached), attach=attach, detach=detach)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="space.md space.md space.xl" gap="space.lg" box-sizing="border-box" width="100%"
@@ -1179,11 +1209,12 @@ component App
                   : "The conversation you have open, beside whatever page you are on.")
                   font-style="italic" color="ink.muted"
             else
-              Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still)
+              Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
             Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
-              model=account.model, models=account.models, chooseModel=chooseModel)
+              model=account.model, models=account.models, chooseModel=chooseModel,
+                      attachments=attachments, attaching=pending(attached), attach=attach, detach=detach)
         else if wide
           aside position="absolute" top="3.25rem" right=0 bottom=0 width="24rem" box-sizing="border-box"
             border-left="1px solid line.subtle" background-color="surface.page" aria-hidden=true testId="chat-column"

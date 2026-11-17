@@ -141,7 +141,7 @@ function modelChoice(text: string, model: string) {
 }
 
 // The model that is asked comes last, after the request's options and the provider's state.
-const respond: FauxResponseFactory = (context, ...rest) => {
+const answer: FauxResponseFactory = (context, ...rest) => {
   const { 2: model } = rest;
   // A prompt section that changed since the last turn (the memory's, say) arrives as a system message after the
   // message it answers to, so the turn's last word is the last message that is not one.
@@ -203,6 +203,24 @@ const respond: FauxResponseFactory = (context, ...rest) => {
 
   return fauxAssistantMessage("Hello from the test model.");
 };
+
+/** A message with images: the model says what it was shown, so a test sees the images reached it. */
+function imagesShown(content: Content | undefined) {
+  const shown = isText(content)
+    ? []
+    : (content ?? []).flatMap((part) =>
+        part.type === "image" ? [part.mimeType] : []
+      );
+
+  return shown.length > 0
+    ? fauxAssistantMessage(`I see ${shown.join(", ")}.`)
+    : undefined;
+}
+
+const respond: FauxResponseFactory = async (context, ...rest) =>
+  imagesShown(
+    context.messages.findLast(({ role }) => role !== "system")?.content
+  ) ?? (await answer(context, ...rest));
 
 const faux = fauxProvider({
   provider: CHATGPT,

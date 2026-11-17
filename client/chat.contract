@@ -17,19 +17,33 @@ component Transcript
     messages: ChatMessage[]
     lastId: string
     still: bool
+    // The host's address, which the images' paths are on.
+    origin: string
+  derive firstId = match messages.at(0) { case some(m) => m.id, case none => "" }
   view
     // Its top edge fades, so a row scrolling under the page's title leaves it gently instead of cut in half.
     list id=`${prefix}transcript` appearance="none" virtualized=true scroll-start="end" scrollFollowEnd=true flex=1
       min-height=0 mask-image="linear-gradient(to bottom, transparent 0px, black 20px)" testId=`${prefix}transcript`
       for m in messages key=m.id
-        row justify-content="center" padding=(compact ? "0 space.md" : "0 space.md")
+        // The first row starts below the fade at the top, so the conversation's first message is never dimmed.
+        row justify-content="center" padding=(m.id == firstId ? "space.lg space.md 0" : "0 space.md")
           column width="100%" max-width="measure.page"
             animation=(still or m.id != lastId ? "none" : "rise 220ms ease-out both")
             if m.role == "user"
-              row justify-content="flex-end" padding=(compact ? "space.md 0 space.xs" : "space.md 0 space.sm")
-                text m.text padding="space.sm space.ms" max-width="85%" overflow-wrap="break-word"
-                  white-space="pre-wrap" background-color="surface.soft" class=(compact ? Body : Lead)
-                  testId=`${prefix}message-${m.id}`
+              column align-items="flex-end" gap="space.xs" padding=(compact ? "space.md 0 space.xs" : "space.md 0 space.sm")
+                // The images the person sent, above their words, each opening full size in a new tab.
+                if m.images.length > 0
+                  row gap="space.xs" justify-content="flex-end" flex-wrap="wrap" max-width="85%"
+                    testId=`${prefix}message-images-${m.id}`
+                    for src in m.images key=src
+                      link href=`${origin}${src}` target="_blank" aria-label="Open the image"
+                        image `${origin}${src}` alt="An image you sent" width=(compact ? 96 : 160)
+                          height=(compact ? 96 : 160) object-fit="cover" border="1px solid line.subtle"
+                          background-color="surface.soft"
+                if m.text != ""
+                  text m.text padding="space.sm space.ms" max-width="85%" overflow-wrap="break-word"
+                    white-space="pre-wrap" background-color="surface.soft" class=(compact ? Body : Lead)
+                    testId=`${prefix}message-${m.id}`
             else if m.role == "activity"
               column gap="space.xxs" padding="space.xs 0" testId=`${prefix}message-${m.id}`
                 row gap="space.sm" align-items="center" color=(m.failed ? "ink.danger" : "ink.muted")
@@ -86,14 +100,39 @@ component Composer
     model: string
     models: string[]
     chooseModel: action
+    // The images going with the next message (app files the shell made from what was attached), while more are
+    // being made, and the actions that attach files (by their paths) and take one off again.
+    attachments: string[]
+    attaching: bool
+    attach: action
+    detach: action
+  // A file dragged over the box, which outlines it.
+  state over = false
   derive said = withSpoken(draft, heard).trim()
+  derive sendable = (said != "" or attachments.length > 0) and not attaching
   // Enter sends, as a chat's composer does; Shift+Enter breaks the line, and the Enter that picks an input method's
   // candidate stays the input method's.
   action compose(k: string, e: KeyboardEvent)
     if k == "Enter" and not e.shiftKey and not e.isComposing
       preventDefault()
-      if said != "" and not sending
+      if sendable and not sending
         post(prefix)
+  // An image pasted into the field, such as a screenshot, is attached; pasted text stays the field's.
+  action pasted(e: ClipboardEvent)
+    if e.files.length > 0
+      preventDefault()
+      attach(e.files)
+  action dropped(e: DragEvent)
+    over = false
+    attach(e.files)
+  action entered
+    over = true
+  action left
+    over = false
+  action picked(files: Picked[])
+    attach(files.map(f => f.path))
+  action pickImages
+    showPicker(`${prefix}images`)
   view
     row justify-content="center" padding=(compact ? "space.sm space.ms space.ms" : "space.sm space.md space.ms")
       column width="100%" max-width="measure.page" gap="space.sm"
@@ -106,16 +145,46 @@ component Composer
               class=(compact ? Body : Lead) overflow-wrap="break-word" testId=`${prefix}dictation-heard`
         // As Amp's composer: the field across the top, and under it a toolbar with the model on the left and
         // dictation and send on the right, all in one box.
-        column border="1px solid line.strong" background-color="surface.page" position="relative"
+        // Images dropped anywhere on the box, or pasted into its field, go with the message.
+        column border=(over ? "1px solid AccentColor" : "1px solid line.strong") background-color="surface.page"
+          position="relative" dragenter=entered dragleave=left drop=dropped testId=`${prefix}composer-box`
           if keys
             KeyBadge(chord="Meta+L", at="start")
+          if attachments.length > 0 or attaching
+            row gap="space.xs" flex-wrap="wrap" padding=(compact ? "space.ms space.ms 0" : "space.ms space.md 0")
+              testId=`${prefix}attachments`
+              for a in attachments key=a
+                row position="relative" width=64 height=64
+                  image a alt="An image to send" width=64 height=64 object-fit="cover"
+                    border="1px solid line.subtle" background-color="surface.soft"
+                  button press=detach(a) aria-label="Remove the image" testId=`${prefix}detach`
+                    position="absolute" top=0 right=0 width=20 height=20 min-width=20 padding=0 border="none"
+                    background-color="ink.strong" color="surface.page" display="flex" align-items="center"
+                    justify-content="center"
+                    image "symbol:icon.close" width=10 height=10 aria-hidden=true
+              if attaching
+                row width=64 height=64 align-items="center" justify-content="center"
+                  border="1px dashed line.strong" aria-label="Attaching an image" testId=`${prefix}attaching`
+                  image "symbol:icon.image" width=16 height=16 color="ink.faint" aria-hidden=true
           textarea id=`${prefix}composer` value=draft input=edit key=compose rows=1 field-sizing="content" max-height=180
-            placeholder=placeholder aria-label="Message" testId=`${prefix}composer` min-width=0
+            paste=pasted placeholder=placeholder aria-label="Message" testId=`${prefix}composer` min-width=0
             padding=(compact ? "space.ms space.ms space.xs" : "space.ms space.md space.xs") border="none" background-color="transparent"
             outline="none" resize="none" class=Lead
             color="ink.strong"
           // The same inset left and right as the field's text, so the model and send line up with it.
           row align-items="center" gap="space.xs" padding=(compact ? "space.xs space.ms" : "space.xs space.md")
+            button press=pickImages retainFocus=true aria-label="Attach an image" testId=`${prefix}attach`
+              cursor=(attachments.length >= 4 ? "default" : "pointer")
+              disabled=(attachments.length >= 4) width=34 height=34 min-width=34 padding=0 border="none"
+              display="flex" align-items="center" justify-content="center" background-color="transparent"
+              color="ink.muted" transition="color 120ms ease"
+              :hover
+                color="ink.strong"
+              :disabled
+                color="ink.faint"
+              image "symbol:icon.image" width=16 height=16
+            input type="file" id=`${prefix}images` accept="image/png,image/jpeg,image/gif,image/webp,image/heic"
+              multiple=true change=picked display="none" aria-label="Choose images" testId=`${prefix}images`
             if models.length > 1
               select value=model change=chooseModel aria-label="Model" testId=`${prefix}model` min-width=0
                 cursor="pointer"
@@ -132,7 +201,7 @@ component Composer
                 background-color=(dictating ? "danger.soft" : "transparent")
                 color=(dictating ? "ink.danger" : "ink.muted") transition="background-color 120ms ease, color 120ms ease"
                 image "symbol:icon.microphone" width=16 height=16
-            if busy and said == ""
+            if busy and said == "" and attachments.length == 0
               button press=stop disabled=stopping aria-label="Stop" aria-keyshortcuts="Meta+." testId=`${prefix}stop`
                 cursor=(stopping ? "default" : "pointer")
                 width=34 height=34 min-width=34 padding=0 border="none" background-color="ink.strong"
@@ -141,8 +210,8 @@ component Composer
                 if keys
                   KeyBadge(chord="Meta+.", at="end")
             else
-              button press=post(prefix) disabled=(said == "" or sending) retainFocus=true aria-label="Send"
-                cursor=(said == "" or sending ? "default" : "pointer")
+              button press=post(prefix) disabled=(not sendable or sending) retainFocus=true aria-label="Send"
+                cursor=(not sendable or sending ? "default" : "pointer")
                 testId=`${prefix}send` width=34 height=34 min-width=34 padding=0 border="none"
                 background-color="AccentColor" color="ink.on-fill" display="flex" align-items="center"
                 justify-content="center" transition="background-color 120ms ease"

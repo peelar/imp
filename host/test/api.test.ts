@@ -328,6 +328,7 @@ test("the assistant adds a todo with the app's tool, and the transcript says wha
         detail: "Book train to Kraków",
         icon: "symbol:icon.todos",
         failed: false,
+        images: [],
       },
       said("assistant", "Done."),
     ]

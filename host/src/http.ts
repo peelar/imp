@@ -148,6 +148,28 @@ async function serveCall(options: HttpOptions, { req, res, url }: Request) {
   }
 }
 
+/** An image the person sent in a chat: /api/image/<conversation>/<entry>/<nth>. A sent message never changes. */
+async function serveImage(options: HttpOptions, { res, url }: Request) {
+  const [, conversation = "", entry = "", nth = ""] =
+    /^\/api\/image\/(\d+)\/(\d+)\/(\d+)$/.exec(url.pathname) ?? [];
+
+  const image = await options.api.image(
+    conversation,
+    Number(entry),
+    Number(nth)
+  );
+
+  if (image) {
+    res.writeHead(200, {
+      "content-type": image.mimeType,
+      "cache-control": "private, max-age=31536000, immutable",
+    });
+    res.end(Buffer.from(image.data, "base64"));
+  } else {
+    send(res, 404, { error: "no such image" });
+  }
+}
+
 /** Serves the file a GET asks for; false when the host has none to offer. */
 function serveFile(options: HttpOptions, { req, res, url }: Request): boolean {
   const { pathname } = url;
@@ -222,6 +244,11 @@ async function serve(options: HttpOptions, request: Request) {
       "cache-control": "no-store",
     });
     res.end(message);
+  } else if (
+    method === "GET" &&
+    /^\/api\/image\/\d+\/\d+\/\d+$/.test(url.pathname)
+  ) {
+    await serveImage(options, request);
   } else if (
     url.pathname.startsWith("/api/") ||
     method !== "GET" ||

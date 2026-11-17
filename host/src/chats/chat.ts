@@ -2,7 +2,7 @@
 // way (one activity row per tool call, in words, not JSON), plus the reply being written. chats.ts keeps the list of
 // conversations and which one is open.
 import type { Context } from "@earendil-works/chord/context";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ImageContent } from "@earendil-works/pi-ai";
 import {
   type Conversation,
   type EntryRecord,
@@ -10,7 +10,11 @@ import {
   LiveDoc,
 } from "@earendil-works/pi-durable";
 import { personText } from "./origin.ts";
-import { messageText } from "./message-text.ts";
+import {
+  type MessageContent,
+  messageParts,
+  messageText,
+} from "./message-text.ts";
 
 export const TOPIC = "chat";
 const SHOWN = 80;
@@ -19,7 +23,8 @@ const SHOWN = 80;
  * One row of the transcript. `role` is "user", "assistant" (Markdown in `text`), "activity" (a tool call: `title`,
  * `detail`, `icon`, and `failed` when it errored, with a title that says so and `text` the error), "error" (the model
  * failed: `text` says why), or "thinking" (the
- * last row while the assistant works with no words on the way).
+ * last row while the assistant works with no words on the way). The person's row has the images they sent in
+ * `images`, each as the host's path for it (`imagePath`).
  */
 export type ChatMessage = {
   id: string;
@@ -29,6 +34,7 @@ export type ChatMessage = {
   detail: string;
   icon: string;
   failed: boolean;
+  images: string[];
 };
 
 export type AppLabel = {
@@ -291,6 +297,7 @@ const row = (
   detail: "",
   icon: "",
   failed: false,
+  images: [],
   ...fields,
 });
 
@@ -314,10 +321,47 @@ function assistantRows(id: string, message: AssistantMessage, calls: Calls) {
   ];
 }
 
+const isImage = (part: { readonly type: string }): part is ImageContent =>
+  part.type === "image";
+
+/** The images in a message the person sent, in the order they sent them. */
+const imagesIn = (content: MessageContent) =>
+  messageParts(content).filter(isImage);
+
+/** Where the host serves the `nth` image of a message the person sent (http.ts). */
+const imagePath = (
+  conversation: Conversation["id"],
+  entry: EntryRecord["id"],
+  nth: number
+) => `/api/image/${String(conversation)}/${String(entry)}/${nth}`;
+
+/** The `nth` image of the person's message `entry`, an id from `imagePath`; undefined when it has none. */
+export async function entryImage(
+  conversation: Conversation,
+  { entry, nth }: { readonly entry: number; readonly nth: number },
+  context: Context
+) {
+  // SAFETY: entry ids are the harness's integers, and one it never gave out finds no entry.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- an id read back from the image's path
+  const id = entry as EntryRecord["id"];
+
+  const page = await conversation.entries(
+    { minEntryId: id, maxEntryId: id },
+    1,
+    undefined,
+    context
+  );
+
+  const [message] = page.items[0]?.model ?? [];
+
+  return message?.role === "user" ? imagesIn(message.content)[nth] : undefined;
+}
+
 /** The transcript's rows for the conversation's entries, oldest first. */
 function transcript(
   entries: readonly EntryRecord[],
-  apps: readonly AppLabel[]
+  apps: readonly AppLabel[],
+  conversation: Conversation["id"]
 ) {
   // A tool result names its call; the call, in the assistant message before it, holds the arguments.
   const calls: Calls = new Map();
@@ -329,7 +373,11 @@ function transcript(
     if (entry.kind === "pi.user" && message?.role === "user") {
       const text = personText(messageText(message.content));
 
-      return [row(id, "user", { text })];
+      const images = imagesIn(message.content).map((_, index) =>
+        imagePath(conversation, entry.id, index)
+      );
+
+      return [row(id, "user", { text, images })];
     }
 
     if (entry.kind === "pi.assistant" && message?.role === "assistant") {
@@ -399,7 +447,7 @@ export async function conversationState(options: ConversationOptions) {
     context
   );
 
-  const messages = transcript(page.items.toReversed(), apps);
+  const messages = transcript(page.items.toReversed(), apps, conversation.id);
 
   const { busy, streaming } = await liveState(
     harness,

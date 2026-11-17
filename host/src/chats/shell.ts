@@ -8,8 +8,29 @@ import {
   text,
   why,
 } from "../live/live.ts";
+import { arr, compile, lit, obj, oneOf, str } from "@earendil-works/pi-schema";
 import { TOPIC } from "./chat.ts";
 import type { Chats, ChatsOptions } from "./chats.ts";
+
+const MAX_IMAGES = 4;
+
+/**
+ * The images a message carries, base64 as the model takes them, at most 5 MB each: a size the providers' APIs take
+ * inline. The shell shrinks each one below it before sending.
+ */
+const attachedImages = compile(
+  arr(
+    obj({
+      type: lit("image"),
+      data: str({
+        minLength: 1,
+        maxLength: Math.ceil((5 * 1024 * 1024 * 4) / 3),
+      }),
+      mimeType: oneOf(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+    }),
+    { maxItems: MAX_IMAGES }
+  )
+);
 
 /** The open conversation as the shell shows it, and the list of them. */
 export const chatSource = (chats: Chats): LiveSource => ({
@@ -33,8 +54,16 @@ export function chatCalls(
       "chatSend",
       async (args) => {
         const message = text(args, 0).trim();
+        // The third argument is the images the person attached, as the model takes them; none from older shells.
+        const images = args[2] ?? [];
 
-        if (!message) {
+        if (!attachedImages.check(images)) {
+          return refused(
+            `Imp takes up to ${MAX_IMAGES} PNG, JPEG, GIF or WebP images of at most 5 MB each.`
+          );
+        }
+
+        if (!message && images.length === 0) {
           return refused("Write a message first.");
         }
 
@@ -45,7 +74,7 @@ export function chatCalls(
         // The second argument is the app open beside the chat, "" from the chat tab.
         const open = apps().find((app) => app.id === args[1]);
 
-        await chats.submit(message, open);
+        await chats.submit(message, open, images);
 
         return ok;
       },
