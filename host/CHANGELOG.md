@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.14.8
+
+### Patch Changes
+
+- ba9b464: The card above an app (your first app, and what the app is waiting for) now lines up with the app's own column instead of sitting in a narrower one of its own.
+
 ## 0.14.7
 
 ### Patch Changes
