@@ -1,5 +1,15 @@
 # @imp/host
 
+## 0.18.0
+
+### Minor Changes
+
+- 225a53a: When your imp needs a key or a login, it fills in the whole form itself (hosts, header and variable for another API, or the site and username for a login) and asks in the chat: you paste the value into the card above the message box and press Save. The value goes straight to your vault, and your imp never sees it. A key's hosts can now be written as addresses, such as https://www.example.com.
+
+### Patch Changes
+
+- 3b00661: Images you send now reach a model you use with an API key too, not only ChatGPT's. A text-only model refuses a message with images, and the chat says so.
+
 ## 0.17.0
 
 ### Minor Changes
