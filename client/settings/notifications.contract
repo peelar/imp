@@ -1,10 +1,9 @@
 // Settings' Notifications: whether this Imp may show the person a notification while they are away.
 
-use Label, Body, Control from "../look.contract"
+use Button from "../controls.contract"
 use NotificationStatus from "@exact/notifications"
+use SettingsSection, SettingsEmpty, SettingsFoot from "../parts.contract"
 
-// Where the apps' code is kept besides the host: every version in the host's history, and a private GitHub repository
-// the host pushes each one to, connected with a device code like the ChatGPT sign-in.
 // Whether this device tells the person what needs them. The browser or the system asks once; after a no, only its own
 // settings can turn notifications back on.
 component NotificationSettings
@@ -13,24 +12,16 @@ component NotificationSettings
     asking: bool
     allow: action
   view
-    column testId="notifications"
-      row align-items="baseline" justify-content="space-between" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-        text "Notifications" class=Label color="ink.strong" role="heading" aria-level=2
-        if alerts.available
-          text (alerts.state == "granted" ? "On" : "Off") class=Label testId="notifications-state"
-      text "Routine findings, key requests and finished replies, while Imp is open here."
-        class=Body color="ink.muted" padding-top="space.ms"
+    SettingsSection(title="Notifications", aside=(not alerts.available ? "" : alerts.state == "granted" ? "On" : "Off"),
+      asideTestId="notifications-state", note="Routine findings, key requests and finished replies, while Imp is open here.",
+      testId="notifications")
       if not alerts.available
-        text "This browser can't show notifications." font-style="italic" color="ink.muted" padding-top="space.ms"
-          testId="notifications-unavailable"
+        SettingsEmpty(message="This browser can't show notifications.", testId="notifications-unavailable")
       else if alerts.state == "denied"
-        text "Notifications are blocked for Imp. Allow them in your browser's settings for this site, or in System Settings for the app."
-          font-style="italic" color="ink.muted" padding-top="space.ms" testId="notifications-denied"
+        SettingsEmpty(message="Notifications are blocked for Imp. Allow them in your browser's settings for this site, or in System Settings for the app.",
+          testId="notifications-denied")
       else if alerts.state != "granted"
-        button press=allow disabled=asking testId="notifications-allow" align-self="flex-start"
-          margin-top="space.md" padding="space.sm space.ms" border="none" background-color="AccentColor" color="ink.on-fill"
-          class=Control    
-          :disabled
-            background-color="surface.soft"
-            color="ink.faint"
-          text "Turn on notifications"
+        SettingsFoot(testId="")
+          row
+            Button(press=allow, variant="primary", disabled=asking, testId="notifications-allow")
+              text "Turn on notifications"

@@ -1,0 +1,52 @@
+// Settings' General: the account the imp thinks with, how Imp looks, its notifications, and signing out.
+
+use Label, Lead, Mono, Monogram, Control from "../look.contract"
+use Button from "../controls.contract"
+use Account from "../host.contract"
+use NotificationStatus from "@exact/notifications"
+use NotificationSettings from "./notifications.contract"
+use SettingsPage, SettingsSection, SettingsRow from "../parts.contract"
+
+fn capitalizedWord(s: string): string = s == "" ? "" : `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
+fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUpperCase()
+
+component GeneralSettings
+  props
+    account: Account
+    // The imp thinks on an OpenAI-compatible API key, not a ChatGPT account.
+    onKey: bool
+    scheme: string
+    setAppearance: action
+    alerts: NotificationStatus
+    asking: bool
+    allow: action
+    signingOut: bool
+    signOut: action
+  view
+    SettingsPage(intro="The account your imp thinks with, how Imp looks, and what it tells you.", testId="general")
+      SettingsSection(title=(onKey ? "API key" : "ChatGPT account"), aside="", asideTestId="", note="", testId="")
+        SettingsRow(testId="")
+          if onKey
+            column flex=1 min-width=0 gap="space.xxs"
+              text account.model class=Lead overflow-wrap="anywhere" testId="account-model"
+              text account.baseUrl class=Mono color="ink.muted" overflow-wrap="anywhere" testId="account-base"
+          else
+            text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem" text-align="center"
+              class=Monogram border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+            column flex=1 min-width=0 gap="space.xxs" align-items="flex-start"
+              text (account.email == "" ? "ChatGPT account" : account.email) class=Lead overflow-wrap="anywhere"
+                testId="account-email"
+              if account.plan != ""
+                text capitalizedWord(account.plan) class=Label testId="account-plan"
+          Button(press=signOut, variant="quiet-danger", disabled=signingOut, testId="signout")
+            text "Sign out"
+      SettingsSection(title="Appearance", aside="", asideTestId="", note="", testId="")
+        row role="radiogroup" aria-label="Appearance" padding="space.ms 0" border-bottom="1px solid line.subtle"
+          for s, i in ["system", "light", "dark"] key=s
+            button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
+              padding="space.sm 0" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
+              background-color=(scheme == s ? "ink.strong" : "transparent")
+              color=(scheme == s ? "surface.page" : "ink.strong")
+              class=Control
+              text capitalizedWord(s)
+      NotificationSettings(alerts=alerts, asking=asking, allow=allow)

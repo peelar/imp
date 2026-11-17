@@ -20,18 +20,18 @@ use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 use showNotification, closeNotification, setAppBadge, clearAppBadge, notificationStatus, requestNotificationPermission, notificationclick, NotificationStatus, NotificationEvent from "@exact/notifications"
 use getUserMedia, stopTrack, MediaStream, MediaStreamTrack from "@exact/media-capture"
 use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
-use Label, pulse, Key, rise, Body, Code, Control, Display, Heading, Lead, Mono, Title, Initial, Monogram, Page from "./look.contract"
+use Label, pulse, Key, rise, Body, Code, Control, Display, Heading, Lead, Mono, Title, Initial, Page from "./look.contract"
 use Button from "./controls.contract"
 use SecretSettings from "./settings/secrets.contract"
 use MemorySettings from "./settings/memory.contract"
-use NotificationSettings from "./settings/notifications.contract"
+use GeneralSettings from "./settings/general.contract"
 use ExperimentalSettings from "./settings/experimental.contract"
 use ConnectionsSettings, McpServerSettings from "./settings/connections.contract"
 use AssistantsSettings from "./settings/assistants.contract"
 use AppTile, Memory, Secrets, Connection, Notice, Host, Account, ChatState, Build, Update, Reply from "./host.contract"
 use repoPath, AppDirectory, directory from "./app-directory.contract"
 use withSpoken, Transcript, Composer from "./chat.contract"
-use KeyBadge, Initialled, numbered, Confirm from "./parts.contract"
+use KeyBadge, Initialled, numbered, Confirm, SettingsPage from "./parts.contract"
 use RoutineList, RoutineBar from "./routines.contract"
 use TrickList from "./tricks.contract"
 use ComputerSettings, ComputerScreen, ComputerWizard from "./computer.contract"
@@ -85,7 +85,6 @@ fn tabTitle(name: string, wide: bool, apps: AppTile[]): string = name == "chat" 
 fn tabChord(name: string, bar: string[]): string =
   name == "settings" ? "Meta+," : bar.indexOf(name) >= 0 and bar.indexOf(name) < 9 ? `Meta+${bar.indexOf(name) + 1}` : ""
 fn capitalized(s: string): string = s == "" ? "" : `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
-fn initial(email: string): string = email == "" ? "?" : email.slice(0, 1).toUpperCase()
 fn hourOf(ms: number, offset: number): number = floor(((ms + offset * 60000) % 86400000) / 3600000)
 fn greeting(hour: number): string = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
 fn tabLabel(name: string, apps: AppTile[]): string =
@@ -1037,61 +1036,23 @@ component App
                               loginError=loginError, deleteError=secretDeleteError, save=saveSecret, saveLogin=saveLogin,
                               remove=deleteSecret, dismiss=dismissSecret)
                         else if settingsPane == "connections"
-                          ConnectionsSettings(github=github, backup=backup,
-                            busy=(pending(githubConnected) or pending(githubDisconnected) or pending(backupTurnedOn) or pending(backupTurnedOff)),
-                            connect=connectGithub, cancel=cancelGithub, disconnect=disconnectGithub, copyCode=copyGithubCode,
-                            turnOn=turnOnBackup, turnOff=turnOffBackup)
-                          for r in [serverRound] key=`${r}`
-                            McpServerSettings(servers=account.mcpServers, adding=pending(serverAdded), error=serverError,
-                              removeError=serverRemoveError, add=addServer, signIn=signInServer, cancel=cancelServer,
-                              remove=removeServer)
+                          SettingsPage(intro="The accounts and services your imp reaches for you, and where your apps' code is kept.",
+                            testId="connections-page")
+                            ConnectionsSettings(github=github, backup=backup,
+                              busy=(pending(githubConnected) or pending(githubDisconnected) or pending(backupTurnedOn) or pending(backupTurnedOff)),
+                              connect=connectGithub, cancel=cancelGithub, disconnect=disconnectGithub, copyCode=copyGithubCode,
+                              turnOn=turnOnBackup, turnOff=turnOffBackup)
+                            for r in [serverRound] key=`${r}`
+                              McpServerSettings(servers=account.mcpServers, adding=pending(serverAdded), error=serverError,
+                                removeError=serverRemoveError, add=addServer, signIn=signInServer, cancel=cancelServer,
+                                remove=removeServer)
                         else if settingsPane == "assistants"
                           AssistantsSettings(apps=account.assistants, url=`${host.origin}/mcp`, copyUrl=copyMcpUrl, share=shareApp)
                         else if settingsPane == "experimental"
                           ExperimentalSettings(flags=account.flags, choose=chooseFlag)
                         else
-                          if onKey
-                            column
-                              row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-                                text "API key" class=Label color="ink.strong" role="heading" aria-level=2
-                              column gap="space.xs" padding="space.md 0" border-bottom="1px solid line.subtle"
-                                text account.model class=Heading
-                                  overflow-wrap="anywhere" testId="account-model"
-                                text account.baseUrl class=Mono color="ink.muted" overflow-wrap="anywhere"
-                                  testId="account-base"
-                          else
-                            column
-                              row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-                                text "ChatGPT account" class=Label color="ink.strong" role="heading" aria-level=2
-                              row gap="space.ms" align-items="center" padding="space.md 0" border-bottom="1px solid line.subtle"
-                                text initial(account.email) width="2.75rem" height="2.75rem" min-width="2.75rem"
-                                  text-align="center" class=Monogram
-                                  border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                                column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
-                                  text (account.email == "" ? "ChatGPT account" : account.email) class=Heading
-                                      overflow-wrap="anywhere" testId="account-email"
-                                  if account.plan != ""
-                                    text capitalized(account.plan) class=Label testId="account-plan"
-                          column
-                            row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-                              text "Appearance" class=Label color="ink.strong" role="heading" aria-level=2
-                            row role="radiogroup" aria-label="Appearance" padding-top="space.ms" gap=0
-                              for s, i in ["system", "light", "dark"] key=s
-                                button role="radio" aria-checked=(scheme == s) press=setAppearance(s) flex=1 testId=`scheme-${s}`
-                                  padding="space.sm 0" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
-                                  background-color=(scheme == s ? "ink.strong" : "transparent")
-                                  color=(scheme == s ? "surface.page" : "ink.strong")
-                                  class=Control
-                                  text capitalized(s)
-                          NotificationSettings(alerts=alerts, asking=pending(alertsAsked), allow=allowNotifications)
-                          column
-                            button press=askSignOut disabled=pending(signedOut) testId="signout" display="flex" align-items="center"
-                              gap="space.sm" padding="space.ms 0" color="ink.danger" background-color="transparent" border="none"
-                              border-top="1px solid line.subtle" border-bottom="1px solid line.subtle" text-align="start"
-                              :hover
-                                background-color="danger.soft"
-                              image "symbol:icon.sign-out" width=16 height=16
-                              text "Sign out" class=Label color="ink.danger"
+                          GeneralSettings(account=account, onKey=onKey, scheme=scheme, setAppearance=setAppearance, alerts=alerts,
+                            asking=pending(alertsAsked), allow=allowNotifications, signingOut=pending(signedOut), signOut=askSignOut)
                     Confirm(id="confirm-signout", question=(onKey ? "Remove the API key?" : "Sign out of ChatGPT?"),
                       message="Your imp stops until you sign in again. Your chats and apps stay.", label="Sign out",
                       confirm=signOut, testId="signout")

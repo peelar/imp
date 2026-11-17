@@ -1,12 +1,13 @@
 // Settings' Connections: the accounts the host signs in to, and what each one turns on. GitHub first: connecting
-// signs in with a device code, and below it the person turns on Backup, which pushes their apps' code to it. Then the
-// MCP servers the imp uses for the person.
+// signs in with a device code. Then Backup: the host always keeps every version of the apps' code in a local git
+// repository (host/src/backup/), and Copy to GitHub only adds a private copy there. Then the MCP servers the imp uses
+// for the person.
 
-use Label, Body, Code, ControlLarge, Heading, Mono, Subheading from "../look.contract"
+use Label, Body, Code, ControlLarge, Lead, Mono, Small from "../look.contract"
 use Button, ButtonLink, ErrorNote from "../controls.contract"
 use Connection, Backup, McpServer from "../host.contract"
 use Step from "../onboarding.contract"
-use Confirm from "../parts.contract"
+use Confirm, SettingsSection, SettingsRow, SettingsEmpty, SettingsFoot, SettingsError from "../parts.contract"
 
 component ConnectionsSettings
   props
@@ -20,56 +21,52 @@ component ConnectionsSettings
     turnOn: action
     turnOff: action
   view
-    column testId="connections"
-      row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-        text "GitHub" class=Label color="ink.strong" role="heading" aria-level=2
-      if github.status == "on"
-        row gap="space.ms" align-items="center" padding="space.md 0" border-bottom="1px solid line.subtle"
-          column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
-            text (github.login == "" ? "Connected" : `@${github.login}`) class=Heading
-              overflow-wrap="anywhere" testId="github-login"
-            text "Your apps, your imp and Backup reach GitHub as you." class=Body color="ink.muted"
-          Button(press=disconnect, variant="quiet-danger", disabled=busy, testId="github-disconnect")
-            text "Disconnect"
-      else
-        column padding="space.md 0" border-bottom="1px solid line.subtle"
-          GithubSignIn(github=github, busy=busy, connect=connect, cancel=cancel, copyCode=copyCode,
-            note="Sign in once, and your apps, your imp and Backup reach GitHub as you.", prefix="")
-      // Once on, only Disconnect can fail; before, the sign-in shows its own error.
-      if github.status == "on" and github.error != ""
-        ErrorNote(message=github.error, testId="github-error")
-      // Backup: what the connection turns on. Every version stays on the host either way.
-      column testId="backup" padding="space.md 0" gap="space.ms" border-bottom="1px solid line.subtle"
-        row gap="space.ms" align-items="baseline"
-          text "Backup" class=Subheading flex=1
-          text `${backup.versions} ${backup.versions == 1 ? "version" : "versions"} kept` class=Label testId="backup-versions"
-        text (not backup.git ? "Needs git on your host. Install it, then restart Imp."
-          : github.status != "on" ? "Your host keeps every version of your apps' code. Connect GitHub to keep a private copy there too."
-          : "Your host keeps every version of your apps' code. Push a private copy to your imp-apps repository on GitHub.")
-          class=Body color="ink.muted"
+    column gap="space.xl" testId="connections"
+      SettingsSection(title="GitHub", aside="", asideTestId="", note="", testId="")
+        if github.status == "on"
+          SettingsRow(testId="")
+            column flex=1 min-width=0 gap="space.xxs" align-items="flex-start"
+              text (github.login == "" ? "Connected" : `@${github.login}`) class=Lead
+                overflow-wrap="anywhere" testId="github-login"
+              text "Your apps, your imp and Backup reach GitHub as you." class=Small color="ink.muted"
+            Button(press=disconnect, variant="quiet-danger", disabled=busy, testId="github-disconnect")
+              text "Disconnect"
+        else
+          column padding="space.ms 0" border-bottom="1px solid line.subtle"
+            GithubSignIn(github=github, busy=busy, connect=connect, cancel=cancel, copyCode=copyCode,
+              note="Sign in once, and your apps, your imp and Backup reach GitHub as you.", prefix="")
+        // Once on, only Disconnect can fail; before, the sign-in shows its own error.
+        if github.status == "on"
+          SettingsError(message=github.error, testId="github-error")
+      // Backup: every version always stays in a git repository on the host; GitHub only adds a copy of it.
+      SettingsSection(title="Backup", aside=`${backup.versions} ${backup.versions == 1 ? "version" : "versions"} kept`,
+        asideTestId="backup-versions",
+        note=(not backup.git ? "Needs git on your host. Install it, then restart Imp."
+          : "Your host always keeps every version of your apps' code, in a git repository on your host. You can also keep a private copy on GitHub."),
+        testId="backup")
         if backup.status == "on"
-          row gap="space.ms" align-items="center"
-            column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
-              text backup.repo class=Mono overflow-wrap="anywhere" testId="backup-repo"
+          SettingsRow(testId="")
+            column flex=1 min-width=0 gap="space.xxs" align-items="flex-start"
+              text "Copied to GitHub" class=Lead
+              text backup.repo class=Mono color="ink.muted" overflow-wrap="anywhere" testId="backup-repo"
               row gap="space.sm" align-items="center"
                 row width=6 height=6 aria-hidden=true background-color=(backup.synced ? "ink.success" : "ink.faint")
-                text (backup.synced ? "Up to date" : "Not backed up yet") class=Label testId="backup-state"
+                text (backup.synced ? "Up to date" : "Not copied yet") class=Label testId="backup-state"
             ButtonLink(href=`https://github.com/${backup.repo}`, variant="secondary", testId="backup-open-repo")
               text "Open"
               text "↗" aria-hidden=true
-          row
             Button(press=turnOff, variant="quiet-danger", disabled=busy, testId="backup-turn-off")
-              text "Turn off"
+              text "Stop copying"
         else if backup.status == "starting"
-          row gap="space.sm" align-items="center" testId="backup-starting"
-            progress aria-label="Loading"
-            text "Finding your imp-apps repository…" font-style="italic" color="ink.muted"
-        else
-          row
-            Button(press=turnOn, variant="secondary", disabled=(not backup.git or github.status != "on" or busy), testId="backup-turn-on")
-              text "Turn on backup"
-        if backup.error != ""
-          ErrorNote(message=backup.error, testId="backup-error")
+          SettingsEmpty(message="Finding your imp-apps repository on GitHub…", testId="backup-starting")
+        else if backup.git and github.status != "on"
+          SettingsEmpty(message="Connect GitHub above to copy your apps' code there.", testId="backup-needs-github")
+        if backup.status == "off"
+          SettingsFoot(testId="")
+            row
+              Button(press=turnOn, variant="secondary", disabled=(not backup.git or github.status != "on" or busy), testId="backup-turn-on")
+                text "Copy to GitHub"
+        SettingsError(message=backup.error, testId="backup-error")
 
 // Connecting GitHub, until it is on: the button, then GitHub's code to enter on its sign-in page, and why the last
 // try failed. Settings shows it, and so does an app's page while the app waits for GitHub, in the same look.
@@ -154,17 +151,15 @@ component McpServerSettings
     remove(removing)
     removing = ""
   view
-    column testId="mcp-servers" padding-top="space.lg"
-      row padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-        text "MCP servers" class=Label color="ink.strong" role="heading" aria-level=2
+    SettingsSection(title="MCP servers", aside="", asideTestId="",
+      note="Your imp can use a service's MCP server for you, and asks before it changes anything there.", testId="mcp-servers")
       if servers.length == 0
-        text "Add a service's MCP server, and your imp can use it for you: it asks before it changes anything there."
-          class=Body color="ink.muted" padding="space.md 0" border-bottom="1px solid line.subtle" testId="mcp-empty"
+        SettingsEmpty(message="No MCP servers yet.", testId="mcp-empty")
       for x, i in servers key=x.id
-        column gap="space.sm" padding="space.md 0" border-bottom="1px solid line.subtle" testId=`mcp-server-${i}`
+        column gap="space.sm" padding="space.ms 0" border-bottom="1px solid line.subtle" testId=`mcp-server-${i}`
           row gap="space.ms" align-items="center"
             column flex=1 min-width=0 gap="space.xxs"
-              text x.name class=Heading overflow-wrap="anywhere" testId=`mcp-name-${i}`
+              text x.name class=Lead overflow-wrap="anywhere" testId=`mcp-name-${i}`
               text x.url class=Mono color="ink.muted" overflow-wrap="anywhere"
               text (x.status == "on" ? (x.tools < 0 ? "Connected" : `Connected · ${x.tools} ${x.tools == 1 ? "tool" : "tools"}`)
                 : x.status == "starting" ? "Asking the server…" : x.status == "waiting" ? "Waiting for you to sign in…"
@@ -186,13 +181,12 @@ component McpServerSettings
                 text "Cancel"
           if x.error != ""
             ErrorNote(message=x.error, testId=`mcp-error-${i}`)
+      SettingsError(message=removeError, testId="mcp-remove-error")
       Confirm(id="confirm-server-remove", question="Remove this server?",
         message="Your imp can no longer use it, and Imp forgets its sign-in. Your account there is untouched.",
         label="Remove", confirm=confirmRemove, testId="mcp-remove")
-      if removeError != ""
-        ErrorNote(message=removeError, testId="mcp-remove-error")
-      column gap="space.sm" padding-top="space.md" testId="mcp-form"
-        text "Add an MCP server" class=Subheading role="heading" aria-level=3
+      SettingsFoot(testId="mcp-form")
+        text "Add an MCP server" class=Label color="ink.strong" role="heading" aria-level=3
         input value=name input=editName placeholder="Name, such as Linear" aria-label="Name" testId="mcp-form-name"
           padding="space.sm space.ms" border="1px solid line.strong" background-color="transparent"
         input value=url input=editUrl placeholder="Address, such as https://mcp.linear.app/mcp" aria-label="Address"

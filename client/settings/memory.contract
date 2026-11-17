@@ -1,8 +1,8 @@
 // Settings' Memory: what the imp knows about the person and itself, each fact of which they can make it forget.
 
-use Label, Body, Heading, Mono, Small from "../look.contract"
+use Label, Body, Lead, Mono, Small from "../look.contract"
 use Memory from "../host.contract"
-use Confirm from "../parts.contract"
+use Confirm, SettingsPage, SettingsSection, SettingsRow, SettingsEmpty, SettingsFoot from "../parts.contract"
 
 // A memory entry's title inside a sentence: the person's own entry is "You", which reads "you" there.
 fn aboutTitle(title: string): string = title == "You" ? "you" : title
@@ -24,40 +24,39 @@ component MemorySettings
     forget(forgetting, "")
     forgetting = ""
   view
-    column testId="memory"
-      if memory.entries.length == 0
-        text "Nothing remembered yet."
-          class=Body color="ink.muted" padding="space.ms 0" border-bottom="1px solid line.subtle"
-          testId="memory-empty"
-      for m, j in memory.entries key=m.id
-        column gap="space.xs" padding="space.ms 0" border-bottom="1px solid line.subtle" testId=`memory-${j}`
-          row align-items="baseline" gap="space.sm"
-            text m.title class=Heading flex=1 min-width=0
-              overflow-wrap="anywhere" testId=`memory-title-${j}`
-            if m.kind != ""
-              text m.kind class=Label
-            button press=askForget(m.id, m.title) aria-label=`Forget everything about ${aboutTitle(m.title)}` testId=`memory-forget-${j}`
-              appearance="none" padding="space.xs 0" border="none" background-color="transparent" color="ink.muted"
-              :hover
-                color="ink.danger"
-              text "Forget" class=Label color="inherit"
-          for f, i in m.facts key=f
-            row align-items="baseline" gap="space.sm"
-              text "—" color="ink.faint" aria-hidden=true
-              text f flex=1 min-width=0 class=Body overflow-wrap="break-word"
-                testId=`memory-fact-${j}-${i}`
-              button press=forget(m.id, f) aria-label=`Forget: ${f}` testId=`memory-forget-${j}-${i}` appearance="none"
-                width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
-                border="none" background-color="transparent" color="ink.faint"
-                :hover
-                  color="ink.danger"
-                image "symbol:icon.close" width=11 height=11
-          for l in m.links key=l
-            text l class=Mono color="ink.muted" padding-left="space.md"
-      Confirm(id="confirm-memory-forget", question=`Forget everything about ${aboutTitle(forgettingTitle)}?`,
-        message="Your imp loses every fact here. It may learn some of them again as you talk.", label="Forget",
-        confirm=confirmForget, testId="memory-forget")
-      if memory.name != ""
-        column gap="space.xxs" padding-top="space.sm"
-          text `${memory.name}, kept on your host.` class=Small font-style="italic" color="ink.faint"
-          text memory.location class=Mono color="ink.faint" overflow-wrap="anywhere"
+    SettingsPage(intro="What your imp knows about you, itself and what it learned. Forget anything it shouldn't keep.", testId="memory")
+      SettingsSection(title="Remembered", aside="", asideTestId="", note="", testId="")
+        if memory.entries.length == 0
+          SettingsEmpty(message="Nothing remembered yet.", testId="memory-empty")
+        for m, j in memory.entries key=m.id
+          SettingsRow(testId=`memory-${j}`)
+            column flex=1 min-width=0 gap="space.xs"
+              row align-items="baseline" gap="space.sm"
+                text m.title class=Lead flex=1 min-width=0 overflow-wrap="anywhere" testId=`memory-title-${j}`
+                if m.kind != ""
+                  text m.kind class=Label
+                button press=askForget(m.id, m.title) aria-label=`Forget everything about ${aboutTitle(m.title)}` testId=`memory-forget-${j}`
+                  appearance="none" padding="space.xs 0" border="none" background-color="transparent" color="ink.muted"
+                  :hover
+                    color="ink.danger"
+                  text "Forget" class=Label color="inherit"
+              for f, i in m.facts key=f
+                row align-items="baseline" gap="space.sm"
+                  text "—" color="ink.faint" aria-hidden=true
+                  text f flex=1 min-width=0 class=Body overflow-wrap="break-word"
+                    testId=`memory-fact-${j}-${i}`
+                  button press=forget(m.id, f) aria-label=`Forget: ${f}` testId=`memory-forget-${j}-${i}` appearance="none"
+                    width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
+                    border="none" background-color="transparent" color="ink.faint"
+                    :hover
+                      color="ink.danger"
+                    image "symbol:icon.close" width=11 height=11
+              for l in m.links key=l
+                text l class=Mono color="ink.muted" padding-left="space.md"
+        if memory.name != ""
+          SettingsFoot(testId="")
+            text `${memory.name}, kept on your host.` class=Small color="ink.muted"
+            text memory.location class=Mono color="ink.muted" overflow-wrap="anywhere"
+        Confirm(id="confirm-memory-forget", question=`Forget everything about ${aboutTitle(forgettingTitle)}?`,
+          message="Your imp loses every fact here. It may learn some of them again as you talk.", label="Forget",
+          confirm=confirmForget, testId="memory-forget")

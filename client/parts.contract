@@ -1,7 +1,8 @@
 // Small parts more than one screen of the shell uses: a shortcut's keys on its control, a person's initial, a
-// number in words, and the question asked before what can't be undone.
+// number in words, the question asked before what can't be undone, and the layout every Settings tab shares.
 
 use Key, Label, Body, Title, Display, Initial from "./look.contract"
+use ErrorNote from "./controls.contract"
 
 // A chord as the Mac writes it: "Control+Meta+S" is ⌃⌘S.
 fn keysOf(chord: string): string =
@@ -60,3 +61,72 @@ component Confirm
           :hover
             opacity=0.9
           text label class=Label color="inherit"
+
+// Settings' layout, which every tab shares: a line that says what the tab is for, then its sections. A section has its
+// name in small capitals over a black rule, a note under it when the section needs one, its rows, each ruled off below
+// with its actions at its end, or one line saying it is empty, and below them what adds to it (SettingsFoot).
+component SettingsPage
+  props
+    intro: string
+    testId: string
+  slot
+  view
+    column gap="space.xl" testId=testId
+      text intro class=Body color="ink.muted"
+      children
+
+component SettingsSection
+  props
+    title: string
+    // Beside the name, such as a count or a state; "" for none.
+    aside: string
+    asideTestId: string
+    // What the section is for, when its name doesn't say; "" for none.
+    note: string
+    testId: string
+  slot
+  view
+    column testId=testId
+      row align-items="baseline" gap="space.ms" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
+        text title class=Label color="ink.strong" role="heading" aria-level=2 flex=1
+        if aside != ""
+          text aside class=Label testId=asideTestId
+      if note != ""
+        text note class=Body color="ink.muted" padding="space.ms 0" border-bottom="1px solid line.subtle"
+      children
+
+// One thing in a section: its name in Lead, what it is in Small or Mono under it, and its actions at its end.
+component SettingsRow
+  props
+    testId: string
+  slot
+  view
+    row align-items="center" gap="space.ms" padding="space.ms 0" border-bottom="1px solid line.subtle" testId=testId
+      children
+
+// A section with no rows yet, or still loading them.
+component SettingsEmpty
+  props
+    message: string
+    testId: string
+  view
+    text message class=Body color="ink.muted" padding="space.ms 0" border-bottom="1px solid line.subtle" testId=testId
+
+// What adds to a section or changes it, below its rows: a row of buttons, or a form.
+component SettingsFoot
+  props
+    testId: string
+  slot
+  view
+    column gap="space.sm" padding-top="space.ms" testId=testId
+      children
+
+// Why a section's last action failed, under its rows; nothing when it didn't.
+component SettingsError
+  props
+    message: string
+    testId: string
+  view
+    if message != ""
+      column padding-top="space.ms"
+        ErrorNote(message=message, testId=testId)

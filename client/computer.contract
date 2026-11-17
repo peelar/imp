@@ -5,6 +5,7 @@ use Label, rise, Body, Control, Heading, Lead, Mono, Small, Subheading, Title fr
 use Button from "./controls.contract"
 use Computer from "./host.contract"
 use WizardTitle, WizardFold from "./onboarding.contract"
+use SettingsPage, SettingsSection, SettingsRow, SettingsEmpty, SettingsFoot, SettingsError from "./parts.contract"
 
 fn computerStatus(status: string): string =
   status == "ready" ? "Ready" : status == "starting" ? "Starting…" : status == "failed" ? "Not reachable" : "Not chosen yet"
@@ -73,121 +74,98 @@ component ComputerSettings
   action editKey(v: string)
     keyDraft = v
   view
-    column
-      row gap="space.ms" align-items="center" padding="space.md 0" border-bottom="1px solid line.subtle"
-        row width="2.75rem" height="2.75rem" min-width="2.75rem" align-items="center" justify-content="center"
-          border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-          image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=20 height=20
-        column flex=1 min-width=0 gap="space.xs" align-items="flex-start"
-          text (computer.name == "" ? "No computer yet" : computer.name) class=Heading
-            overflow-wrap="anywhere" testId="computer-name"
-          row gap="space.sm" align-items="center"
-            row width=6 height=6 aria-hidden=true
-              background-color=(computer.status == "ready" ? "ink.success" : computer.status == "failed" ? "ink.danger" : "ink.faint")
-            text computerStatus(computer.status) class=Label testId="computer-status"
-        if computer.status == "failed"
-          Button(press=retry, variant="secondary", disabled=false, testId="computer-retry")
-            text "Retry"
-        if computer.status == "ready"
-          Button(press=openScreen, variant="secondary", disabled=false, testId="computer-open-screen")
-            text "Open screen"
-            text "→" aria-hidden=true
-      if computer.status == "failed" and computer.error != ""
-        row gap="space.sm" align-items="flex-start" padding="space.sm space.ms" margin-top="space.ms" background-color="danger.soft"
-          border-left="2px solid ink.danger"
-          image "symbol:icon.alert" color="ink.danger" width=16 height=16 aria-hidden=true
-          text computer.error class=Body flex=1 min-width=0 overflow-wrap="anywhere" testId="computer-error"
-      if computer.kind == "dev"
-        text "This host fixes the computer for development, so there is nothing to choose." class=Body
-          color="ink.muted" padding-top="space.sm"
-      else
-        if switchError != "" and not switching
-          text switchError color="ink.danger" class=Body padding-top="space.sm" testId="computer-switch-error"
-        column gap="space.sm" padding-top="space.lg"
-          text "Imp cloud" class=Subheading role="heading" aria-level=3
-          text (computer.cloudAvailable ? "Sleeps when idle, keeps its files." : "Paste an API key from e2b.dev/dashboard.")
-            class=Body color="ink.muted"
-          if not computer.cloudAvailable
-            row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.ms" border="1px solid line.strong"
-              input type="password" value=keyDraft input=editKey submit=setCloudKey(keyDraft.trim()) placeholder="e2b_…"
-                aria-label="E2B API key" testId="computer-cloud-key" flex=1 min-width=0 padding="space.sm 0" border="none"
-                background-color="transparent" outline="none" class=Mono color="ink.strong"
-              Button(press=setCloudKey(keyDraft.trim()), variant="primary", disabled=(keyDraft.trim() == "" or switching), testId="computer-cloud-key-save")
-                text "Save"
-          row role="radiogroup" aria-label="Imp cloud size"
-            for z, i in computer.sizes key=z.id
-              button role="radio" aria-checked=(computer.kind == "cloud" and computer.size == z.id) press=useCloud(z.id)
-                disabled=(not computer.cloudAvailable or switching) flex=1 testId=`computer-size-${z.id}`
-                padding="space.sm space.xs" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
-                background-color=(computer.kind == "cloud" and computer.size == z.id ? "ink.strong" : "transparent")
-                color=(computer.kind == "cloud" and computer.size == z.id ? "surface.page" : "ink.strong")
-                class=Label
-                :disabled
-                  color="ink.faint"
-                text z.label
-        column gap="space.sm" padding-top="space.lg"
-          row align-items="center" gap="space.sm"
-            text "Your computer" class=Subheading role="heading" aria-level=3 flex=1
-            button press=refresh disabled=refreshing aria-label="Look for computers again" testId="computer-refresh"
-              appearance="none" width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
-              border="none" background-color="transparent" color="ink.muted"
+    SettingsPage(intro="The computer your imp works on: its files, its browser and the programs it runs.", testId="computer")
+      SettingsSection(title="In use", aside="", asideTestId="", note="", testId="")
+        SettingsRow(testId="")
+          row width="2.75rem" height="2.75rem" min-width="2.75rem" align-items="center" justify-content="center"
+            border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
+            image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=20 height=20
+          column flex=1 min-width=0 gap="space.xxs" align-items="flex-start"
+            text (computer.name == "" ? "No computer yet" : computer.name) class=Lead
+              overflow-wrap="anywhere" testId="computer-name"
+            row gap="space.sm" align-items="center"
+              row width=6 height=6 aria-hidden=true
+                background-color=(computer.status == "ready" ? "ink.success" : computer.status == "failed" ? "ink.danger" : "ink.faint")
+              text computerStatus(computer.status) class=Label testId="computer-status"
+          if computer.status == "failed"
+            Button(press=retry, variant="secondary", disabled=false, testId="computer-retry")
+              text "Retry"
+          if computer.status == "ready"
+            Button(press=openScreen, variant="secondary", disabled=false, testId="computer-open-screen")
+              text "Open screen"
+              text "→" aria-hidden=true
+        if computer.kind == "dev"
+          SettingsEmpty(message="This host fixes the computer for development, so there is nothing to choose.", testId="")
+        SettingsError(message=(computer.status == "failed" ? computer.error : ""), testId="computer-error")
+        SettingsError(message=(switching ? "" : switchError), testId="computer-switch-error")
+      if computer.kind != "dev"
+        SettingsSection(title="Imp cloud", aside="", asideTestId="",
+          note=(computer.cloudAvailable ? "Sleeps when idle, keeps its files." : "Paste an API key from e2b.dev/dashboard."), testId="")
+          SettingsFoot(testId="")
+            if not computer.cloudAvailable
+              row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.ms" border="1px solid line.strong"
+                input type="password" value=keyDraft input=editKey submit=setCloudKey(keyDraft.trim()) placeholder="e2b_…"
+                  aria-label="E2B API key" testId="computer-cloud-key" flex=1 min-width=0 padding="space.sm 0" border="none"
+                  background-color="transparent" outline="none" class=Mono color="ink.strong"
+                Button(press=setCloudKey(keyDraft.trim()), variant="primary", disabled=(keyDraft.trim() == "" or switching), testId="computer-cloud-key-save")
+                  text "Save"
+            row role="radiogroup" aria-label="Imp cloud size"
+              for z, i in computer.sizes key=z.id
+                button role="radio" aria-checked=(computer.kind == "cloud" and computer.size == z.id) press=useCloud(z.id)
+                  disabled=(not computer.cloudAvailable or switching) flex=1 testId=`computer-size-${z.id}`
+                  padding="space.sm space.xs" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
+                  background-color=(computer.kind == "cloud" and computer.size == z.id ? "ink.strong" : "transparent")
+                  color=(computer.kind == "cloud" and computer.size == z.id ? "surface.page" : "ink.strong")
+                  class=Label
+                  :disabled
+                    color="ink.faint"
+                  text z.label
+        SettingsSection(title="Your computer", aside="", asideTestId="", note="A Linux machine on your tailnet.", testId="")
+          for d in computer.devices key=d.id
+            button press=useOwn(d.id) disabled=(d.problem != "" or switching)
+              aria-pressed=(computer.kind == "own" and computer.device == d.id) testId=`computer-device-${d.name}`
+              display="flex" align-items="center" gap="space.ms" padding="space.ms 0" background-color="transparent" border="none"
+              border-bottom="1px solid line.subtle" text-align="start" color="ink.strong"
               :hover
                 background-color="surface.soft"
-              image "symbol:icon.refresh" width=15 height=15
-          text "A Linux machine on your tailnet."
-            class=Body color="ink.muted"
-          if computer.tailnetError != ""
-            text computer.tailnetError class=Body color="ink.danger" testId="computer-tailnet-error"
-          column border-top="1px solid line.subtle"
-            for d in computer.devices key=d.id
-              button press=useOwn(d.id) disabled=(d.problem != "" or switching)
-                aria-pressed=(computer.kind == "own" and computer.device == d.id) testId=`computer-device-${d.name}`
-                display="flex" align-items="center" gap="space.ms" padding="space.ms 0" background-color="transparent" border="none"
-                border-bottom="1px solid line.subtle" text-align="start" color="ink.strong"
-                :hover
-                  background-color="surface.soft"
-                image "symbol:icon.computer" width=16 height=16 aria-hidden=true
-                  color=(d.problem == "" ? "ink.strong" : "ink.faint")
-                column flex=1 min-width=0 gap="space.xxs"
-                  text d.name class=Lead color=(d.problem == "" ? "ink.strong" : "ink.muted")
-                  if d.problem != ""
-                    text d.problem class=Small color="ink.muted" font-style="italic"
-                text (computer.kind == "own" and computer.device == d.id ? "In use" : d.problem == "" ? "Use" : "")
-                  class=Label color=(computer.kind == "own" and computer.device == d.id ? "ink.strong" : "AccentColor")
-            if computer.devices.length == 0 and computer.tailnetError == ""
-              text "No Linux computers on your tailnet yet." font-style="italic" color="ink.muted" padding="space.ms 0"
-                border-bottom="1px solid line.subtle"
-          if usable > 0
-            button press=toggleSetup aria-expanded=settingUp testId="computer-add" align-self="flex-start" padding="space.xs 0"
-              border="none" background-color="transparent" color="ink.muted"
-              :hover
-                color="ink.strong"
-              text (settingUp ? "Hide setup" : "Add a computer") class=Label color="inherit"
-          if usable == 0 or settingUp
-            column gap="space.sm" padding-top="space.sm"
+              image "symbol:icon.computer" width=16 height=16 aria-hidden=true
+                color=(d.problem == "" ? "ink.strong" : "ink.faint")
+              column flex=1 min-width=0 gap="space.xxs"
+                text d.name class=Lead color=(d.problem == "" ? "ink.strong" : "ink.muted")
+                if d.problem != ""
+                  text d.problem class=Small color="ink.muted"
+              text (computer.kind == "own" and computer.device == d.id ? "In use" : d.problem == "" ? "Use" : "")
+                class=Label color=(computer.kind == "own" and computer.device == d.id ? "ink.strong" : "AccentColor")
+          if computer.devices.length == 0 and computer.tailnetError == ""
+            SettingsEmpty(message="No Linux computers on your tailnet yet.", testId="")
+          SettingsError(message=computer.tailnetError, testId="computer-tailnet-error")
+          SettingsFoot(testId="")
+            row gap="space.ms" align-items="center"
+              if usable > 0
+                Button(press=toggleSetup, variant="quiet", disabled=false, testId="computer-add")
+                  text (settingUp ? "Hide setup" : "Add a computer")
+              Button(press=refresh, variant="quiet", disabled=refreshing, testId="computer-refresh")
+                image "symbol:icon.refresh" width=13 height=13 aria-hidden=true
+                text "Look again"
+            if usable == 0 or settingUp
               text "Give this prompt to a coding agent on the computer." class=Body color="ink.muted"
               SetupPrompt(prompt=computer.setupPrompt, copy=copyPrompt)
-        column gap="space.sm" padding-top="space.lg" testId="computer-container-section"
-          row align-items="center" gap="space.sm"
-            text "This machine" class=Subheading role="heading" aria-level=3 flex=1
-            text "Free" class=Label
-          text "A container here, through Docker, OrbStack or Podman. Less isolated; the first start takes minutes."
-            class=Body color="ink.muted"
+        SettingsSection(title="This machine", aside="Free", asideTestId="",
+          note="A container here, through Docker, OrbStack or Podman. Less isolated; the first start takes minutes.",
+          testId="computer-container-section")
           if computer.kind == "container"
-            text "In use" class=Label color="ink.strong" testId="computer-container-in-use"
+            SettingsEmpty(message="In use.", testId="computer-container-in-use")
           else if computer.containerAvailable
-            row
-              Button(press=useContainer, variant="secondary", disabled=switching, testId="computer-container")
-                text "Use this machine"
+            SettingsFoot(testId="")
+              row
+                Button(press=useContainer, variant="secondary", disabled=switching, testId="computer-container")
+                  text "Use this machine"
           else
-            row gap="space.sm" align-items="flex-start"
-              text computer.containerProblem class=Body font-style="italic" color="ink.muted" flex=1
-                testId="computer-container-problem"
-              button press=refresh disabled=refreshing testId="computer-container-again" padding="space.xs 0" border="none"
-                background-color="transparent" color="ink.muted"
-                :hover
-                  color="ink.strong"
-                text "Look again" class=Label color="inherit"
+            SettingsEmpty(message=computer.containerProblem, testId="computer-container-problem")
+            SettingsFoot(testId="")
+              row
+                Button(press=refresh, variant="quiet", disabled=refreshing, testId="computer-container-again")
+                  text "Look again"
 
 // Text to copy into a terminal or a file, set in mono, with Copy.
 // A prompt for the person's coding agent: the setup to do, which the agent reads and the person only copies. It

@@ -7,6 +7,7 @@ Imp's shell, the app you open, looks like a catalogue: white paper, black ink, o
 | `app.forma` | The tokens: colours, the type scale, spacing, and the widths a column of reading runs to |
 | `look.contract` | The text styles, one per role of type, and the shell's motion |
 | `controls.contract` | The controls: `Button`, `DialogButton`, `ButtonLink`, `Callout` and `ErrorNote` |
+| `parts.contract` | Parts several screens share, among them the layout every Settings tab uses |
 
 `pnpm check` runs `scripts/design.ts`, which refuses a font, size, line height or weight, a colour of its own, or spacing in pixels in any other contract of the shell. A 1px hairline and a negative margin that lines a control up with the text beside it are allowed. The apps under `client/apps/` keep their own looks and are not checked.
 
@@ -64,4 +65,15 @@ Button(press=save, variant="primary", disabled=(not ready), testId="secret-save"
 
 `Callout` says something beside the content in a tone: `accent`, `danger` or `neutral`. It draws as a tint with a rule down its left edge, never a box across the page. `ErrorNote` is a danger callout with the alert symbol.
 
-Controls with a shape of their own stay their own components but are built from the same tokens: a tab, a row in the sidebar, Settings' sections, a segmented choice, a symbol-only button, and the onboarding's `WizardButton` and `WizardFold`.
+Controls with a shape of their own stay their own components but are built from the same tokens: a tab, a row in the sidebar, a segmented choice, a symbol-only button, and the onboarding's `WizardButton` and `WizardFold`.
+
+## Settings
+
+Every Settings tab has the same layout, from `parts.contract`, and builds from those parts rather than spacing and ruling its own:
+
+- `SettingsPage`: one muted line that says what the tab is for, then the tab's sections.
+- `SettingsSection`: the section's name in `Label` small capitals over a black rule, with an optional count or state beside it (`aside`) and an optional `note` under it.
+- `SettingsRow`: one thing in a section, ruled off below. Its name is `Lead`, what it is goes under it in `Small` or `Mono`, and its actions sit at its end, as `quiet` buttons or a switch.
+- `SettingsEmpty`: the one line a section shows when it has no rows, or is still loading them.
+- `SettingsFoot`: what adds to a section or changes it, below its rows: a row of buttons or a form.
+- `SettingsError`: why a section's last action failed, as an `ErrorNote` under its rows.
