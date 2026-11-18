@@ -3,7 +3,7 @@
 // first app.
 
 use Label, Body, Small, Heading, Lead, Title, Control, Key, rise from "./look.contract"
-use Button, DialogButton, ButtonLink, Callout, ErrorNote from "./controls.contract"
+use Button, DialogButton, Callout, ErrorNote from "./controls.contract"
 use keysOf, KeyBadge, Confirm from "./parts.contract"
 use WizardTitle, WizardButton from "./onboarding.contract"
 use Connection, AppTile from "./host.contract"
@@ -11,18 +11,21 @@ use GithubSignIn from "./settings/connections.contract"
 
 // An app's page, under the page's one bar (AppBar), around the app's own screen, which the app cannot draw over.
 // Above the screen, a card: while the app waits for a key (`needs`), GitHub's sign-in right there, or for another
-// key a button to Settings, which adds it; and while a preview shows, what that version reads from outside, and, where this window
-// runs a build of its own (`behind`: the Mac app, which carries its screens and never loads the host's), that it
-// shows the new version's data on the screen it has, with a link to the page in the browser, which has the new one.
+// key a button to Settings, which adds it; and while a preview shows, what that version reads from outside.
 // Waiting is setup still to do, not a failure: the bar says nothing of the sync until the key is there.
+//
+// The Mac app carries the screens Imp ships and never loads the host's build. An app whose version is another
+// (`framed`: changed by the imp, previewed, or built by it) shows the host's own page for it instead, the page alone
+// (`?embed=1`), with its card and screen as the browser has them, beside this window's bar and chat.
 component AppPage
   props
     id: string
     name: string
     draft: bool
     reads: string
-    behind: bool
+    framed: bool
     origin: string
+    scheme: string
     needs: string
     openSettings: action
     github: Connection
@@ -32,37 +35,33 @@ component AppPage
     copyGithubCode: action
   slot
   view
-    column flex=1 min-height=0
-      scroll id=`${id}-screen` flex=1 min-height=0
-        if (draft and (reads != "" or behind)) or (not draft and needs != "")
-          // In the apps' own column (docs/building-apps.md): measure.page wide, centered, inside space.page, so the card
-          // lines up with the app's screen under it.
-          column padding="space.lg space.page space.xs"
-            column width="100%" max-width="measure.page" margin="0 auto"
-              Callout(tone="accent", testId="app-card")
-                if draft
-                  column gap="space.sm" align-items="flex-start" testId="preview-note"
-                    if reads != ""
+    if framed
+      iframe src=`${origin}/${id}?embed=1&scheme=${scheme}` title=name testId="app-frame" flex=1 min-height=0
+        width="100%" border="none"
+    else
+      column flex=1 min-height=0
+        scroll id=`${id}-screen` flex=1 min-height=0
+          if (draft and reads != "") or (not draft and needs != "")
+            // In the apps' own column (docs/building-apps.md): measure.page wide, centered, inside space.page, so the card
+            // lines up with the app's screen under it.
+            column padding="space.lg space.page space.xs"
+              column width="100%" max-width="measure.page" margin="0 auto"
+                Callout(tone="accent", testId="app-card")
+                  if draft
+                    column gap="space.sm" align-items="flex-start" testId="preview-note"
                       text reads class=Body testId="preview-reads"
-                    if behind
-                      text "This window carries Imp's own screens: it shows the new version's data, not its screen. Try the new version in your browser before you save it."
-                        class=Body color="ink.muted"
-                      row
-                        ButtonLink(href=`${origin}/${id}`, variant="accent", testId="preview-open")
-                          text "Open in browser"
-                          text "→" aria-hidden=true
-                if needs == "github"
-                  column testId="app-needs"
-                    GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
-                      copyCode=copyGithubCode, note="This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile.",
-                      prefix="app-")
-                else if needs != ""
-                  column gap="space.sm" align-items="flex-start" testId="app-needs"
-                    text `This app reads with your ${needs} key: add it, and the app fills in.` class=Body color="ink.muted"
-                    Button(press=openSettings("secrets"), variant="accent", disabled=false, testId="app-needs-settings")
-                      text "Add it in Settings"
-                      text "→" aria-hidden=true
-        children
+                  if needs == "github"
+                    column testId="app-needs"
+                      GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
+                        copyCode=copyGithubCode, note="This app reads GitHub as you: connect GitHub, and the app fills in. Your imp can work on it meanwhile.",
+                        prefix="app-")
+                  else if needs != ""
+                    column gap="space.sm" align-items="flex-start" testId="app-needs"
+                      text `This app reads with your ${needs} key: add it, and the app fills in.` class=Body color="ink.muted"
+                      Button(press=openSettings("secrets"), variant="accent", disabled=false, testId="app-needs-settings")
+                        text "Add it in Settings"
+                        text "→" aria-hidden=true
+          children
 
 // A symbol-only control in an app's bar, as tall as the page header's other controls (New chat, the drawer).
 component BarSymbol

@@ -17,7 +17,12 @@
 import type { Context } from "@earendil-works/chord/context";
 import type { Registry } from "@earendil-works/pi-durable";
 import type { RemoteExecutionEnv } from "@earendil-works/pi-env";
-import type { AppInfo, AppGateway } from "../apps/apps.ts";
+import {
+  APP_FILES,
+  type AppFiles,
+  type AppInfo,
+  type AppGateway,
+} from "../apps/apps.ts";
 import type { Topics } from "../live/live.ts";
 import { shellBuilds } from "./builds.ts";
 import { codeFolders, impServers, shippedApps } from "./code.ts";
@@ -75,14 +80,44 @@ function oneAtATime() {
 
 export type Studio = ReturnType<typeof studio>;
 
-/** An app as the shell lists it: its draft and undo, what it reads, how its sync went and the key it waits for. */
-const tile = (
+/**
+ * Whether the version of the app the shell shows (its draft, else its live one) is the one Imp ships. The Mac app
+ * carries the screens Imp ships, and frames the host's own page for any other (client/apps.contract, AppPage).
+ */
+const showsShipped = (
   gateway: AppGateway,
-  decisions: ReturnType<typeof appDecisions>,
+  shipped: ReadonlyMap<string, AppFiles>,
+  id: string
+) => {
+  const files = (gateway.draft(id) ?? gateway.live(id))?.files;
+  const ships = shipped.get(id);
+
+  return (
+    files !== undefined &&
+    ships !== undefined &&
+    APP_FILES.every((name) => files[name] === ships[name])
+  );
+};
+
+/**
+ * An app as the shell lists it: its draft and undo, what it reads, how its sync went, the key it waits for, and whether
+ * it shows the version Imp ships.
+ */
+const tile = (
+  {
+    gateway,
+    decisions,
+    shipped,
+  }: {
+    readonly gateway: AppGateway;
+    readonly decisions: ReturnType<typeof appDecisions>;
+    readonly shipped: ReadonlyMap<string, AppFiles>;
+  },
   app: ReturnType<AppGateway["apps"]>[number]
 ) => ({
   ...app,
   draft: gateway.draft(app.id) !== undefined,
+  shipped: showsShipped(gateway, shipped, app.id),
   undo: decisions.undoKind(app.id),
   reads: gateway.reads(app.id),
   sync: gateway.syncLine(app.id),
@@ -181,7 +216,8 @@ export function studio(options: StudioOptions) {
 
   return {
     /** The apps for the shell, as `tile` shows each one. */
-    state: () => gateway.apps().map((app) => tile(gateway, decisions, app)),
+    state: () =>
+      gateway.apps().map((app) => tile({ gateway, decisions, shipped }, app)),
     /** Whether the onboarding still shows the person their first app: the host never had an app. */
     introduceApps: () => !folders.any(),
     /** The build the host serves, "repo" while it serves the repository's own. */

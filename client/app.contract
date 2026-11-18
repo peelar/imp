@@ -57,6 +57,9 @@ routes nav
   // </apps:tabs>
   // The imp's computer: its screen, beside the chat on a wide window, as an app's page is.
   tab computer "/computer"
+  // An app the Mac app has no screen for (one the imp built): the host's own page for it, framed (AppPage).
+  tab hosted "/hosted"
+    hostedApp "/hosted/:app"
   // The imp's own pages, which the sidebar opens.
   tab routines "/routines"
   tab tricks "/tricks"
@@ -107,6 +110,11 @@ fn readsOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.reads, case none => "" }
 fn syncOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.sync, case none => "" }
+fn isShipped(name: string, apps: AppTile[]): bool =
+  match first(apps.filter(a => a.id == name)) { case some(a) => a.shipped, case none => false }
+// The app a page shows: a tab's own, or the hosted tab's, from its address.
+fn pageApp(name: string, url: string): string =
+  name == "hosted" ? "" : name != "hostedApp" ? name : match url.slice(8).split("?").at(0) { case some(id) => id, case none => "" }
 fn needsOf(name: string, apps: AppTile[]): string =
   match first(apps.filter(a => a.id == name)) { case some(a) => a.needs, case none => "" }
 // The count a Settings tab carries: what is remembered, the secrets; "" for none.
@@ -154,6 +162,9 @@ component App
   // The host's address in the Mac app ("" on the web, where the page's origin is the host). The Mac installer fills it
   // in; the onboarding asks for it when no host answers.
   state hostAddress = "" persist
+  // The page alone, as the Mac app frames it for an app whose screen it does not carry (`?embed=1`, AppPage): the
+  // open app's screen, without the sidebar, the bars, the chat and the notifications, which the Mac app has.
+  state embedded = searchParam(top(nav), "embed") == "1"
   state hostDraft = ""
   // The onboarding's open section for the computer: "cloud", "own", "container" or none.
   state computerChoice = ""
@@ -207,7 +218,7 @@ component App
   // browser's connections to the host, so the page opened after it, another of the shell's routes, waits on the
   // splash for one.
   resource account = account() when host.origin != "" and not page.frozen as shape Account else empty()
-  resource chat = chat() when signedIn and landed and not page.frozen as shape ChatState else empty()
+  resource chat = chat() when signedIn and landed and not embedded and not page.frozen as shape ChatState else empty()
   resource apps = apps() when signedIn and not page.frozen as shape AppTile[] else empty()
   resource build = build() when signedIn and not page.frozen as shape Build else empty()
   resource update = updateReady() as shape Update else empty()
@@ -263,8 +274,15 @@ component App
   // Wide enough for the three columns: the sidebar (the imp's pages, the apps and the conversations), the page, and
   // the chat beside every page but the chat's own, which takes that room itself. Narrower windows have a tab bar and
   // a drawer instead.
-  derive wide = media.width >= 1280
+  derive wide = media.width >= 1280 and not embedded
   derive docked = wide and nav.tab != "chat"
+  // The app the open page shows, the hosted tab's included; else the page's own name.
+  derive tabApp = pageApp(top(nav).name, top(nav).url)
+  // The apps this build has no screen for, which the Mac app shows in the hosted tab; none where the host served the
+  // page, which has a tab for every app.
+  derive hostedApps = host.served ? [] : apps.map(a => a.id).filter(id => not nav.tabs.map(t => t.name).includes(id))
+  // The appearance: the framing window's, when the page is framed.
+  derive shownScheme = embedded and searchParam(top(nav), "scheme") != "" ? searchParam(top(nav), "scheme") : scheme
   // The home page on a wide window: no bar over it, and the greeting, what to try and the apps over the composer.
   derive homeWide = wide and chat.messages.length == 0 and not chat.busy and chat.routine == ""
   // What the home page offers to try: the todos ones only while Todos is installed.
@@ -281,10 +299,10 @@ component App
   // On a narrow window, where no sidebar is, the bar adds the chat and Settings.
   derive barTabs = wide ? appTabs : ["chat"].concat(appTabs).concat(["settings"])
   // A tab nothing shows, such as an app a flag keeps off, opened by its address: the host has nothing for it.
-  derive offTab = signedIn and current(apps) and not (appTabs.includes(nav.tab)
+  derive offTab = signedIn and current(apps) and not (appTabs.includes(nav.tab) or hostedApps.includes(tabApp)
     or ["chat", "settings", "routines", "tricks"].includes(nav.tab) or (nav.tab == "directory" and directoryOn))
   // What the chat beside the page is about: the open app or the computer, "" for the imp's own pages.
-  derive sideSubject = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == nav.tab)) { case some(a) => a.name, case none => "" }
+  derive sideSubject = nav.tab == "computer" ? "the computer" : match first(apps.filter(a => a.id == tabApp)) { case some(a) => a.name, case none => "" }
   // The home page: the chat with nothing said yet.
   derive atHome = nav.tab == "chat" and chat.messages.length == 0 and not chat.busy and chat.routine == ""
   derive signedIn = account.status == "signedIn"
@@ -295,7 +313,7 @@ component App
   // Its third: the first app, until the person asks the imp to build it or skips it.
   derive needsFirstApp = signedIn and not needsComputer and account.introduceApps and not firstBuild
   // The app the imp built for the first app, once the shell lists it: the host had none before.
-  derive builtApp = match appTabs.filter(n => n != "computer").at(0) { case some(n) => n, case none => "" }
+  derive builtApp = match appTabs.filter(n => n != "computer").concat(hostedApps).at(0) { case some(n) => n, case none => "" }
   derive installError = ((failed(appInstalled) and not pending(appInstalled))
     ? "Your Imp didn't answer in time. Try again in a moment."
     : match appInstalled { case some(r) => r.error, case none => "" })
@@ -331,14 +349,11 @@ component App
   // The host serves a newer build (an app was added, previewed, saved or undone): relaunch into it. Only where the host
   // served this shell: the Mac app relaunches into the build it carries, which would be stale again, forever.
   derive stale = host.served and build.id != "" and build.id != builtVersion()
-  // A page the host did not serve (the Mac app) runs on the screens it carries: a preview there shows the new
-  // version's data on the screen this build has, and the page says so.
-  derive behind = not host.served and build.id != "" and build.id != builtVersion()
   // No host answers: none is known yet (a Mac app installed without the installer), or the saved one is unreachable.
   derive unreachable = hostLost or (accountLost and hostAddress != "")
   // Imp is opening: the host has not said whether it is set up yet, or it is and the chat has not arrived.
   derive opening = (not unreachable and (account.status == "" or account.status == "checking"
-    or (signedIn and not needsComputer and chat.current == "")))
+    or (signedIn and not needsComputer and chat.current == "" and not embedded)))
   derive computer = account.computer
   // The computer's screen above the composer while the imp uses the browser, on every page but the Computer tab, which
   // shows it already. Its frame connects to the screen only while it shows.
@@ -363,7 +378,7 @@ component App
   // Notifications: what the host noticed since this page last looked, shown while no Imp window is in front, and
   // what waits on the person (routines with a run they have not opened, keys the imp asked for) on the app's badge.
   derive newest = noticeAt(account.notices, 0)
-  derive canNotify = alerts.available and alerts.state == "granted"
+  derive canNotify = alerts.available and alerts.state == "granted" and not embedded
   derive waiting = routines.filter(r => r.unread).length + secrets.requests.length
   // What the imp asked for in the open chat: its card shows there, and every other chat leaves it alone.
   derive asked = secrets.requests.filter(q => q.conversation != "" and q.conversation == chat.current)
@@ -398,27 +413,27 @@ component App
     after(1, hideKeys)
   task announce when signedIn key=newest.at
     change(announceNotices)
-  task badge when signedIn and alerts.badge key=waiting
+  task badge when signedIn and alerts.badge and not embedded key=waiting
     change(showWaiting)
   task leaveOffTab when offTab
     after(1, toChat)
   // Opening Imp asks the host for the chat it opens on beside the account stream, not after it. A host that refuses still lets
   // the chat open, on the conversation it has.
-  task openHome when host.origin != "" key=host.origin
+  task openHome when host.origin != "" and not embedded key=host.origin
     change(startHome)
   task homeRefused when failed(openedHome) key=true
     change(land)
-  task openAdded when toOpen != "" and appTabs.includes(toOpen)
+  task openAdded when toOpen != "" and (appTabs.includes(toOpen) or hostedApps.includes(toOpen))
     after(1, showAdded)
   task openBuilt when firstBuild and builtApp != ""
     after(1, showBuilt)
   // Beside an app sits the latest chat started beside it, or a new chat until there is one, whichever conversation
   // was open before: the host keeps which app each chat is about, so a reload shows the same one.
-  task openBeside when landed and docked and apps.map(a => a.id).includes(nav.tab) key=nav.tab
+  task openBeside when landed and docked and apps.map(a => a.id).includes(tabApp) key=tabApp
     change(showBeside)
 
   action applyScheme
-    setScheme(scheme)
+    setScheme(shownScheme)
   // Every key, wherever the focus is. ⌘ pressed on its own starts the wait for the hints; any other key ends it,
   // and the hints already shown stay while ⌘ does.
   action keyDown(k: string, e: KeyboardEvent)
@@ -493,7 +508,10 @@ component App
       refresh todosReadList
     // </apps:refresh>
   action pick(name: string)
-    nav = select(nav, name)
+    if hostedApps.includes(name)
+      nav = open(nav, path("hostedApp", name))
+    else
+      nav = select(nav, name)
   // Settings, open at one of its sections.
   action openSettings(section: string)
     settingsPane = section
@@ -502,7 +520,7 @@ component App
     nav = select(nav, "chat")
   action startHome
     if not pending(openedHome)
-      send openedHome = chatBeside(wide ? nav.tab : "")
+      send openedHome = chatBeside(wide ? tabApp : "")
   action land
     landed = true
   action follow(url: string)
@@ -552,7 +570,7 @@ component App
   action post(where: string)
     let message = withSpoken(draft, interimHeard).trim()
     if (message != "" or attachments.length > 0) and not pending(sent) and not pending(attached)
-      send sent = chatSend(message, where == "side-" ? nav.tab : "", attachments)
+      send sent = chatSend(message, where == "side-" ? tabApp : "", attachments)
       unsent = message
       unsentImages = attachments
       draft = ""
@@ -652,7 +670,7 @@ component App
   action restoreChat(id: string)
     send chatArchived = chatRestore(id)
   action showBeside
-    send chatChanged = chatBeside(nav.tab)
+    send chatChanged = chatBeside(tabApp)
   action showChat(id: string)
     drawer = false
     nav = select(nav, "chat")
@@ -794,7 +812,10 @@ component App
     toOpen = builtApp
     firstBuild = false
   action showAdded
-    nav = select(nav, toOpen)
+    if hostedApps.includes(toOpen)
+      nav = open(nav, path("hostedApp", toOpen))
+    else
+      nav = select(nav, toOpen)
     toOpen = ""
   action uninstallApp(id: string)
     send appUninstalled = appsUninstall(id)
@@ -932,11 +953,11 @@ component App
               for e in t.stack key=e.id
                 column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : ["routines", "tricks", "directory"].includes(e.name) ? `${e.name}-list` : `${e.name}-screen`)
                   position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
-                  padding-bottom=(wide ? "0" : "calc(3.5rem + env(safe-area-inset-bottom))")
+                  padding-bottom=(wide or embedded ? "0" : "calc(3.5rem + env(safe-area-inset-bottom))")
                   // On a wide window every page's header is the same bar, as tall as the sidebar's and the chat
                   // column's, its title at the left: switching pages moves nothing. The home page has none there:
                   // its greeting is its title.
-                  header display=(homeWide and e.name == "chat" ? "none" : "flex") justify-content="center" padding=(wide ? "0 space.lg" : "0 space.md")
+                  header display=(embedded or (homeWide and e.name == "chat") ? "none" : "flex") justify-content="center" padding=(wide ? "0 space.lg" : "0 space.md")
                     border-bottom="1px solid line.subtle" background-color="surface.page"
                     row width="100%" max-width=(wide ? "none" : "measure.page") align-items="center" gap="space.ms"
                       height=(wide ? "measure.bar" : "auto") box-sizing="border-box" padding=(wide ? "0" : "space.ms 0 space.ms")
@@ -950,19 +971,19 @@ component App
                           if keys
                             KeyBadge(chord="Control+Meta+S", at="end")
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size=(wide ? "1.75rem" : "1.5rem"), heading=1)
+                      Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(pageApp(e.name, e.url), wide, apps)), size=(wide ? "1.75rem" : "1.5rem"), heading=1)
                       // An app's page has one bar: its controls sit in the header, beside its title.
-                      for a in apps.filter(a => a.id == e.name) key=a.id
+                      for a in apps.filter(a => a.id == pageApp(e.name, e.url)) key=a.id
                         AppBar(app=a, wide=wide, keys=keys, save=saveApp, discard=discardApp, undoSave=undoApp,
                           syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError)
-                      if not apps.map(a => a.id).includes(e.name)
+                      if not apps.map(a => a.id).includes(pageApp(e.name, e.url))
                         row flex=1
                       if e.name == "chat" and chat.busy
                         row gap="space.sm" align-items="center" testId="busy"
                           row width=6 height=6 background-color="AccentColor" aria-hidden=true
                             animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
                           text "Imp at work" class=Label color="ink.strong"
-                      else if not wide and not apps.map(a => a.id).includes(e.name)
+                      else if not wide and not apps.map(a => a.id).includes(pageApp(e.name, e.url))
                         text formatDate(shown, time.utcOffset, "medium") class=Label
                       // New chat from any page; on a wide window the sidebar has it.
                       if not wide
@@ -1098,12 +1119,16 @@ component App
                   if e.name == "computer"
                     ComputerScreen(computer=computer, src=`${host.origin}/computer/screen?embed&scheme=${scheme}`,
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=openSettings("computer"))
+                  if e.name == "hostedApp" and pageApp(e.name, e.url) != ""
+                    AppPage(id=pageApp(e.name, e.url), name=tabLabel(pageApp(e.name, e.url), apps), draft=false, reads="",
+                      framed=true, origin=host.origin, scheme=scheme, needs="", openSettings=openSettings, github=github,
+                      githubBusy=false, connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                   // <apps:screens>
                   if e.name == "github"
-                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), reads=readsOf("github", apps), behind=behind, origin=host.origin, needs=needsOf("github", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
+                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), reads=readsOf("github", apps), framed=(not host.served and not isShipped("github", apps)), origin=host.origin, scheme=scheme, needs=needsOf("github", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       GithubScreen(inbox=githubReadInbox, done=githubDoDone, snooze=githubDoSnooze, restore=githubDoRestore)
                   if e.name == "todos"
-                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), reads=readsOf("todos", apps), behind=behind, origin=host.origin, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
+                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), reads=readsOf("todos", apps), framed=(not host.served and not isShipped("todos", apps)), origin=host.origin, scheme=scheme, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The tabs: on a wide window the sidebar's apps, with Settings at its foot; on a narrow one a bar along the
@@ -1139,6 +1164,11 @@ component App
                 column role="tablist" aria-label="Apps" aria-orientation="vertical" appearance="none" testId="tabs"
                   gap="space.xxs" background-color="transparent" border="none"
                   for t in nav.tabs key=t.name
+                    // The apps this build has no tab for, after the ones it has.
+                    if t.name == "computer"
+                      for id in hostedApps key=id
+                        AppTab(prefix="", name=id, label=tabLabel(id, apps), symbol=tabSymbol(id, apps), chord="",
+                          selected=(tabApp == id), shown=true, keys=keys, side=true, draft=hasDraft(id, apps), press=pick)
                     AppTab(prefix=(t.name == "settings" ? "bar-" : ""), name=t.name, label=tabLabel(t.name, apps),
                       symbol=tabSymbol(t.name, apps), chord=(t.name == "settings" ? "" : tabChord(t.name, appTabs)),
                       selected=(nav.tab == t.name), shown=barTabs.includes(t.name), keys=keys, side=true,
@@ -1163,10 +1193,15 @@ component App
                   text "⌘," class=Key aria-hidden=true testId="keys-Meta+,"
         else
           row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left=0 right=0 bottom=0
+            display=(embedded ? "none" : "flex")
             box-sizing="border-box" height="calc(3.5rem + env(safe-area-inset-bottom))"
             padding="0 0 env(safe-area-inset-bottom)" justify-content="center" align-items="stretch"
             background-color="surface.page" border-top="1px solid line.subtle"
             for t in nav.tabs key=t.name
+              if t.name == "computer"
+                for id in hostedApps key=id
+                  AppTab(prefix="", name=id, label=tabLabel(id, apps), symbol=tabSymbol(id, apps), chord="",
+                    selected=(tabApp == id), shown=true, keys=keys, side=false, draft=false, press=pick)
               AppTab(prefix="", name=t.name, label=tabLabel(t.name, apps), symbol=tabSymbol(t.name, apps),
                 chord=tabChord(t.name, appTabs), selected=(nav.tab == t.name),
                 shown=barTabs.includes(t.name), keys=keys, side=false, draft=false, press=pick)

@@ -14,8 +14,10 @@
 #   sh scripts/walkthrough.sh mac      the native Mac app (on macOS, after setup.sh mac), shot whole with its toolbar and
 #                                      safe areas, which no browser shows: onboarding, with ⌘ held the shortcuts it hints
 #                                      at, the places, then the imp changes GitHub's heading, and the preview, Save, Undo's
-#                                      question and Manage. The Mac app keeps its own screens, so the preview shows the new
-#                                      version's data under the old heading, as its banner says; build shows a changed one
+#                                      question and Manage. The changed GitHub is no longer the one Imp ships, so the Mac
+#                                      app frames the host's own page for it: the preview and the saved app show the new
+#                                      heading. Last the imp builds a new app (Notes), which this build has no tab for:
+#                                      the sidebar lists it and its page frames the host's
 #
 # The screenshots land in client/.exact/walkthrough/, emptied first; it ends by listing them.
 set -eu
@@ -58,17 +60,22 @@ mac() {
 		"resize 1280x800" "tap tab-github" "clock settle" \
 		"type side-composer app code: github" "type side-composer key Enter" \
 		"clock until state chat.busy == false within 20000" \
-		"type side-composer run: perl -pi -e s/Nothing.needs.you/All_caught_up/ workspace/apps/github/app.contract" \
+		"type side-composer run: perl -pi -e s/Nothing.needs.you/All_caught_up/ apps/github/app.contract" \
 		"type side-composer key Enter" "clock until state chat.busy == false within 20000" \
 		"type side-composer preview app: github" "type side-composer key Enter" \
 		"clock until state apps.0.draft == true within 600000" "clock settle" \
-		"tree preview-discard" "tree preview-save" "tree app-manage" \
+		"tree preview-discard" "tree preview-save" "tree app-manage" "tree app-frame" \
 		"screenshot $out/mac-github-preview.png window" \
 		"tap preview-save" 'clock until state apps.0.undo == "keep" within 60000' "clock settle" \
-		"screenshot $out/mac-github-saved.png window" \
+		"tree app-frame" "screenshot $out/mac-github-saved.png window" \
 		"tap undo-save" "clock settle" "screenshot $out/mac-github-undo.png window" "tap undo-cancel" "clock settle" \
 		"tap app-manage" "clock settle" "screenshot $out/mac-github-manage.png window" "tap manage-close-github" "clock settle" \
-		"screenshot $out/mac-github-after.png window")
+		"screenshot $out/mac-github-after.png window" \
+		"type side-composer app code: notes" "type side-composer key Enter" \
+		"clock until state chat.busy == false within 20000" \
+		"type side-composer preview app: notes" "type side-composer key Enter" \
+		"clock until state apps.length == 2 within 600000" "clock settle" "tap tab-notes" "clock settle" \
+		"tree app-frame" "screenshot $out/mac-notes-preview.png window")
 }
 
 # The build part's own host, away from the ports a dev host (8787) and the Exact tests (8787, 8799) take.

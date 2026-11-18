@@ -110,6 +110,9 @@ shape AppTile
   // The key the app reads with that the owner has not added yet, such as "github": it waits, and syncs once it is
   // there. "" for none.
   needs: string
+  // Whether the version the app shows (its draft, else its live one) is the one Imp ships, whose screen every build of
+  // the shell has. The Mac app frames the host's own page for any other.
+  shipped: bool
 
 // The web build the host serves now. A page from an older build relaunches to load it.
 shape Build

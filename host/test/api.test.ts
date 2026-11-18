@@ -49,6 +49,8 @@ const todos = {
   reads: "",
   sync: "",
   needs: "",
+  // Its version is the one Imp ships, whose screen the Mac app carries.
+  shipped: true,
 };
 
 /**
@@ -144,6 +146,7 @@ test("the shell lists the installed apps and the running version", async () => {
         "Reads api.github.com with your github key, every 15 min, and when api.github.com/notifications changes.",
       sync: "",
       needs: "github",
+      shipped: true,
     },
     todos,
   ]);

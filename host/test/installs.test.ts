@@ -1,7 +1,7 @@
 // Installing and uninstalling apps, through the host's HTTP API: the onboarding installs GitHub and the app directory
 // Todos, and Uninstall removes an app with its data, for good. Run: pnpm test
 import assert from "node:assert/strict";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import {
@@ -61,6 +61,26 @@ test("Todos from the app directory is the person's own, like an app the imp buil
   assert.ok(
     existsSync(path.join(dataDir, "code", "todos", "live", "server.ts"))
   );
+});
+
+test("an app shows as Imp ships it until its code is another, which the Mac app frames the host's page for", async () => {
+  const shipped = async () =>
+    rows(await first("apps")).map((app) => [app.id, app.shipped]);
+
+  assert.deepEqual(await shipped(), [
+    ["github", true],
+    ["todos", true],
+  ]);
+
+  // The imp changed Todos' screen and the person saved it.
+  const screen = path.join(dataDir, "code", "todos", "live", "app.contract");
+
+  writeFileSync(screen, `${readFileSync(screen, "utf-8")}\n// Changed.\n`);
+  await startTestHost();
+  assert.deepEqual(await shipped(), [
+    ["github", true],
+    ["todos", false],
+  ]);
 });
 
 test("an uninstalled app goes with its data, and installed again it starts empty", async () => {

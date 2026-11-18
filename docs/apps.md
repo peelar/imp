@@ -64,7 +64,7 @@ The bar says how the last sync went ("Synced 3 min ago", or "Sync failing for 20
 
 3. **You try it**
 
-   The app's tab shows the new version as a preview, on a copy of your data. The page's bar says **Preview** beside the app's name and offers **Save**, and **Back** (←), which discards the preview and goes back to the saved version. Open pages reload into the new version as soon as the host serves it. The Mac app carries its own screens and can't load a new one: there the preview shows the new version's data on the screen it has, and a note offers to open the page in your browser, which shows the new screen.
+   The app's tab shows the new version as a preview, on a copy of your data. The page's bar says **Preview** beside the app's name and offers **Save**, and **Back** (←), which discards the preview and goes back to the saved version. Open pages reload into the new version as soon as the host serves it. The Mac app carries the screens Imp ships and draws them natively. For an app whose version is another one (a preview, a saved change, or an app the imp built), it shows the host's own page for that app in the app's page, framed under the Mac app's bar and beside its chat, so it has the same screen as the browser. That page is the app's alone (`/<id>?embed=1`): no sidebar, bars or chat of its own. An app the Mac app has no tab for at all opens at `/hosted/<id>`, listed in the sidebar with the others.
 
 4. **Only you save**
 
