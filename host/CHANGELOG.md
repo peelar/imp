@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.22.0
+
+### Minor Changes
+
+- 77044b4: The Mac app now shows your apps as your Imp has them, the same as the browser. An app your imp changed or built, or one you are previewing, opens in the Mac app with its new screen, and you no longer need to open it in the browser to see it.
+
 ## 0.21.0
 
 ### Minor Changes
