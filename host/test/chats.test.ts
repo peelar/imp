@@ -2,7 +2,7 @@
 // something said in them, New chat opens an empty one, and any listed one can be shown again; the tricks the machine's
 // agent-browser knows ride on the account stream. The test host's agent-browser is a stand-in (scripts/test-host.ts).
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../sdk/app.ts";
@@ -14,6 +14,7 @@ import {
   first,
   isRow,
   refused,
+  repo,
   type Row,
   rows,
   startTestHost,
@@ -393,39 +394,54 @@ test("beside an app opens the latest chat started beside it, or a new chat until
   );
 });
 
-test("a chat on the chat page that previews a new app sits beside that app from then on", async () => {
-  assert.deepEqual(await call("chatNew", []), done);
-  assert.equal(
-    (await toolRow("Please write app code: built")).title,
-    "Opened an app's code"
-  );
-  assert.equal(
-    (await toolRow("Please preview app: built")).title,
-    "Built a preview"
-  );
+// A preview builds the shell, so this test needs the Exact checkout the host builds with, as api.test.ts's studio
+// tests do: EXACT names it. Without one it is skipped.
+const withExact = existsSync(
+  path.join(
+    process.env.EXACT ?? path.resolve(repo, "..", "..", "tools", "exact"),
+    "scripts",
+    "app-cli.mjs"
+  )
+)
+  ? test
+  : test.skip;
 
-  const building = await until(
-    "chat",
-    chatsWhen(() => true)
-  );
+withExact(
+  "a chat on the chat page that previews a new app sits beside that app from then on",
+  async () => {
+    assert.deepEqual(await call("chatNew", []), done);
+    assert.equal(
+      (await toolRow("Please write app code: built")).title,
+      "Opened an app's code"
+    );
+    assert.equal(
+      (await toolRow("Please preview app: built")).title,
+      "Built a preview"
+    );
 
-  // A new chat, which the imp was not at work in, gives way to the chat that built the app.
-  assert.deepEqual(await call("chatNew", []), done);
-  await until(
-    "chat",
-    chatsWhen((c) => c.current !== building.current)
-  );
-  assert.deepEqual(await call("chatBeside", ["built"]), done);
-  assert.equal(
-    (
-      await until(
-        "chat",
-        chatsWhen((c) => c.current === building.current)
-      )
-    ).messages[0]?.text,
-    "Please write app code: built"
-  );
-});
+    const building = await until(
+      "chat",
+      chatsWhen(() => true)
+    );
+
+    // A new chat, which the imp was not at work in, gives way to the chat that built the app.
+    assert.deepEqual(await call("chatNew", []), done);
+    await until(
+      "chat",
+      chatsWhen((c) => c.current !== building.current)
+    );
+    assert.deepEqual(await call("chatBeside", ["built"]), done);
+    assert.equal(
+      (
+        await until(
+          "chat",
+          chatsWhen((c) => c.current === building.current)
+        )
+      ).messages[0]?.text,
+      "Please write app code: built"
+    );
+  }
+);
 
 // A 2×1 PNG: one red pixel, one blue.
 const PNG =
