@@ -2,9 +2,9 @@
 // app's own screen (apps/<id>/app.contract); the dialog that manages it; and the onboarding's step that installs the
 // first app.
 
-use Label, Body, Small, Heading, Lead, Title, Control, rise from "./look.contract"
+use Label, Body, Small, Heading, Lead, Title, Control, Key, rise from "./look.contract"
 use Button, DialogButton, ButtonLink, Callout, ErrorNote from "./controls.contract"
-use KeyBadge, Confirm from "./parts.contract"
+use keysOf, KeyBadge, Confirm from "./parts.contract"
 use WizardTitle, WizardButton from "./onboarding.contract"
 use Connection, AppTile from "./host.contract"
 use GithubSignIn from "./settings/connections.contract"
@@ -215,8 +215,10 @@ component AppTab
           aria-hidden=true
         if draft
           row width=7 height=7 min-width=7 background-color="AccentColor" aria-hidden=true testId=`${prefix}tab-${name}-mark`
+        // Its keys at the row's end, as New chat's and Settings' are: a badge over the corner would straddle the
+        // next row and the sidebar's edge.
         if keys and chord != ""
-          KeyBadge(chord=chord, at="end")
+          text keysOf(chord) class=Key aria-hidden=true testId=`keys-${chord}`
     else
       button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
         cursor="pointer"

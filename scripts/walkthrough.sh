@@ -12,7 +12,7 @@
 #                                      itself serves, which a preview rebuilds and reloads; Exact's runner cannot drive
 #                                      that release build, so agent-browser does (npm i -g agent-browser)
 #   sh scripts/walkthrough.sh mac      the native Mac app (on macOS, after setup.sh mac), shot whole with its toolbar and
-#                                      safe areas, which no browser shows
+#                                      safe areas, which no browser shows, and with ⌘ held, the shortcuts it hints at
 #
 # The screenshots land in client/.exact/walkthrough/, emptied first; it ends by listing them.
 set -eu
@@ -42,6 +42,7 @@ mac() {
 		"screenshot $out/mac-onboarding-first-app.png window" \
 		"tap first-app-skip" "clock until state account.introduceApps == false within 10000" "clock settle" \
 		"screenshot $out/mac-github.png window" \
+		"type app key Meta down" "clock +800" "screenshot $out/mac-github-keys.png window" "type app key Meta up" \
 		"tap home-entry" "clock settle" "screenshot $out/mac-home.png window" \
 		"tap routines-entry" "clock settle" "screenshot $out/mac-routines.png window" \
 		"tap tricks-entry" "clock settle" "screenshot $out/mac-tricks.png window" \
