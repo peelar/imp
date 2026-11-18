@@ -20,8 +20,8 @@ use Screen as TodosScreen, Todo as TodosTodo from "./apps/todos/app.contract"
 use showNotification, closeNotification, setAppBadge, clearAppBadge, notificationStatus, requestNotificationPermission, notificationclick, NotificationStatus, NotificationEvent from "@exact/notifications"
 use getUserMedia, stopTrack, MediaStream, MediaStreamTrack from "@exact/media-capture"
 use startSpeechRecognition, stopSpeechRecognition, abortSpeechRecognition, speechRecognitionState, speechRecognitionStatus, SpeechRecognitionInfo, SpeechRecognitionState, SpeechRecognitionStatus from "@exact/speech-recognition"
-use Label, pulse, Key, rise, Body, Code, Control, Display, Heading, Lead, Mono, Title, Initial, Page from "./look.contract"
-use Button from "./controls.contract"
+use Label, pulse, Key, rise, Body, Control, Display, Heading, Lead, Mono, Title, Initial, Page from "./look.contract"
+use Button, DeviceCode from "./controls.contract"
 use SecretSettings, SecretAsk from "./settings/secrets.contract"
 use MemorySettings from "./settings/memory.contract"
 use GeneralSettings from "./settings/general.contract"
@@ -1283,24 +1283,11 @@ component App
                 WizardFold(label="Continue with ChatGPT", press=foldChatGPT, testId="signin", primary=(not signingIn),
                   open=signingIn, disabled=(pending(signInStarted) or pending(signInCancelled)))
                   if account.status == "waiting"
-                    column gap="space.ms" testId="signin-waiting"
-                      row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.md" border="1px solid line.strong"
-                        text account.code flex=1 class=Code
-                          user-select="all" testId="signin-code"
-                        Button(press=copyCode, variant="secondary", disabled=false, testId="signin-copy")
-                          image "symbol:icon.copy" width=13 height=13 aria-hidden=true
-                          text "Copy"
-                      link href=account.url testId="signin-open" display="flex" align-items="center"
-                        cursor="pointer"
-                        justify-content="center" gap="space.sm" padding="space.ms space.md" background-color="AccentColor"
-                        color="ink.on-fill" class=Mono
-                        text-transform="uppercase" text-decoration-line="none"
-                        text "Open ChatGPT"
-                        image "symbol:icon.open" width=14 height=14 aria-hidden=true
-                  row gap="space.sm" align-items="center"
-                    progress aria-label=(account.status == "waiting" ? "Waiting for approval" : "Connecting")
-                    text (account.status == "waiting" ? "Waiting for approval…" : "Connecting…") font-style="italic"
-                      color="ink.muted"
+                    DeviceCode(code=account.code, url=account.url, site="ChatGPT", copy=copyCode, prefix="signin-")
+                  else
+                    row gap="space.sm" align-items="center"
+                      progress aria-label="Connecting"
+                      text "Connecting…" font-style="italic" color="ink.muted"
                 WizardFold(label="Use an API key", press=toggleKeyForm, testId="key-open", primary=false, open=keyForm,
                   disabled=false)
                   column gap="space.ms" testId="key-form"

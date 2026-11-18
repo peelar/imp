@@ -3,10 +3,9 @@
 // repository (host/src/backup/), and Copy to GitHub only adds a private copy there. Then the MCP servers the imp uses
 // for the person.
 
-use Label, Body, Code, ControlLarge, Lead, Mono, Small from "../look.contract"
-use Button, ButtonLink, ErrorNote from "../controls.contract"
+use Label, Body, Lead, Mono, Small from "../look.contract"
+use Button, ButtonLink, ErrorNote, DeviceCode from "../controls.contract"
 use Connection, Backup, McpServer from "../host.contract"
-use Step from "../onboarding.contract"
 use Confirm, SettingsSection, SettingsRow, SettingsEmpty, SettingsFoot, SettingsError from "../parts.contract"
 
 component ConnectionsSettings
@@ -68,8 +67,9 @@ component ConnectionsSettings
                 text "Copy to GitHub"
         SettingsError(message=backup.error, testId="backup-error")
 
-// Connecting GitHub, until it is on: the button, then GitHub's code to enter on its sign-in page, and why the last
-// try failed. Settings shows it, and so does an app's page while the app waits for GitHub, in the same look.
+// Connecting GitHub, until it is on: the button, then GitHub's code to enter on its sign-in page (DeviceCode, as
+// ChatGPT's sign-in shows it), and why the last try failed. Settings shows it, and so does an app's page while the
+// app waits for GitHub, in the same look.
 component GithubSignIn
   props
     github: Connection
@@ -83,24 +83,8 @@ component GithubSignIn
   view
     column gap="space.ms" align-items="stretch"
       if github.status == "waiting"
-        column gap="space.sm" testId=`${prefix}github-waiting`
-          Step(number="01", title="Open GitHub's sign-in page")
-          link href=github.url testId=`${prefix}github-open` display="flex" align-items="center" justify-content="center"
-            cursor="pointer"
-            gap="space.sm" padding="space.ms space.md" border="1px solid AccentColor" background-color="AccentColor"
-            color="ink.on-fill" class=ControlLarge text-decoration-line="none"
-            text "Open GitHub"
-            image "symbol:icon.open" width=14 height=14 aria-hidden=true
-          Step(number="02", title="Enter this code")
-          row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.md" border="1px solid line.strong"
-            text github.code flex=1 class=Code
-              user-select="all" testId=`${prefix}github-code`
-            Button(press=copyCode, variant="secondary", disabled=false, testId=`${prefix}github-copy`)
-              image "symbol:icon.copy" width=13 height=13 aria-hidden=true
-              text "Copy"
-          row gap="space.sm" align-items="center" padding-top="space.xxs"
-            progress aria-label="Waiting for approval"
-            text "Waiting for you to approve…" font-style="italic" color="ink.muted"
+        column gap="space.sm"
+          DeviceCode(code=github.code, url=github.url, site="GitHub", copy=copyCode, prefix=`${prefix}github-`)
           row
             Button(press=cancel, variant="quiet", disabled=false, testId=`${prefix}github-cancel`)
               text "Cancel"

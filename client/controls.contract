@@ -2,7 +2,7 @@
 // callout a screen says something in, and an error. Their colours, type and spacing are app.forma's tokens; a screen
 // passes what the control says and does, never how it looks.
 
-use Label, Control, Body from "./look.contract"
+use Label, Control, Body, Code, Mono from "./look.contract"
 
 // A variant's colours. `primary` is the screen's one main action, filled in the accent; `secondary` is any other,
 // outlined; `accent` is outlined in the accent, for the action in an accent Callout; `quiet` is a small capitals
@@ -267,3 +267,29 @@ component ErrorNote
       row gap="space.sm" align-items="flex-start"
         image "symbol:icon.alert" color="ink.danger" width=16 height=16 aria-hidden=true
         text message class=Body flex=1 min-width=0 overflow-wrap="anywhere" testId=testId
+
+// A device code sign-in's code, while it waits for the person: the code with Copy, the link to the page they enter it
+// on, and that it is waiting. ChatGPT's sign-in and GitHub's both show it. Each testId starts with `prefix`.
+component DeviceCode
+  props
+    code: string
+    url: string
+    // What the link opens, such as "ChatGPT".
+    site: string
+    copy: action
+    prefix: string
+  view
+    column gap="space.ms" testId=`${prefix}waiting`
+      row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.md" border="1px solid line.strong"
+        text code flex=1 class=Code user-select="all" testId=`${prefix}code`
+        Button(press=copy, variant="secondary", disabled=false, testId=`${prefix}copy`)
+          image "symbol:icon.copy" width=13 height=13 aria-hidden=true
+          text "Copy"
+      link href=url testId=`${prefix}open` display="flex" align-items="center" cursor="pointer"
+        justify-content="center" gap="space.sm" padding="space.ms space.md" background-color="AccentColor"
+        color="ink.on-fill" class=Mono text-transform="uppercase" text-decoration-line="none"
+        text `Open ${site}`
+        image "symbol:icon.open" width=14 height=14 aria-hidden=true
+      row gap="space.sm" align-items="center"
+        progress aria-label="Waiting for approval"
+        text "Waiting for approval…" font-style="italic" color="ink.muted"
