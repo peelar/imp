@@ -1,5 +1,13 @@
 # @imp/host
 
+## 0.20.4
+
+### Patch Changes
+
+- 90baf41: A key or login your imp asks for now shows only in the chat that asked for it, not in every chat, and its notification opens that chat. Settings → Secrets still lists every open request.
+- 485a7bf: Connecting GitHub now shows its code the way the ChatGPT sign-in does: the code with Copy first, then Open GitHub, then that it's waiting for your approval.
+- eea27b8: While you hold ⌘ in the Mac app, the ⌘1 and ⌘2 hints on the sidebar's apps now sit on their own rows, inside the sidebar, lined up with New chat's ⌘N and Settings' ⌘,.
+
 ## 0.20.3
 
 ### Patch Changes
