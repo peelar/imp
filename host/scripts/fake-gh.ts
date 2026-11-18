@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The GitHub CLI as Connect GitHub sees it (test-host.ts): a device code sign-in that approves itself, for an account
-// named "tester".
+// named "tester". Like gh on a Mac, it copies the code to the clipboard unless told not to, and says so differently.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -17,8 +17,13 @@ const COMMANDS = new Map<string, () => Promise<void> | void>([
   [
     "auth login",
     async () => {
+      // As the real gh does where it can copy the code, as on every Mac: unless told not to, it says it copied it.
+      const said = process.argv.includes("--clipboard=false")
+        ? "! First copy your one-time code: TEST-5678"
+        : "! One-time code (TEST-5678) copied to clipboard";
+
       process.stderr.write(
-        "! First copy your one-time code: TEST-5678\nOpen this URL to continue in your web browser: https://github.com/login/device\n"
+        `${said}\nOpen this URL to continue in your web browser: https://github.com/login/device\n`
       );
       await sleep(Number(process.env.TEST_SIGNIN_MS ?? 1500));
       mkdirSync(config, { recursive: true });

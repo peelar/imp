@@ -140,6 +140,17 @@ const REQUEST = obj({
   ),
 });
 
+/** What the agent hears once it asked for `id`. GitHub's key is the one Connect GitHub signs in for, so its request
+ * offers that sign-in, not a paste. */
+function askedFor(id: string, service: string) {
+  const how =
+    id === "github" && service === "github"
+      ? "connects GitHub from it"
+      : `pastes the ${service === "login" ? "password" : "key"} there`;
+
+  return `Asked. The user sees your request for ${id} in this chat, and ${how}; you never see it. Wait: it shows in your secrets once they add it.`;
+}
+
 /** The tool the agent asks for a secret with: the whole form but the value, checked to save as it is. */
 function requestSecretTool({
   secrets,
@@ -208,9 +219,7 @@ function requestSecretTool({
 
       ask(request);
 
-      return text(
-        `Asked. The user sees your request for ${id} in this chat, and pastes the ${service === "login" ? "password" : "key"} there; you never see it. Wait: it shows in your secrets once they add it.`
-      );
+      return text(askedFor(id, service));
     },
   });
 }

@@ -142,6 +142,8 @@ export function githubSignIn({ gh, dir }: { gh: Gh; dir: string }) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
 
     // --insecure-storage keeps the token in gh's folder, which the host reads it from, not in a keychain.
+    // --clipboard=false: where gh can copy the code (pbcopy is on every Mac) it says so in other words, with the code
+    // in brackets, and the host waited for a code forever. The person copies it from Imp's own Copy button instead.
     const child = spawn(
       program,
       [
@@ -154,6 +156,7 @@ export function githubSignIn({ gh, dir }: { gh: Gh; dir: string }) {
         "https",
         "--skip-ssh-key",
         "--insecure-storage",
+        "--clipboard=false",
         "--scopes",
         SCOPES,
       ],

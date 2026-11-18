@@ -360,6 +360,23 @@ test "the imp asks for a key in the chat, and the owner pastes it there"
   clock until state secrets.secrets.0.name == "weather" within 5000
   expect state chat.messages.length == 3
 
+test "the imp asks for GitHub in the chat, and the owner connects it there"
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  type "composer" "Please ask for a key: github"
+  tap "send"
+  clock until state secrets.requests.0.name == "github" within 10000
+  clock until state chat.busy == false within 10000
+  expect tree missing "secret-ask-value-0"
+  clock until state secrets.status == "ready" within 120000
+  tap "secret-ask-0-github-connect"
+  clock until state github.status == "waiting" within 5000
+  expect text "secret-ask-0-github-code" == "TEST-5678"
+  clock until state github.status == "on" within 30000
+  clock until state secrets.requests.length == 0 within 5000
+  expect tree missing "secret-ask-0"
+
 test "the imp asks for a login, and the owner adds it with its one-time-code key"
   request POST "/api/call/accountSignIn" []
   request POST "/api/call/appsInstall" ["github"]

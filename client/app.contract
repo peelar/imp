@@ -1038,7 +1038,8 @@ component App
                         column width="100%" max-width="measure.page" gap="space.sm"
                           for q, k in secrets.requests key=q.id
                             SecretAsk(request=q, prefix="", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
-                              error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
+                              error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret,
+                              github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                     if previewing and nav.tab == "chat"
                       ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
                         compact=false, still=still)
@@ -1206,7 +1207,8 @@ component App
                 column width="100%" max-width="measure.page" gap="space.sm"
                   for q, k in secrets.requests key=q.id
                     SecretAsk(request=q, prefix="side-", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
-                      error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
+                      error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret,
+                      github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
             if previewing
               ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
                 compact=true, still=still)
