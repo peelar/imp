@@ -12,7 +12,10 @@
 #                                      itself serves, which a preview rebuilds and reloads; Exact's runner cannot drive
 #                                      that release build, so agent-browser does (npm i -g agent-browser)
 #   sh scripts/walkthrough.sh mac      the native Mac app (on macOS, after setup.sh mac), shot whole with its toolbar and
-#                                      safe areas, which no browser shows, and with ⌘ held, the shortcuts it hints at
+#                                      safe areas, which no browser shows: onboarding, with ⌘ held the shortcuts it hints
+#                                      at, the places, then the imp changes GitHub's heading, and the preview, Save, Undo's
+#                                      question and Manage. The Mac app keeps its own screens, so the preview shows the new
+#                                      version's data under the old heading, as its banner says; build shows a changed one
 #
 # The screenshots land in client/.exact/walkthrough/, emptied first; it ends by listing them.
 set -eu
@@ -32,12 +35,13 @@ screens() {
 }
 
 # The native Mac app with its own toolbar (--chrome platform), each shot the whole window: the test runner's screenshots
-# leave the toolbar out, and a page that slides under it is just what a browser never shows.
+# leave the toolbar out, and a page that slides under it is just what a browser never shows. A dialog opens as a sheet
+# there, outside the page, and each app has its own, so its Done is tapped as manage-close-<app>.
 mac() {
 	[ "$(uname -s)" = Darwin ] || fail "the Mac app's walkthrough runs on macOS (after sh scripts/setup.sh mac)"
 	echo "== the Mac app (its toolbar included)"
 	(cd "$root/client" && bun exact.mjs agent macos --chrome platform --reset-storage --size 1280x800 \
-		"clock data" "screenshot $out/mac-onboarding-signin.png window" \
+		"clock data" "clock settle" "screenshot $out/mac-onboarding-signin.png window" \
 		"tap signin" 'clock until state account.status == "signedIn" within 8000' "clock settle" \
 		"screenshot $out/mac-onboarding-first-app.png window" \
 		"tap first-app-skip" "clock until state account.introduceApps == false within 10000" "clock settle" \
@@ -51,8 +55,20 @@ mac() {
 		"tap chat-new" "type composer What can you do?" "type composer key Enter" \
 		"clock until state chat.busy == false within 10000" "clock settle" "screenshot $out/mac-chat.png window" \
 		"resize 900x700" "clock settle" "screenshot $out/mac-chat-small.png window" \
-		"resize 1280x800" "tap tab-github" "clock settle" "tap app-manage" "clock settle" \
-		"screenshot $out/mac-github-manage.png window")
+		"resize 1280x800" "tap tab-github" "clock settle" \
+		"type side-composer app code: github" "type side-composer key Enter" \
+		"clock until state chat.busy == false within 20000" \
+		"type side-composer run: perl -pi -e s/Nothing.needs.you/All_caught_up/ workspace/apps/github/app.contract" \
+		"type side-composer key Enter" "clock until state chat.busy == false within 20000" \
+		"type side-composer preview app: github" "type side-composer key Enter" \
+		"clock until state apps.0.draft == true within 600000" "clock settle" \
+		"tree preview-discard" "tree preview-save" "tree app-manage" \
+		"screenshot $out/mac-github-preview.png window" \
+		"tap preview-save" 'clock until state apps.0.undo == "keep" within 60000' "clock settle" \
+		"screenshot $out/mac-github-saved.png window" \
+		"tap undo-save" "clock settle" "screenshot $out/mac-github-undo.png window" "tap undo-cancel" "clock settle" \
+		"tap app-manage" "clock settle" "screenshot $out/mac-github-manage.png window" "tap manage-close-github" "clock settle" \
+		"screenshot $out/mac-github-after.png window")
 }
 
 # The build part's own host, away from the ports a dev host (8787) and the Exact tests (8787, 8799) take.

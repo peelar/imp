@@ -175,7 +175,7 @@ component ManageApp
       row justify-content="space-between" align-items="center" gap="space.sm" padding="space.md space.lg space.lg"
         DialogButton(dialog=`uninstall-${app.id}`, variant="quiet-danger", testId="uninstall")
           text "Uninstall"
-        button commandfor=`manage-${app.id}` command="close" testId="manage-close" padding="space.sm space.ms"
+        button commandfor=`manage-${app.id}` command="close" testId=`manage-close-${app.id}` padding="space.sm space.ms"
           cursor="pointer"
           border="1px solid line.strong" border-radius=0 background-color="transparent" color="ink.strong"
           :hover
