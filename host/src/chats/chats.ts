@@ -309,6 +309,34 @@ function routineConversations({ options, index, save, conversation }: Shared) {
   };
 }
 
+/** The chats that build an app sit beside it. */
+function builtApps(
+  { index, save }: Pick<Shared, "index" | "save">,
+  working: () => Promise<string[]>
+) {
+  return {
+    /**
+     * The imp previewed `app`: a chat it is at work in that sits beside no app, such as the one that asked for a new
+     * app from the chat page, sits beside that app from then on, so the app's page shows the chat that builds it.
+     */
+    async previewed(app: string) {
+      const busy = new Set(await working());
+
+      const building = index.list.filter(
+        (c) => busy.has(String(c.id)) && !c.routine && c.app === undefined
+      );
+
+      for (const chat of building) {
+        chat.app = app;
+      }
+
+      if (building.length > 0) {
+        save();
+      }
+    },
+  };
+}
+
 /**
  * What the person does with their chats: show one, open a new one or the one beside an app, archive one and restore
  * it.
@@ -525,6 +553,7 @@ export async function openChats(options: ChatsOptions) {
     async stop() {
       await (await conversation(index.current)).abort(context);
     },
+    ...builtApps({ index, save }, conversations.working),
     ...sidebarChats({ options, index, save, conversation }),
     ...routineConversations({ options, index, save, conversation }),
     ...sentImages({ options, index, save, conversation }),

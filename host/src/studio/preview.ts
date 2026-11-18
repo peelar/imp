@@ -21,6 +21,8 @@ export type PreviewOptions = {
   readonly imp: ImpServers;
   /** Tells the open shells that the apps changed. */
   readonly appsChanged: () => void;
+  /** Hears of the new draft before the shells are told to load it. */
+  readonly previewed: (id: string) => Promise<void>;
 };
 
 /**
@@ -117,6 +119,7 @@ export function appPreview(options: PreviewOptions) {
     // All good: this is the draft now.
     folders.put(id, "draft", app.files);
     await gateway.stage(app, { keepData: keepDraftData });
+    await options.previewed(id);
     builds.serve(built);
     options.appsChanged();
 

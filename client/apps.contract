@@ -237,8 +237,8 @@ component AppTab
           KeyBadge(chord=chord, at="tab")
 
 // The onboarding's last step: the first app. The person describes the GitHub app they want, and the imp builds it
-// over Imp's GitHub app, which reads GitHub for it, while they watch; or they skip, and have Imp's as it ships.
-// One thing to do here: connecting GitHub comes after, on the app's page, while the imp builds.
+// from scratch while they watch; or they skip, and have Imp's GitHub app as it ships.
+// One thing to do here: connecting GitHub comes after, on the app's page.
 component FirstAppWizard
   props
     ask: string
@@ -258,7 +258,7 @@ component FirstAppWizard
           image "symbol:icon.github" width=20 height=20
         column gap="space.xs" flex=1 min-width=0
           text "GitHub" class=Heading
-          text "Imp reads your review requests, your pull requests, what's assigned to you and your notifications. Your app shows what you choose."
+          text "Your imp builds a new app from scratch that reads GitHub as you and shows what you choose. Or skip, and use Imp's own."
             class=Body color="ink.muted"
       textarea value=ask input=edit rows=4 aria-label="The app you want" testId="first-app-ask"
         padding="space.ms space.ms" border="1px solid line.strong" background-color="transparent" outline="none"

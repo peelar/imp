@@ -10,8 +10,8 @@ test "onboarding signs in with ChatGPT through a device code"
   clock until state account.status == "waiting" within 5000
   expect text "signin-code" == "TEST-1234"
   clock until state account.status == "signedIn" within 5000
-  // The test host's computer is fixed, so the onboarding goes on to the first app: GitHub, which the imp is asked to
-  // build, and on a narrow window the chat opens to watch it.
+  // The test host's computer is fixed, so the onboarding goes on to the first app, which the person skips here for
+  // Imp's GitHub app (the next test builds it).
   expect tree has "first-app"
   expect text "onboarding-step" == "3 / 3"
   // One thing to do: connecting GitHub comes after, on the app's page.
@@ -23,15 +23,14 @@ test "onboarding signs in with ChatGPT through a device code"
   tap "onboarding-continue"
   expect tree has "first-app"
   expect text "onboarding-step" == "3 / 3"
-  tap "first-app-build"
+  tap "first-app-skip"
   clock until state account.introduceApps == false within 10000
   expect tree missing "onboarding"
-  clock until state chat.messages.0.text == "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review." within 5000
-  expect state nav.tab == "chat"
-  clock until state chat.busy == false within 10000
-  // Without GitHub connected, GitHub waits, which is no failure: the bar says nothing of the sync, and the card above
-  // the app offers GitHub's sign-in right there.
-  tap "tab-github"
+  // GitHub opens. Without GitHub connected it waits, which is no failure: the bar says nothing of the sync, and the
+  // card above the app offers GitHub's sign-in right there.
+  clock settle
+  clock until state nav.tab == "github" within 5000
+  expect state chat.messages.length == 0
   expect tree has "app-needs"
   expect tree missing "sync-bar"
   expect tree has "app-manage"
@@ -48,6 +47,18 @@ test "onboarding signs in with ChatGPT through a device code"
   tap "settings-pane-general"
   expect text "account-email" == "tester@example.com"
   expect text "account-plan" == "Plus"
+
+test "building the first app asks the imp for a new app in the chat, without installing Imp's GitHub app"
+  request POST "/api/call/accountSignIn" []
+  clock until state account.status == "signedIn" within 5000
+  expect tree has "first-app"
+  tap "first-app-build"
+  expect tree missing "onboarding"
+  expect state nav.tab == "chat"
+  clock until state chat.messages.0.text == "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review." within 5000
+  clock until state chat.busy == false within 10000
+  // The imp has built nothing yet, so there is no app: the app it previews opens when the shell has it.
+  expect state apps.length == 0
 
 test "the model is chosen next to the message box"
   request POST "/api/call/accountSignIn" []

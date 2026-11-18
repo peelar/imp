@@ -29,7 +29,9 @@ test "onboarding: sign in, the first app's step, and Build it"
   screenshot ".exact/walkthrough/onboarding-3-first-app-phone.png"
   resize 1280x800
   tap "first-app-build"
-  clock until state account.introduceApps == false within 10000
+  // Build it installs nothing: the onboarding gives way to the chat, where the imp builds a new app.
+  expect tree missing "onboarding"
+  expect state nav.tab == "chat"
   clock until state chat.busy == false within 10000
   clock settle
   // Where Build it lands: the imp is building a new app, which Imp's own GitHub app is not.

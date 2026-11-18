@@ -108,10 +108,11 @@ build() {
 	# The scripted model builds from these words what a real one builds from the person's.
 	$ab fill '[data-testid=first-app-ask]' 'app code: notes' >/dev/null
 	$ab click '[data-testid=first-app-build]' >/dev/null
-	await '[data-testid=side-composer]' 30
+	# Build it installs nothing: the imp builds a new app in the chat page's conversation.
+	await '[data-testid=composer]' 30
 	sleep 2
 	shots after-build-it
-	$ab fill '[data-testid=side-composer]' 'preview app: notes' >/dev/null
+	$ab fill '[data-testid=composer]' 'preview app: notes' >/dev/null
 	$ab press Enter >/dev/null
 	# The host builds the shell with the new app and the page reloads into it: minutes the first time on a machine.
 	await '[data-testid=tab-notes]' 600

@@ -162,9 +162,10 @@ component App
   state keyBase = "https://api.openai.com/v1"
   state keyValue = ""
   state keyModel = ""
-  // The onboarding's ask for the first app, and whether its install sends that ask to the imp ("build") or not ("skip").
+  // The onboarding's ask for the first app, and whether the imp is building it, from Build it until the app it
+  // previews opens, which a relaunch into that preview keeps.
   state firstAsk = "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review."
-  state firstApp = ""
+  state firstBuild = false persist
   // An onboarding step the person went back to, though it is done: "model" or "computer"; "" for the step Imp is at.
   state onboardingBack = ""
   // The app the last install was for, and the one to open once the shell lists it.
@@ -291,8 +292,10 @@ component App
   derive onKey = account.kind == "apiKey"
   // Onboarding's second step: a computer, until the imp has one or the person tries the chat without.
   derive needsComputer = signedIn and computer.status == "none"
-  // Its third: the first app, until the person adds it or skips it.
-  derive needsFirstApp = signedIn and not needsComputer and account.introduceApps
+  // Its third: the first app, until the person asks the imp to build it or skips it.
+  derive needsFirstApp = signedIn and not needsComputer and account.introduceApps and not firstBuild
+  // The app the imp built for the first app, once the shell lists it: the host had none before.
+  derive builtApp = match appTabs.filter(n => n != "computer").at(0) { case some(n) => n, case none => "" }
   derive installError = ((failed(appInstalled) and not pending(appInstalled))
     ? "Your Imp didn't answer in time. Try again in a moment."
     : match appInstalled { case some(r) => r.error, case none => "" })
@@ -407,6 +410,8 @@ component App
     change(land)
   task openAdded when toOpen != "" and appTabs.includes(toOpen)
     after(1, showAdded)
+  task openBuilt when firstBuild and builtApp != ""
+    after(1, showBuilt)
   // Beside an app sits the latest chat started beside it, or a new chat until there is one, whichever conversation
   // was open before: the host keeps which app each chat is about, so a reload shows the same one.
   task openBeside when landed and docked and apps.map(a => a.id).includes(nav.tab) key=nav.tab
@@ -768,27 +773,26 @@ component App
     if not pending(appInstalled)
       added = id
       send appInstalled = appsInstall(id)
-  // The first app: Imp's GitHub app, then the person's ask to the imp to build theirs over it, or Imp's as it ships.
+  // The first app: the person's ask to the imp, which builds a new app from scratch while they watch in the chat, or
+  // Imp's GitHub app as it ships.
   action buildFirstApp
-    if firstAsk.trim() != ""
-      firstApp = "build"
-      addApp("github")
+    if firstAsk.trim() != "" and not pending(sent)
+      firstBuild = true
+      nav = select(nav, "chat")
+      send sent = chatSend(firstAsk.trim(), "", noImages)
   action skipFirstApp
-    firstApp = "skip"
     addApp("github")
   action editFirstAsk(v: string)
     firstAsk = v
-  // An installed app opens once the shell lists it. Asked to build the first one, the imp starts in the chat beside
-  // it, or on a narrow window in the chat's own page, to watch it work.
+  // An installed app opens once the shell lists it.
   action afterInstall
     if match appInstalled { case some(r) => r.ok, case none => false }
-      if firstApp == "build"
-        send sent = chatSend(firstAsk.trim(), wide ? added : "", noImages)
-      if firstApp == "build" and not wide
-        nav = select(nav, "chat")
-      else
-        toOpen = added
-    firstApp = ""
+      toOpen = added
+  // The app the imp built for the first app opens once its preview is in the shell, with the chat it was built in
+  // beside it.
+  action showBuilt
+    toOpen = builtApp
+    firstBuild = false
   action showAdded
     nav = select(nav, toOpen)
     toOpen = ""
@@ -1261,7 +1265,7 @@ component App
                   Button(press=connect, variant="primary", disabled=(hostDraft.trim() == ""), testId="host-connect-button")
                     text "Connect"
             else if needsFirstApp and onboardingBack == ""
-              FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=pending(appInstalled), error=installError,
+              FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=(pending(appInstalled) or pending(sent)), error=installError,
                 build=buildFirstApp, skip=skipFirstApp, still=still)
             else if signedIn and onboardingBack != "model"
               ComputerWizard(computer=computer, switching=pending(computerSwitched) or pending(computerKeySaved),

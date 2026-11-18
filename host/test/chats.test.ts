@@ -393,6 +393,40 @@ test("beside an app opens the latest chat started beside it, or a new chat until
   );
 });
 
+test("a chat on the chat page that previews a new app sits beside that app from then on", async () => {
+  assert.deepEqual(await call("chatNew", []), done);
+  assert.equal(
+    (await toolRow("Please write app code: built")).title,
+    "Opened an app's code"
+  );
+  assert.equal(
+    (await toolRow("Please preview app: built")).title,
+    "Built a preview"
+  );
+
+  const building = await until(
+    "chat",
+    chatsWhen(() => true)
+  );
+
+  // A new chat, which the imp was not at work in, gives way to the chat that built the app.
+  assert.deepEqual(await call("chatNew", []), done);
+  await until(
+    "chat",
+    chatsWhen((c) => c.current !== building.current)
+  );
+  assert.deepEqual(await call("chatBeside", ["built"]), done);
+  assert.equal(
+    (
+      await until(
+        "chat",
+        chatsWhen((c) => c.current === building.current)
+      )
+    ).messages[0]?.text,
+    "Please write app code: built"
+  );
+});
+
 // A 2×1 PNG: one red pixel, one blue.
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABAQMAAADO7O3JAAAABlBMVEX/AAAAAP9sof2OAAAACklEQVQI12NwAAAAQgBBg7nsrQAAAABJRU5ErkJggg==";

@@ -140,7 +140,8 @@ function openStudio(
   {
     drafts,
     liveChanged,
-  }: Pick<Parameters<typeof studio>[0], "drafts" | "liveChanged">
+    previewed,
+  }: Pick<Parameters<typeof studio>[0], "drafts" | "liveChanged" | "previewed">
 ) {
   const clientSource = path.resolve(options.appsDir, "..");
 
@@ -159,6 +160,7 @@ function openStudio(
     context,
     drafts,
     liveChanged,
+    previewed,
   });
 }
 
@@ -535,12 +537,6 @@ export async function startHost(options: HostOptions) {
     gateway,
   });
 
-  // Every save and undo changes the live code, which the backup keeps.
-  const apps = openStudio(parts, gateway, {
-    drafts: stored.drafts,
-    liveChanged: backup.record,
-  });
-
   const account = modelAccount(options.models, topics, {
     ids: chatgptModels(options),
     dataDir: options.dataDir,
@@ -548,6 +544,15 @@ export async function startHost(options: HostOptions) {
 
   const agent = await openAgent(parts, { gateway, secrets, account });
   const { harness, chats, routines, tricks, notifications } = agent;
+
+  // Every save and undo changes the live code, which the backup keeps; a preview puts the chat building it beside it.
+  const apps = openStudio(parts, gateway, {
+    drafts: stored.drafts,
+    liveChanged: backup.record,
+    previewed: async (id) => {
+      await chats.previewed(id);
+    },
+  });
 
   loadApps({ gateway, studio: apps, tricks }).catch(report("apps"));
 

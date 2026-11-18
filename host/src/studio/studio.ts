@@ -54,6 +54,8 @@ export type StudioOptions = {
   readonly drafts: readonly AppInfo[];
   /** A save or an undo changed an app's live code, said in words such as "Save Todos" (the backup commits it). */
   readonly liveChanged: (what: string) => void;
+  /** The agent previewed an app (the chats hear it, and the chat it was at work in sits beside the app). */
+  readonly previewed: (id: string) => Promise<void>;
   readonly log?: ((message: string) => void) | undefined;
 };
 
@@ -88,7 +90,7 @@ const tile = (
 });
 
 export function studio(options: StudioOptions) {
-  const { gateway, topics } = options;
+  const { gateway, topics, previewed } = options;
 
   const log =
     options.log ??
@@ -134,7 +136,7 @@ export function studio(options: StudioOptions) {
 
   // What a preview and a decision both change: the code, the shell's build and the apps the shell lists.
   const versions = { gateway, folders, builds, imp, appsChanged };
-  const preview = appPreview({ ...versions, workspace });
+  const preview = appPreview({ ...versions, workspace, previewed });
   const serial = oneAtATime();
 
   const rebuildLater = () => {

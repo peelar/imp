@@ -81,7 +81,7 @@ The host keeps the last three web builds in `DATA_DIR/builds/`, and `builds/curr
 
 ## The chat beside an app
 
-On a wide window an app's page has the chat beside it, and the imp is told which app you have open when you write there. Each app keeps its own chat: opening an app shows the latest chat you started beside it, or a new chat until you write in one, whichever chat was open before. A chat you pick in the sidebar opens on the chat page. The host remembers which app each chat was started beside in `DATA_DIR/conversations.json` (`host/src/chats/chats.ts`), so a reload, or opening Imp on an app's page, shows the same chat. On any other page Imp opens on a new chat.
+On a wide window an app's page has the chat beside it, and the imp is told which app you have open when you write there. Each app keeps its own chat: opening an app shows the latest chat you started beside it, or a new chat until you write in one, whichever chat was open before. A chat you pick in the sidebar opens on the chat page. A chat started on the chat page in which the imp previews a new app sits beside that app from then on, so the app opens on the chat that built it. The host remembers which app each chat sits beside in `DATA_DIR/conversations.json` (`host/src/chats/chats.ts`), so a reload, or opening Imp on an app's page, shows the same chat. On any other page Imp opens on a new chat.
 
 ## Install and uninstall
 
@@ -105,7 +105,7 @@ Only code is backed up. The apps' data stays on the host, so back up `DATA_DIR` 
 
 ## Apps Imp ships
 
-The onboarding's last step, **Build your first app**, shows you what an app is with GitHub. You describe the GitHub app you want, such as one that shows only the pull requests waiting for your review. The host installs Imp's GitHub app, the shell opens it with the chat beside it (on a narrow window, the chat), and your words go to the imp, which builds your version over Imp's while you watch: its preview shows in the GitHub tab, on a copy of what Imp's version read, and you save it or discard it. **Skip, use Imp's GitHub app** installs Imp's as it ships. Until GitHub is connected, the GitHub app's page offers **Connect GitHub** right there, the same sign-in as **Settings → Connections**, while the imp builds. Either way, GitHub opens with a short note on what an app is, which its × closes, and once a host has had an app, the onboarding doesn't show again.
+The onboarding's last step, **Build your first app**, shows you what an app is with GitHub. You describe the GitHub app you want, such as one that shows only the pull requests waiting for your review, and **Build it** sends your words to the imp in the chat, which builds a new app from scratch while you watch. Nothing is installed first. As soon as the imp previews the app, the shell opens it, with that chat beside it, and you save it or discard it. **Skip, use Imp's GitHub app** installs Imp's as it ships instead. Until GitHub is connected, an app that reads GitHub offers **Connect GitHub** right on its page (Imp's GitHub app) or asks for the key in Settings (one the imp built). Either way, once a host has had an app, the onboarding doesn't show again.
 
 Todos (`client/apps/todos`) is in the **App directory**. Installed, it is yours like an app the imp built: the host copies it into `DATA_DIR/code/todos/live/` and runs it from there, and Imp's later changes to it don't reach it.
 

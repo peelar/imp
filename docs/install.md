@@ -45,7 +45,7 @@ The host runs on one machine you keep on: a home server, a spare Mac, a small VM
 
 4. **Build your first app**
 
-   Describe the GitHub app you want, such as one that shows only the pull requests waiting for your review, and **Build it**: the imp builds it over Imp's GitHub app while you watch, and you save its preview. **Skip, use Imp's GitHub app** installs Imp's as it ships. The app reads GitHub as you once you connect GitHub, on the app's page or in **Settings → Connections**; until then it waits. See [Apps](apps.md#apps-imp-ships).
+   Describe the GitHub app you want, such as one that shows only the pull requests waiting for your review, and **Build it**: the imp builds a new app from scratch while you watch in the chat, its preview opens when it's ready, and you save it. **Skip, use Imp's GitHub app** installs Imp's as it ships. The app reads GitHub as you once you connect GitHub, on the app's page or in **Settings → Connections**; until then it waits. See [Apps](apps.md#apps-imp-ships).
 
 ## The Mac app on another Mac
 
