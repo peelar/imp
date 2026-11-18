@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.20.2
+
+### Patch Changes
+
+- 0b607f5: Connect GitHub shows its code again on a Mac, where it used to wait at "Asking GitHub for a code…" forever. When your imp needs GitHub in the chat, its request now offers the same Connect GitHub sign-in as Settings and the GitHub app's page, not a box to paste a token into.
+
 ## 0.20.1
 
 ### Patch Changes
