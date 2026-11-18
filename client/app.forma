@@ -81,6 +81,7 @@ icons
   icon.add = icon(sf "plus", svg "icons/add.svg")
   icon.alert = icon(sf "exclamationmark.circle", svg "icons/alert.svg")
   icon.archive = icon(sf "archivebox", svg "icons/archive.svg")
+  icon.attach = icon(sf "paperclip", svg "icons/attach.svg")
   icon.back = icon(sf "chevron.left", svg "icons/back.svg")
   icon.book = icon(sf "book", svg "icons/book.svg")
   icon.chart = icon(sf "chart.xyaxis.line", svg "icons/chart.svg")

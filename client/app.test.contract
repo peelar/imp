@@ -29,14 +29,11 @@ test "onboarding signs in with ChatGPT through a device code"
   clock until state chat.messages.0.text == "Build me a GitHub app that shows only the pull requests waiting for my review, and the ones I opened that are waiting on a review." within 5000
   expect state nav.tab == "chat"
   clock until state chat.busy == false within 10000
-  // GitHub shows what an app is above it, until that is closed. Without GitHub connected it waits, which is no
-  // failure: the bar says nothing of the sync, and the card offers GitHub's sign-in right there.
+  // Without GitHub connected, GitHub waits, which is no failure: the bar says nothing of the sync, and the card above
+  // the app offers GitHub's sign-in right there.
   tap "tab-github"
-  expect tree has "app-guide"
   expect tree has "app-needs"
   expect tree missing "sync-bar"
-  tap "app-guide-dismiss"
-  expect tree missing "app-guide"
   expect tree has "app-manage"
   tap "app-github-connect"
   clock until state github.status == "waiting" within 5000
@@ -74,7 +71,6 @@ test "the app directory installs Todos, which Imp ships, and opens it"
   clock until state apps.length == 2 within 5000
   clock settle
   expect state nav.tab == "todos"
-  expect tree missing "app-guide"
   tap "home-entry"
 
 test "a todo added in the Todos app is listed and counted"

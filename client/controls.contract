@@ -242,8 +242,9 @@ component ButtonLink
           color="ink.strong"
         children
 
-// Something the screen says beside its content, in a tone: `accent` introduces or asks (the first app's card),
-// `danger` says what went wrong, `neutral` notes. A tint with a rule down its left edge, never a box across the page.
+// Something the screen says beside its content, in a tone: `accent` introduces or asks (the card above an app's
+// screen), `danger` says what went wrong, `neutral` notes. A tint with a rule down its left edge, never a box across
+// the page.
 component Callout
   props
     tone: string

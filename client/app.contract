@@ -170,9 +170,6 @@ component App
   // The app the last install was for, and the one to open once the shell lists it.
   state added = ""
   state toOpen = ""
-  // The app whose page shows what an app is: the first app, once the onboarding installed it, until the person
-  // dismisses it.
-  state guide = "" persist
   // Settings' open section: "general", "computer", "memory", "secrets", "connections", "assistants" or "experimental".
   state settingsPane = "general"
   // Counts saved secrets: the Secrets section starts again, with an empty form, after each.
@@ -777,12 +774,10 @@ component App
     addApp("github")
   action editFirstAsk(v: string)
     firstAsk = v
-  // An installed app opens once the shell lists it. The first one shows what an app is above it; asked to build, the
-  // imp starts in the chat beside it, or on a narrow window in the chat's own page, to watch it work.
+  // An installed app opens once the shell lists it. Asked to build the first one, the imp starts in the chat beside
+  // it, or on a narrow window in the chat's own page, to watch it work.
   action afterInstall
     if match appInstalled { case some(r) => r.ok, case none => false }
-      if firstApp != ""
-        guide = added
       if firstApp == "build"
         send sent = chatSend(firstAsk.trim(), wide ? added : "", noImages)
       if firstApp == "build" and not wide
@@ -793,12 +788,8 @@ component App
   action showAdded
     nav = select(nav, toOpen)
     toOpen = ""
-  action dismissGuide
-    guide = ""
   action uninstallApp(id: string)
     send appUninstalled = appsUninstall(id)
-    if guide == id
-      guide = ""
   // <apps:members>
   resource githubReadInbox = githubInbox() when signedIn and nav.tab == "github" and not page.frozen as shape GithubInbox else empty()
   derive githubReadInboxLost = match failure(githubReadInbox) { case some(f) => true, case none => false }
@@ -1108,10 +1099,10 @@ component App
                       shown=(nav.tab == "computer"), openTab=openScreen, setUp=openSettings("computer"))
                   // <apps:screens>
                   if e.name == "github"
-                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), reads=readsOf("github", apps), behind=behind, origin=host.origin, guide=(guide == "github"), dismissGuide=dismissGuide, needs=needsOf("github", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
+                    AppPage(id="github", name=tabLabel("github", apps), draft=hasDraft("github", apps), reads=readsOf("github", apps), behind=behind, origin=host.origin, needs=needsOf("github", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       GithubScreen(inbox=githubReadInbox, done=githubDoDone, snooze=githubDoSnooze, restore=githubDoRestore)
                   if e.name == "todos"
-                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), reads=readsOf("todos", apps), behind=behind, origin=host.origin, guide=(guide == "todos"), dismissGuide=dismissGuide, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
+                    AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), reads=readsOf("todos", apps), behind=behind, origin=host.origin, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
         // The tabs: on a wide window the sidebar's apps, with Settings at its foot; on a narrow one a bar along the

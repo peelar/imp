@@ -174,18 +174,19 @@ component Composer
             padding=(compact ? "space.ms space.ms space.xs" : "space.ms space.md space.xs") border="none" background-color="transparent"
             outline="none" resize="none" class=Lead
             color="ink.strong"
-          // The same inset left and right as the field's text, so the model and send line up with it.
+          // The same inset left and right as the field's text, so the model and send line up with it. Attach's symbol
+          // starts where the field's text starts.
           row align-items="center" gap="space.xs" padding=(compact ? "space.xs space.ms" : "space.xs space.md")
             button press=pickImages retainFocus=true aria-label="Attach an image" testId=`${prefix}attach`
               cursor=(attachments.length >= 4 ? "default" : "pointer")
-              disabled=(attachments.length >= 4) width=34 height=34 min-width=34 padding=0 border="none"
-              display="flex" align-items="center" justify-content="center" background-color="transparent"
+              disabled=(attachments.length >= 4) width=24 height=34 min-width=24 padding=0 border="none"
+              display="flex" align-items="center" justify-content="flex-start" background-color="transparent"
               color="ink.muted" transition="color 120ms ease"
               :hover
                 color="ink.strong"
               :disabled
                 color="ink.faint"
-              image "symbol:icon.image" width=16 height=16
+              image "symbol:icon.attach" width=16 height=16
             input type="file" id=`${prefix}images` accept="image/png,image/jpeg,image/gif,image/webp,image/heic"
               multiple=true change=picked display="none" aria-label="Choose images" testId=`${prefix}images`
             if models.length > 1

@@ -10,9 +10,8 @@ use Connection, AppTile from "./host.contract"
 use GithubSignIn from "./settings/connections.contract"
 
 // An app's page, under the page's one bar (AppBar), around the app's own screen, which the app cannot draw over.
-// Above the screen, a card: what an app is, above the first one the onboarding installed, until the person closes it
-// (`guide`); while the app waits for a key (`needs`), GitHub's sign-in right there, or for another key a button to
-// Settings, which adds it; and while a preview shows, what that version reads from outside, and, where this window
+// Above the screen, a card: while the app waits for a key (`needs`), GitHub's sign-in right there, or for another
+// key a button to Settings, which adds it; and while a preview shows, what that version reads from outside, and, where this window
 // runs a build of its own (`behind`: the Mac app, which carries its screens and never loads the host's), that it
 // shows the new version's data on the screen it has, with a link to the page in the browser, which has the new one.
 // Waiting is setup still to do, not a failure: the bar says nothing of the sync until the key is there.
@@ -24,8 +23,6 @@ component AppPage
     reads: string
     behind: bool
     origin: string
-    guide: bool
-    dismissGuide: action
     needs: string
     openSettings: action
     github: Connection
@@ -37,7 +34,7 @@ component AppPage
   view
     column flex=1 min-height=0
       scroll id=`${id}-screen` flex=1 min-height=0
-        if (draft and (reads != "" or behind)) or (not draft and (guide or needs != ""))
+        if (draft and (reads != "" or behind)) or (not draft and needs != "")
           // In the apps' own column (docs/building-apps.md): measure.page wide, centered, inside space.page, so the card
           // lines up with the app's screen under it.
           column padding="space.lg space.page space.xs"
@@ -54,19 +51,6 @@ component AppPage
                         ButtonLink(href=`${origin}/${id}`, variant="accent", testId="preview-open")
                           text "Open in browser"
                           text "→" aria-hidden=true
-                if guide
-                  row gap="space.sm" align-items="flex-start" testId="app-guide"
-                    column flex=1 min-width=0 gap="space.xs"
-                      text "Your first app" class=Label color="AccentColor" role="heading" aria-level=2
-                      text `This is ${name}. Use it here, or ask your imp in the chat to use it, change it, or build you another.`
-                        class=Body
-                    button press=dismissGuide aria-label="Close" title="Close" testId="app-guide-dismiss" appearance="none"
-                      cursor="pointer"
-                      width=24 height=24 min-width=24 padding=0 display="flex" align-items="center" justify-content="center"
-                      border="none" background-color="transparent" color="ink.muted"
-                      :hover
-                        color="ink.strong"
-                      image "symbol:icon.close" width=11 height=11 aria-hidden=true
                 if needs == "github"
                   column testId="app-needs"
                     GithubSignIn(github=github, busy=githubBusy, connect=connectGithub, cancel=cancelGithub,
