@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.20.3
+
+### Patch Changes
+
+- dcb99e3: The message box's attach button is now a paperclip, lined up with the text above it, and the "Your first app" note above GitHub is gone.
+- ad635e1: In the Mac app, the window's toolbar no longer covers the top of the page: the chat, Tricks, Routines, Settings and every other page, the sidebar and the chat beside a page now start below it, on a wide window and a narrow one.
+
 ## 0.20.2
 
 ### Patch Changes
