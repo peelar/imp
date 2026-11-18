@@ -19,13 +19,23 @@ Colours are named by what they do, not by what they look like:
 - **Surfaces:** `surface.page` is the paper and `surface.soft` a quiet panel.
 - **Lines:** `line.subtle` and `line.strong`.
 - **Accent:** `AccentColor` is the one action and the focus ring. `accent.soft` is its tint, for a note that introduces or asks.
-- **Meaning:** `ink.danger` with `danger.soft` for what went wrong or can't be undone, and `ink.success` for what works.
+- **Meaning:** `ink.danger` with `danger.soft` for what went wrong or can't be undone, `ink.warning` for what is not ready yet, and `ink.success` for what works.
 
 The type scale has one token per role, `type.display.xl` through `type.code`. Screens use it through the text styles, not directly.
 
 Spacing sits on a 4px grid: `space.xxs` (2px), `xs` (4), `sm` (8), `ms` (12), `md` (16), `lg` (24), `xl` (32) and `xxl` (48), and `space.page` (20), an app's page edge. Use the tokens for `gap`, `padding` and `margin`, such as `padding="space.sm space.md"`.
 
-Widths: `measure.form` for a form, `measure.note` for a note or card, and `measure.page` for a page of reading. An app's column is `measure.page` wide inside `space.page`, centered, and what the shell puts above an app's screen sits in the same column.
+Widths: `measure.form` for a form, `measure.note` for a note or card, and `measure.page` for a page of reading. An app's column is `measure.page` wide inside `space.page`, centered, and what the shell puts above an app's screen sits in the same column. A wide window's columns have widths of their own: `measure.sidebar`, `measure.chat` for the chat beside a page, and `measure.wide` for the home page. `measure.bar` is how tall the bar across the top of each is.
+
+## Layout
+
+On a window at least 1280px wide the shell has up to three columns, told apart by their surface as well as a hairline:
+
+- **The sidebar**, on `surface.soft`: the wordmark, New chat, the imp's pages, the apps, the conversations, and Settings at its foot. The open place is the page's paper (`surface.page`) with an ink bar down its left; a place pointed at darkens to `line.subtle`.
+- **The page**, on `surface.page`, under a bar with its title. The home page has no bar: the day and the computer stand over an ink rule, then the greeting in the display serif at its largest, the composer ruled in ink, and the apps as a ruled grid of tiles. A tile says how its app stands in small capitals: a preview, a key it waits for, or its sync. The computer's tile has a mark in its top right corner instead: green while it is ready, orange while it starts, red when it failed.
+- **The chat**, on `surface.soft`, beside every page but the chat's own, which takes that room itself.
+
+A narrower window has one column, a bar of tabs along its bottom, and the sidebar as a drawer.
 
 ## Text styles
 
@@ -65,7 +75,7 @@ Button(press=save, variant="primary", disabled=(not ready), testId="secret-save"
 
 `Callout` says something beside the content in a tone: `accent`, `danger` or `neutral`. It draws as a tint with a rule down its left edge, never a box across the page. `ErrorNote` is a danger callout with the alert symbol.
 
-Controls with a shape of their own stay their own components but are built from the same tokens: a tab, a row in the sidebar, a segmented choice, a symbol-only button, and the onboarding's `WizardButton` and `WizardFold`.
+Controls with a shape of their own stay their own components but are built from the same tokens: a tab, a row in the sidebar, a tile on the home page, a segmented choice, a symbol-only button, and the onboarding's `WizardButton` and `WizardFold`.
 
 ## Settings
 

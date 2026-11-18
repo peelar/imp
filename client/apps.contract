@@ -198,7 +198,9 @@ component ManageApp
             background-color="surface.soft"
           text "Done" class=Label color="inherit"
 
-// One tab in the bar along the bottom: its symbol over its name, and its keys over its corner while ⌘ is held.
+// One tab. In the bar along a narrow window's bottom: its symbol over its name, and its keys over its corner while ⌘
+// is held. On a wide window the tabs are the sidebar's apps (`side`), each a row in the look of the sidebar's places,
+// with a mark while the app shows a preview.
 component AppTab
   props
     prefix: string
@@ -209,23 +211,44 @@ component AppTab
     selected: bool
     shown: bool
     keys: bool
+    side: bool
+    draft: bool
     press: action
+  state hovered = false
+  action hover(on: bool)
+    hovered = on
   view
-    button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
-      cursor="pointer"
-      aria-keyshortcuts=chord aria-label=label title=label testId=`${prefix}tab-${name}` appearance="none"
-      display=(shown ? "flex" : "none") flex-direction="column" align-items="center" justify-content="center"
-      position="relative" box-sizing="border-box" flex="1 1 0" max-width="7rem" gap="space.xs" min-width=0 padding=0
-      border="none" border-top=(selected ? "2px solid ink.strong" : "2px solid transparent")
-      background-color="transparent" color=(selected ? "ink.strong" : "ink.muted")
-      transition="background-color 120ms ease, color 120ms ease"
-      :hover
-        color="ink.strong"
-        background-color="surface.soft"
-      image symbol width=19 height=19 aria-hidden=true
-      text label class=Label color="inherit" aria-hidden=true
-      if keys and chord != ""
-        KeyBadge(chord=chord, at="tab")
+    if side
+      button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name) hover=hover
+        cursor="pointer"
+        aria-keyshortcuts=chord aria-label=label title=label testId=`${prefix}tab-${name}` appearance="none"
+        display=(shown ? "flex" : "none") align-items="center" position="relative" gap="space.sm"
+        padding="space.sm space.sm" border="none" text-align="start" color="ink.strong"
+        border-left=(selected ? "2px solid ink.strong" : "2px solid transparent")
+        background-color=(selected ? "surface.page" : hovered ? "line.subtle" : "transparent")
+        image symbol width=15 height=15 aria-hidden=true
+        text label class=Body flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          aria-hidden=true
+        if draft
+          row width=7 height=7 min-width=7 background-color="AccentColor" aria-hidden=true testId=`${prefix}tab-${name}-mark`
+        if keys and chord != ""
+          KeyBadge(chord=chord, at="end")
+    else
+      button role="tab" aria-controls=`panel-${name}` aria-selected=selected press=press(name)
+        cursor="pointer"
+        aria-keyshortcuts=chord aria-label=label title=label testId=`${prefix}tab-${name}` appearance="none"
+        display=(shown ? "flex" : "none") flex-direction="column" align-items="center" justify-content="center"
+        position="relative" box-sizing="border-box" flex="1 1 0" max-width="7rem" gap="space.xs" min-width=0 padding=0
+        border="none" border-top=(selected ? "2px solid ink.strong" : "2px solid transparent")
+        background-color="transparent" color=(selected ? "ink.strong" : "ink.muted")
+        transition="background-color 120ms ease, color 120ms ease"
+        :hover
+          color="ink.strong"
+          background-color="surface.soft"
+        image symbol width=19 height=19 aria-hidden=true
+        text label class=Label color="inherit" aria-hidden=true
+        if keys and chord != ""
+          KeyBadge(chord=chord, at="tab")
 
 // The onboarding's last step: the first app. The person describes the GitHub app they want, and the imp builds it
 // over Imp's GitHub app, which reads GitHub for it, while they watch; or they skip, and have Imp's as it ships.

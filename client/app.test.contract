@@ -161,9 +161,9 @@ test "on a wide window the chat sits beside an open app, and what it is asked th
   clock until state chat.messages.0.text == "Add todo: Call the vet" within 1000
   expect state chat.messages.1.title == "Todos · Add"
   expect state chat.messages.1.detail == "Call the vet"
+  // The chat's own page has no chat beside it: it takes that room.
   tap "chat-expand"
   expect tree missing "chat-panel"
-  expect tree has "chat-column"
   expect tree has "composer"
   expect tree has "tab-settings"
 

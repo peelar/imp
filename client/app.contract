@@ -31,7 +31,8 @@ use AssistantsSettings from "./settings/assistants.contract"
 use AppTile, Memory, Secrets, Connection, Notice, Host, Account, ChatState, Build, Update, Reply from "./host.contract"
 use repoPath, AppDirectory, directory from "./app-directory.contract"
 use withSpoken, Transcript, Composer from "./chat.contract"
-use KeyBadge, Initialled, numbered, Confirm, SettingsPage from "./parts.contract"
+use KeyBadge, Initialled, Confirm, SettingsPage, RestartButton from "./parts.contract"
+use HomeApps, Suggestions, computerMark from "./home.contract"
 use RoutineList, RoutineBar from "./routines.contract"
 use TrickList from "./tricks.contract"
 use ComputerSettings, ComputerScreen, ComputerWizard, ScreenPreview from "./computer.contract"
@@ -261,11 +262,15 @@ component App
   mutation micOpened as shape MediaStream then micReady
   mutation micClosed as shape MediaStreamTrack
   derive still = media.prefersReducedMotion
-  // Wide enough for the three columns: the sidebar (the imp's pages and conversations), the page above the bar of apps,
-  // and the chat beside every page but the chat's own (where its column stays, empty, so no page moves when another
-  // opens). Narrower windows have a tab bar and a drawer instead.
+  // Wide enough for the three columns: the sidebar (the imp's pages, the apps and the conversations), the page, and
+  // the chat beside every page but the chat's own, which takes that room itself. Narrower windows have a tab bar and
+  // a drawer instead.
   derive wide = media.width >= 1280
   derive docked = wide and nav.tab != "chat"
+  // The home page on a wide window: no bar over it, the greeting over the composer, and the apps under them.
+  derive homeWide = wide and chat.messages.length == 0 and not chat.busy and chat.routine == ""
+  // What the home page offers to try: the todos ones only while Todos is installed.
+  derive asks = (apps.map(a => a.id).includes("todos") ? ["Add todo: Buy flowers", "What's on my todo list?"] : []).concat(["Build me an app that tracks my runs"])
   // The ⌘ chords are the app's in the Mac app (and an installed desktop app), where no browser takes them first: only
   // there does the screen hint at them.
   derive keyboard = media.pointer == "fine" and media.displayMode != "browser"
@@ -919,21 +924,21 @@ component App
             text "I" class=Initial margin-right="0.04em"
             text "mp"
       else if signedIn and not needsComputer and not needsFirstApp
-        // The routes. On a wide window they sit under the top bar, between the sidebar and the chat's column, above the
-        // tab bar.
-        column position="absolute" left=(wide ? "24rem" : "0px") bottom=(wide ? "3.5rem" : "0px") top=(wide ? "3.25rem" : "0px") right=(wide ? "24rem" : "0px")
+        // The routes. On a wide window they sit between the sidebar and, beside every page but the chat's, the chat.
+        column position="absolute" left=(wide ? "measure.sidebar" : "0px") bottom="0px" top="0px" right=(docked ? "measure.chat" : "0px")
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
                 column navigationKey=`${e.id}` navigationScroll=(e.name == "chat" ? "transcript" : e.name == "settings" ? "settings-list" : ["routines", "tricks", "directory"].includes(e.name) ? `${e.name}-list` : `${e.name}-screen`)
                   position="absolute" inset=0 display="flex" flex-direction="column" box-sizing="border-box"
                   padding-bottom=(wide ? "0" : "calc(3.5rem + env(safe-area-inset-bottom))")
-                  // On a wide window every page's header is the same bar, as tall as the chat column's, its title at
-                  // the left: switching pages moves nothing.
-                  header display="flex" justify-content="center" padding=(wide ? "0 space.lg" : "0 space.md")
+                  // On a wide window every page's header is the same bar, as tall as the sidebar's and the chat
+                  // column's, its title at the left: switching pages moves nothing. The home page has none there:
+                  // its greeting is its title.
+                  header display=(homeWide and e.name == "chat" ? "none" : "flex") justify-content="center" padding=(wide ? "0 space.lg" : "0 space.md")
                     border-bottom="1px solid line.subtle" background-color="surface.page"
                     row width="100%" max-width=(wide ? "none" : "measure.page") align-items="center" gap="space.ms"
-                      height=(wide ? "3.25rem" : "auto") box-sizing="border-box" padding=(wide ? "0" : "space.ms 0 space.ms")
+                      height=(wide ? "measure.bar" : "auto") box-sizing="border-box" padding=(wide ? "0" : "space.ms 0 space.ms")
                       if ["chat", "routines", "tricks", "directory"].includes(e.name) and not wide
                         button press=toggleDrawer aria-label="Conversations, routines and tricks" aria-expanded=drawer
                           cursor="pointer"
@@ -944,26 +949,16 @@ component App
                           if keys
                             KeyBadge(chord="Control+Meta+S", at="end")
                         image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-                      Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size="1.5rem", heading=1)
+                      Initialled(word=(e.name == "chat" and chat.routine != "" ? chat.routine : tabTitle(e.name, wide, apps)), size=(wide ? "1.75rem" : "1.5rem"), heading=1)
                       // An app's page has one bar: its controls sit in the header, beside its title.
                       for a in apps.filter(a => a.id == e.name) key=a.id
                         AppBar(app=a, wide=wide, keys=keys, save=saveApp, discard=discardApp, undoSave=undoApp,
                           syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError)
                       if not apps.map(a => a.id).includes(e.name)
                         row flex=1
-                      // A new release of the Mac app is ready: it waits for the person to restart, never quits Imp.
                       if update.version != ""
-                        button press=restartToUpdate disabled=pending(restarting) testId=`update-restart-${e.name}`
-                          cursor=(pending(restarting) ? "default" : "pointer")
-                          aria-label=`Restart Imp to update to ${update.version}` display="flex" align-items="center" gap="space.sm"
-                          padding="space.sm space.ms" border="none" background-color="AccentColor" color="ink.on-fill"
-                          class=Label
-                          white-space="nowrap"
-                          :disabled
-                            background-color="surface.soft"
-                            color="ink.faint"
-                          image "symbol:icon.refresh" width=12 height=12 aria-hidden=true
-                          text (wide ? `Restart for ${update.version}` : "Update")
+                        RestartButton(version=update.version, busy=pending(restarting), wide=wide, press=restartToUpdate,
+                          testId=`update-restart-${e.name}`)
                       if e.name == "chat" and chat.busy
                         row gap="space.sm" align-items="center" testId="busy"
                           row width=6 height=6 background-color="AccentColor" aria-hidden=true
@@ -998,8 +993,28 @@ component App
                     Confirm(id="confirm-routine-delete", question="Delete this routine?",
                       message="It stops running, and its conversation goes with it.", label="Delete",
                       confirm=deleteRoutine, testId="routine-delete")
-                    if chat.messages.length == 0 and not chat.busy and chat.routine == ""
-                      // Home with nothing said yet: a greeting, the apps, and what to try.
+                    if homeWide
+                      // Home on a wide window: the day and the computer over an ink rule, then the greeting. The
+                      // composer stands under it (the one composer, so its words and focus stay when the chat
+                      // begins), and what to try and the apps scroll under that.
+                      row justify-content="center" padding="space.xl space.xl 0" testId="home"
+                        column width="100%" max-width="measure.wide" gap="space.ms"
+                          row align-items="center" gap="space.ms" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
+                            text formatDate(shown, time.utcOffset, "medium") class=Label flex=1
+                            if update.version != ""
+                              RestartButton(version=update.version, busy=pending(restarting), wide=true,
+                                press=restartToUpdate, testId="update-restart-home")
+                            if computer.status != "none"
+                              row align-items="center" gap="space.sm" testId="home-computer"
+                                row width=6 height=6 aria-hidden=true
+                                  background-color=computerMark(computer)
+                                text computer.name class=Label
+                          column gap="space.ms" padding-top="space.lg"
+                            Initialled(word=salutation, size="4.75rem", heading=1)
+                            text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
+                              color="ink.muted" class=Lead max-width="measure.note"
+                    else if chat.messages.length == 0 and not chat.busy and chat.routine == ""
+                      // Home on a narrow window: a greeting, the apps, and what to try, over the composer.
                       scroll id="home-scroll" flex=1 min-height=0
                         column max-width="48.5rem" margin="0 auto" padding="space.lg space.md space.lg" gap="space.lg" box-sizing="border-box"
                           width="100%" testId="home"
@@ -1007,85 +1022,34 @@ component App
                             Initialled(word=salutation, size="2.5rem", heading=2)
                             text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
                               color="ink.muted" class=Lead max-width="measure.note"
-                          column
-                            row align-items="baseline" justify-content="space-between" padding-bottom="space.sm"
-                              border-bottom="1px solid ink.strong"
-                              text "Your apps" class=Label color="ink.strong" role="heading" aria-level=3
-                              text `No. ${numbered(apps.length + (computer.status == "none" ? 0 : 1))}` class=Label
-                            for a in apps key=a.id
-                              button press=pick(a.id) display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
-                                cursor="pointer"
-                                background-color="transparent" border="none" border-bottom="1px solid line.subtle"
-                                text-align="start" color="ink.strong" testId=`app-${a.id}`
-                                transition="background-color 120ms ease"
-                                :hover
-                                  background-color="surface.soft"
-                                row width=44 height=44 min-width=44 align-items="center" justify-content="center"
-                                  border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                                  image a.symbol width=20 height=20
-                                column gap="space.xxs" flex=1 min-width=0
-                                  text a.name class=Heading
-                                  text a.description class=Body color="ink.muted" line-clamp=1
-                            // The imp's computer, as an app: its screen, to watch the imp work or take over.
-                            if computer.status != "none"
-                              button press=pick("computer") display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
-                                cursor="pointer"
-                                background-color="transparent" border="none" border-bottom="1px solid line.subtle"
-                                text-align="start" color="ink.strong" testId="app-computer"
-                                transition="background-color 120ms ease"
-                                :hover
-                                  background-color="surface.soft"
-                                row width=44 height=44 min-width=44 align-items="center" justify-content="center"
-                                  border="1px solid line.strong" box-sizing="border-box" aria-hidden=true
-                                  image (computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer") width=20 height=20
-                                column gap="space.xxs" flex=1 min-width=0
-                                  text "Computer" class=Heading
-                                  text `${computer.name}. Watch your imp work, or take over.` class=Body
-                                    color="ink.muted" line-clamp=1
-                            button press=startApp display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
-                              cursor="pointer"
-                              background-color="transparent" border="none" border-bottom="1px solid line.subtle"
-                              text-align="start" color="ink.strong" testId="app-new"
-                              transition="background-color 120ms ease"
-                              :hover
-                                background-color="surface.soft"
-                              row width=44 height=44 min-width=44 align-items="center" justify-content="center"
-                                border="1px dashed line.strong" box-sizing="border-box" aria-hidden=true color="ink.muted"
-                                image "symbol:icon.add" width=20 height=20
-                              column gap="space.xxs" flex=1 min-width=0
-                                text "Build a new app" class=Heading
-                                text "Describe it in a sentence. It stays here." class=Body color="ink.muted"
+                          HomeApps(apps=apps, computer=computer, tile=false, level=3, open=pick, build=startApp)
                           column gap="space.sm"
                             text "Try" class=Label
-                            row flex-wrap="wrap" gap="space.sm"
-                              // The todos ones only while Todos is installed.
-                              for s in (apps.map(a => a.id).includes("todos") ? ["Add todo: Buy flowers", "What's on my todo list?"] : []).concat(["Build me an app that tracks my runs"]) key=s
-                                button press=suggest(s) disabled=pending(sent) padding="space.sm space.ms"
-                                  cursor=(pending(sent) ? "default" : "pointer")
-                                  background-color="transparent" border="1px solid line.strong" color="ink.strong"
-                                  class=Body transition="border-color 120ms ease, background-color 120ms ease"
-                                  testId=`suggest-${s.length}`
-                                  :hover
-                                    border-color="ink.strong"
-                                    background-color="surface.soft"
-                                  text s
+                            Suggestions(asks=asks, disabled=pending(sent), send=suggest)
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
                     // What the imp asked for, where the person pastes it: the value goes to the vault, not the conversation.
+                    // On a wide window's home page it stands in the page's wider column, as the composer under it does.
                     if secrets.requests.length > 0
-                      row justify-content="center" padding="0 space.md"
-                        column width="100%" max-width="measure.page" gap="space.sm"
+                      row justify-content="center" padding=(homeWide ? "space.lg space.xl 0" : "0 space.md")
+                        column width="100%" max-width=(homeWide ? "measure.wide" : "measure.page") gap="space.sm"
                           for q, k in secrets.requests key=q.id
                             SecretAsk(request=q, prefix="", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
                               error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
                     if previewing and nav.tab == "chat"
                       ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
                         compact=false, still=still)
-                    Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
+                    Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, hero=homeWide, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
                       canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
                       model=account.model, models=account.models, chooseModel=chooseModel,
                       attachments=attachments, attaching=pending(attached), attach=attach, detach=detach)
+                    if homeWide
+                      scroll id="home-scroll" flex=1 min-height=0
+                        row justify-content="center" padding="0 space.xl space.xl"
+                          column width="100%" max-width="measure.wide" gap="space.xxl"
+                            Suggestions(asks=asks, disabled=pending(sent), send=suggest)
+                            HomeApps(apps=apps, computer=computer, tile=true, level=2, open=pick, build=startApp)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="space.md space.md space.xl" gap="space.lg" box-sizing="border-box" width="100%"
@@ -1150,41 +1114,57 @@ component App
                     AppPage(id="todos", name=tabLabel("todos", apps), draft=hasDraft("todos", apps), reads=readsOf("todos", apps), behind=behind, origin=host.origin, guide=(guide == "todos"), dismissGuide=dismissGuide, needs=needsOf("todos", apps), openSettings=openSettings, github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
                       TodosScreen(list=todosReadList, add=todosDoAdd, setDone=todosDoSetDone, rename=todosDoRename, remove=todosDoRemove)
                   // </apps:screens>
-        // The tabs, in a bar along the bottom: on a wide window under the page, between the sidebar and the chat's
-        // column, with Settings at the foot of the sidebar; on a narrow one across the window, Settings with them.
-        // Every tab stays in a tablist, hidden while the bar does not show it: a tab left out unlinks its panel,
-        // which then shows over every page.
+        // The tabs: on a wide window the sidebar's apps, with Settings at its foot; on a narrow one a bar along the
+        // bottom, Settings with them. Every tab stays in a tablist, hidden while nothing shows it: a tab left out
+        // unlinks its panel, which then shows over every page.
         if wide
-          aside position="absolute" top="3.25rem" left=0 bottom=0 width="24rem" box-sizing="border-box"
-            display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.page"
-            aria-label="Conversations, routines and settings"
+          aside position="absolute" top=0 left=0 bottom=0 width="measure.sidebar" box-sizing="border-box"
+            display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.soft"
+            aria-label="Apps, conversations, routines and settings"
+            // The wordmark, in a bar as tall as the page's: home.
+            row height="measure.bar" min-height="measure.bar" box-sizing="border-box" align-items="center" padding="0 space.md"
+              border-bottom="1px solid line.subtle"
+              button press=goHome aria-label="Imp, home" testId="home-logo" appearance="none" display="flex"
+                cursor="pointer"
+                align-items="center" gap="space.sm" padding="space.xs space.xs" margin-left="-4px" border="none"
+                background-color="transparent" color="ink.strong"
+                :hover
+                  background-color="line.subtle"
+                image "symbol:icon.imp" width=26 height=26 aria-hidden=true
+                text aria-hidden=true class=Title
+                  text "I" class=Initial margin-right="0.04em"
+                  text "mp"
             Sidebar(prefix="", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome, tricks=tricks.length,
               routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, archive=archiveChat, touch=(media.pointer == "coarse"),
                 archived=chat.archived, archivedOpen=archivedOpen, toggleArchived=toggleArchived, restore=restoreChat, openRoutines=openRoutines,
               openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder, keyboard=keyboard,
               directory=directoryOn, still=still)
-            // As tall as the tab bar beside it, so their top lines meet.
-            column height="3.5rem" box-sizing="border-box" justify-content="center" padding="0 space.sm"
+              // The apps, and the computer once there is one. The chat's, Settings' and the imp's pages' tabs stay
+              // here, hidden, for their panels: the sidebar's own rows open them.
+              column gap="space.xxs" padding="0 space.sm space.sm"
+                if appTabs.length > 0
+                  text "Apps" class=Label padding="space.sm space.ms space.xs"
+                column role="tablist" aria-label="Apps" aria-orientation="vertical" appearance="none" testId="tabs"
+                  gap="space.xxs" background-color="transparent" border="none"
+                  for t in nav.tabs key=t.name
+                    AppTab(prefix=(t.name == "settings" ? "bar-" : ""), name=t.name, label=tabLabel(t.name, apps),
+                      symbol=tabSymbol(t.name, apps), chord=(t.name == "settings" ? "" : tabChord(t.name, appTabs)),
+                      selected=(nav.tab == t.name), shown=barTabs.includes(t.name), keys=keys, side=true,
+                      draft=hasDraft(t.name, apps), press=pick)
+            column box-sizing="border-box" justify-content="center" padding="space.sm space.sm"
               border-top="1px solid line.subtle"
               button press=pick("settings") aria-pressed=(nav.tab == "settings") aria-keyshortcuts="Meta+,"
                 cursor="pointer"
                 testId="tab-settings" appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
                 border="none" text-align="start" color="ink.strong"
-                background-color=(nav.tab == "settings" ? "surface.soft" : "transparent")
+                border-left=(nav.tab == "settings" ? "2px solid ink.strong" : "2px solid transparent")
+                background-color=(nav.tab == "settings" ? "surface.page" : "transparent")
                 :hover
-                  background-color="surface.soft"
+                  background-color="line.subtle"
                 image "symbol:icon.settings" width=16 height=16 aria-hidden=true
                 text "Settings" class=Body flex=1
                 if keys
                   text "⌘," class=Key aria-hidden=true testId="keys-Meta+,"
-          row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left="24rem" right="24rem" bottom=0
-            height="3.5rem" box-sizing="border-box" justify-content="center" align-items="stretch"
-            background-color="surface.page" border-top="1px solid line.subtle"
-            // The chat's, Settings' and the imp's pages' tabs stay here, hidden, for their panels: the sidebar opens them.
-            for t in nav.tabs key=t.name
-              AppTab(prefix=(t.name == "settings" ? "bar-" : ""), name=t.name, label=tabLabel(t.name, apps),
-                symbol=tabSymbol(t.name, apps), chord=(t.name == "settings" ? "" : tabChord(t.name, appTabs)),
-                selected=(nav.tab == t.name), shown=barTabs.includes(t.name), keys=keys, press=pick)
         else
           row role="tablist" aria-label="Apps" appearance="none" testId="tabs" position="absolute" left=0 right=0 bottom=0
             box-sizing="border-box" height="calc(3.5rem + env(safe-area-inset-bottom))"
@@ -1193,14 +1173,14 @@ component App
             for t in nav.tabs key=t.name
               AppTab(prefix="", name=t.name, label=tabLabel(t.name, apps), symbol=tabSymbol(t.name, apps),
                 chord=tabChord(t.name, appTabs), selected=(nav.tab == t.name),
-                shown=barTabs.includes(t.name), keys=keys, press=pick)
-        // The chat, beside the open app on a wide window: the same conversation, told what the person is looking at.
-        // On the chat and Settings its column stays, empty, so the page keeps its width from one tab to the next.
+                shown=barTabs.includes(t.name), keys=keys, side=false, draft=false, press=pick)
+        // The chat, beside the open page on a wide window, tinted as the sidebar is: the same conversation, told what
+        // the person is looking at. The chat's own page has none beside it, and takes its room.
         if docked
-          aside position="absolute" top="3.25rem" right=0 bottom=0 width="24rem" box-sizing="border-box"
-            display="flex" flex-direction="column" border-left="1px solid line.subtle" background-color="surface.page"
+          aside position="absolute" top=0 right=0 bottom=0 width="measure.chat" box-sizing="border-box"
+            display="flex" flex-direction="column" border-left="1px solid line.subtle" background-color="surface.soft"
             aria-label="Chat" testId="chat-panel"
-            row align-items="center" gap="space.sm" padding="0 space.sm 0 space.md" height="3.25rem" box-sizing="border-box"
+            row align-items="center" gap="space.sm" padding="0 space.sm 0 space.md" height="measure.bar" min-height="measure.bar" box-sizing="border-box"
               border-bottom="1px solid line.subtle"
               text "Chat" class=Label color="ink.strong" role="heading" aria-level=2
               if chat.busy
@@ -1212,7 +1192,7 @@ component App
                 width=32 height=32 padding=0 display="flex" align-items="center" justify-content="center"
                 border="none" background-color="transparent" color="ink.muted"
                 :hover
-                  background-color="surface.soft"
+                  background-color="line.subtle"
                 image "symbol:icon.expand" width=15 height=15
             if chat.messages.length == 0 and not chat.busy
               column flex=1 min-height=0 justify-content="flex-end" padding="space.lg space.md" gap="space.sm" testId="side-empty"
@@ -1233,19 +1213,16 @@ component App
             if previewing
               ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
                 compact=true, still=still)
-            Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, draft=draft, busy=chat.busy,
+            Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, hero=false, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
               model=account.model, models=account.models, chooseModel=chooseModel,
                       attachments=attachments, attaching=pending(attached), attach=attach, detach=detach)
-        else if wide
-          aside position="absolute" top="3.25rem" right=0 bottom=0 width="24rem" box-sizing="border-box"
-            border-left="1px solid line.subtle" background-color="surface.page" aria-hidden=true testId="chat-column"
         // On a narrow window the sidebar opens as a drawer over everything.
         if drawer and not wide
           row position="absolute" inset=0 testId="drawer"
             aside width="17rem" max-width="85%" box-sizing="border-box" display="flex" flex-direction="column"
-              padding-top="env(safe-area-inset-top)" background-color="surface.page" border-right="1px solid line.strong"
+              padding-top="env(safe-area-inset-top)" background-color="surface.soft" border-right="1px solid line.strong"
               aria-label="Conversations, routines and tricks"
               Sidebar(prefix="drawer-", conversations=chat.conversations, current=chat.current, tab=nav.tab, atHome=atHome, home=goHome,
                 tricks=tricks.length, routines=routines, olderOpen=olderOpen, newChat=newChat, show=showChat, archive=archiveChat, touch=(media.pointer == "coarse"),
@@ -1256,22 +1233,6 @@ component App
               cursor="pointer"
               flex=1 border="none"
               background-color="ink.strong" opacity=0.25
-        // The masthead above everything on a wide window: the wordmark and the day.
-        if wide
-          row position="absolute" top=0 left=0 right=0 height="3.25rem" box-sizing="border-box" align-items="center"
-            padding="0 space.md" border-bottom="1px solid line.subtle" background-color="surface.page"
-            button press=goHome aria-label="Imp, home" testId="home-logo" appearance="none" display="flex"
-              cursor="pointer"
-              align-items="center" gap="space.sm" padding="space.xs space.xs" margin-left="-6px" border="none"
-              background-color="transparent" color="ink.strong"
-              :hover
-                background-color="surface.soft"
-              image "symbol:icon.imp" width=26 height=26 aria-hidden=true
-              text aria-hidden=true class=Title
-                text "I" class=Initial margin-right="0.04em"
-                text "mp"
-            row flex=1
-            text formatDate(shown, time.utcOffset, "medium") class=Label
       else
         // Onboarding, a wizard: one question a screen, a model first and then a computer.
         scroll flex=1 min-height=0

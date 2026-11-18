@@ -1,5 +1,5 @@
-// The sidebar: its places (Chat, the apps, the computer, Routines, Tricks, App directory), New chat and the
-// conversations.
+// The sidebar, tinted beside the page: New chat, its places (Home, Routines, Tricks, App directory), the apps on a wide
+// window, and the conversations. The open place is the page's paper with an ink bar down its left.
 
 use Label, pulse, Key, Body, Mono from "./look.contract"
 use ChatSummary, Routine from "./host.contract"
@@ -15,13 +15,16 @@ component PlaceEntry
     mark: string
     selected: bool
     press: action
+  // Pointed at, a place darkens, unless it is the open one, which stays the page's paper (a `:hover` row is a literal).
+  state hovered = false
+  action hover(on: bool)
+    hovered = on
   view
-    button press=press aria-pressed=selected testId=`${id}-entry` appearance="none" display="flex" align-items="center"
+    button press=press hover=hover aria-pressed=selected testId=`${id}-entry` appearance="none" display="flex"
       cursor="pointer"
-      gap="space.sm" padding="space.sm space.sm" border="none" text-align="start" color="ink.strong"
-      background-color=(selected ? "surface.soft" : "transparent")
-      :hover
-        background-color="surface.soft"
+      align-items="center" gap="space.sm" padding="space.sm space.sm" border="none" text-align="start" color="ink.strong"
+      border-left=(selected ? "2px solid ink.strong" : "2px solid transparent")
+      background-color=(selected ? "surface.page" : hovered ? "line.subtle" : "transparent")
       image symbol width=15 height=15 aria-hidden=true
       text label class=Body flex=1
       if mark != ""
@@ -51,11 +54,13 @@ component ChatEntry
     hovered = on
   view
     row hover=hover position="relative" align-items="center" min-width=0 testId=`${prefix}conversation-row-${index}`
-      background-color=(selected or hovered ? "surface.soft" : "transparent")
+      border-left=(selected ? "2px solid ink.strong" : "2px solid transparent")
+      background-color=(selected ? "surface.page" : hovered ? "line.subtle" : "transparent")
       button press=show(id) aria-pressed=selected testId=`${prefix}conversation-${index}` appearance="none" display="flex"
         cursor="pointer"
         flex=1 align-items="center" gap="space.sm" padding=(hovered or touch ? "space.sm space.xl space.sm space.sm" : "space.sm space.sm")
-        border="none" text-align="start" color="ink.strong" min-width=0 background-color="transparent"
+        border="none" text-align="start" color=(selected or hovered ? "ink.strong" : "ink.muted") min-width=0
+        background-color="transparent"
         text title class=Body min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
         if working
           row width=6 height=6 min-width=6 background-color="AccentColor" aria-label="Imp at work"
@@ -103,19 +108,21 @@ component Sidebar
     directory: bool
     // Reduced motion: the working mark holds still.
     still: bool
+  // The apps, on a wide window (app.contract's tablist), between the places and the conversations.
+  slot
   // A routine at work shows cobalt on the Routines entry, else one with a run the person has not read shows ink.
   derive routineMark = routines.filter(r => r.running).length > 0 ? "AccentColor" : routines.filter(r => r.unread).length > 0 ? "ink.strong" : ""
   view
     column flex=1 min-height=0 testId=`${prefix}sidebar`
-      column gap="space.xxs" padding="space.ms space.sm" border-bottom="1px solid line.subtle"
+      column gap="space.xxs" padding="space.ms space.sm space.sm"
         // New chat is the first of the places, in their look. Beside the chat on a wide window ⌘N is this button's; on
         // a narrow one, the page header's (under the drawer).
         button press=newChat aria-keyshortcuts=(prefix == "" ? "Meta+N" : "") testId=`${prefix}chat-new`
           cursor="pointer"
           appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm" border="none"
-          background-color="transparent" color="ink.strong" text-align="start"
+          border-left="2px solid transparent" background-color="transparent" color="ink.strong" text-align="start"
           :hover
-            background-color="surface.soft"
+            background-color="line.subtle"
           image "symbol:icon.compose" width=15 height=15 aria-hidden=true
           text "New chat" class=Body flex=1
           if keyboard
@@ -129,10 +136,11 @@ component Sidebar
         if directory
           PlaceEntry(id=`${prefix}directory`, label="App directory", symbol="symbol:icon.layers", count=0, mark="",
             selected=(tab == "directory"), press=openDirectory)
+      children
       scroll flex=1 min-height=0
         if conversations.length > 0
-          column gap="space.xxs" padding="space.ms space.sm space.md"
-            text "Recent" class=Label padding="0 space.sm space.xs"
+          column gap="space.xxs" padding="space.sm space.sm space.md"
+            text "Recent" class=Label padding="0 space.ms space.xs"
             for c, i in conversations.slice(0, 3) key=c.id
               ChatEntry(prefix=prefix, index=i, id=c.id, title=c.title, working=c.working, still=still, selected=(tab == "chat" and c.id == current), touch=touch, show=show, verb="Archive", act=archive)
             if conversations.length > 3

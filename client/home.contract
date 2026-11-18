@@ -1,0 +1,129 @@
+// The home page's parts: a chat with nothing said yet, which app.contract lays out. On a wide window the greeting stands
+// over the composer and the apps are a ruled grid of tiles under it; on a narrow one the apps are rows, over the
+// composer at the window's foot. An app says how it stands (a preview, a key it waits for, its sync) from what the
+// host already tells the shell about it; the computer says it with a mark in its box's top right corner.
+
+use Label, Body, Small, Heading, Title from "./look.contract"
+use AppTile, Computer from "./host.contract"
+use numbered from "./parts.contract"
+
+// How an app stands, in a few words: "" for an app with nothing to say.
+fn appStanding(a: AppTile): string =
+  a.draft ? "Preview" : a.needs == "github" ? "Connect GitHub" : a.needs != "" ? `Needs your ${a.needs} key` : a.sync
+// In the accent while the app waits on the person, in red while its sync fails.
+fn appStandingInk(a: AppTile): string =
+  a.draft or a.needs != "" ? "AccentColor" : a.sync.startsWith("Sync failing") ? "ink.danger" : "ink.muted"
+// The computer's mark: green while it is ready, orange while it starts, red when it failed. Its words are the mark's
+// label, for a screen reader and for the pointer resting on it.
+fn computerMark(c: Computer): string = c.status == "ready" ? "ink.success" : c.status == "failed" ? "ink.danger" : "ink.warning"
+fn computerStanding(c: Computer): string = c.status == "ready" ? "Ready" : c.status == "failed" ? "Not running" : "Starting"
+
+// One app on the home page: a tile in the grid, or a row. `offer` is the one that builds a new app, quieter than
+// the apps there are.
+component HomeApp
+  props
+    testId: string
+    symbol: string
+    name: string
+    standing: string
+    standingInk: string
+    // A mark in the box's top right corner in place of words, in this colour ("" for none), and what it says.
+    mark: string
+    markLabel: string
+    detail: string
+    tile: bool
+    offer: bool
+    press: action
+  view
+    if tile
+      // The grid's left edge and the rule over it are the section's: a tile rules its right and its foot.
+      button press=press testId=testId appearance="none" display="flex" flex-direction="column" align-items="flex-start"
+        cursor="pointer"
+        gap="space.xs" padding="space.md space.md space.lg" min-height="10.5rem" box-sizing="border-box" border="none"
+        border-right="1px solid line.subtle" border-bottom="1px solid line.subtle" background-color="transparent"
+        text-align="start" color=(offer ? "ink.muted" : "ink.strong") transition="background-color 120ms ease"
+        :hover
+          background-color="surface.soft"
+        row width="100%" align-items="center" justify-content="space-between" margin-bottom="space.ms"
+          image symbol width=22 height=22 aria-hidden=true
+          if mark != ""
+            row width=8 height=8 min-width=8 background-color=mark aria-label=markLabel title=markLabel
+              testId=`${testId}-mark`
+        text name class=Title
+        if standing != ""
+          text standing class=Label color=standingInk testId=`${testId}-standing`
+        text detail class=Small color="ink.muted" line-clamp=3
+    else
+      button press=press display="flex" align-items="center" gap="space.ms" padding="space.ms space.ms"
+        cursor="pointer"
+        background-color="transparent" border="none" border-bottom="1px solid line.subtle"
+        text-align="start" color="ink.strong" testId=testId
+        transition="background-color 120ms ease"
+        :hover
+          background-color="surface.soft"
+        row width=44 height=44 min-width=44 align-items="center" justify-content="center"
+          border=(offer ? "1px dashed line.strong" : "1px solid line.strong") box-sizing="border-box" aria-hidden=true
+          color=(offer ? "ink.muted" : "ink.strong")
+          image symbol width=20 height=20
+        column gap="space.xxs" flex=1 min-width=0
+          row align-items="baseline" gap="space.sm" min-width=0
+            text name class=Heading
+            if standing != ""
+              text standing class=Label color=standingInk white-space="nowrap" testId=`${testId}-standing`
+          text detail class=Body color="ink.muted" line-clamp=1
+        if mark != ""
+          row width=8 height=8 min-width=8 align-self="flex-start" margin-top="space.sm" background-color=mark
+            aria-label=markLabel title=markLabel testId=`${testId}-mark`
+
+// The apps, the imp's computer as one of them, and the offer to build another, under their count.
+component HomeApps
+  props
+    apps: AppTile[]
+    computer: Computer
+    tile: bool
+    // The heading's level: under the greeting, which is the page's title on a wide window.
+    level: number
+    open: action
+    build: action
+  view
+    column
+      row align-items="baseline" justify-content="space-between" padding-bottom="space.sm"
+        border-bottom="1px solid ink.strong"
+        text "Your apps" class=Label color="ink.strong" role="heading" aria-level=level
+        text `No. ${numbered(apps.length + (computer.status == "none" ? 0 : 1))}` class=Label
+      // As many tiles across as fit, none narrower than 13rem.
+      view display=(tile ? "grid" : "flex") flex-direction="column"
+        grid-template-columns="repeat(auto-fill, minmax(min(100%, 13rem), 1fr))"
+        border-left=(tile ? "1px solid line.subtle" : "none")
+        for a in apps key=a.id
+          HomeApp(testId=`app-${a.id}`, symbol=a.symbol, name=a.name, standing=appStanding(a),
+            standingInk=appStandingInk(a), mark="", markLabel="", detail=a.description, tile=tile, offer=false,
+            press=open(a.id))
+        // The imp's computer, as an app: its screen, to watch the imp work or take over.
+        if computer.status != "none"
+          HomeApp(testId="app-computer", symbol=(computer.kind == "cloud" ? "symbol:icon.cloud" : "symbol:icon.computer"),
+            name="Computer", standing="", standingInk="ink.muted", mark=computerMark(computer),
+            markLabel=computerStanding(computer),
+            detail=`${computer.name}. Watch your imp work, or take over.`, tile=tile, offer=false, press=open("computer"))
+        HomeApp(testId="app-new", symbol="symbol:icon.add", name="Build a new app", standing="", standingInk="ink.muted",
+          mark="", markLabel="",
+          detail="Describe it in a sentence. It stays here.", tile=tile, offer=true, press=build)
+
+// What to try: each sends itself to the imp.
+component Suggestions
+  props
+    asks: string[]
+    disabled: bool
+    send: action
+  view
+    row flex-wrap="wrap" gap="space.sm"
+      for s in asks key=s
+        button press=send(s) disabled=disabled padding="space.sm space.ms"
+          cursor=(disabled ? "default" : "pointer")
+          background-color="transparent" border="1px solid line.strong" color="ink.strong"
+          class=Body transition="border-color 120ms ease, background-color 120ms ease"
+          testId=`suggest-${s.length}`
+          :hover
+            border-color="ink.strong"
+            background-color="surface.soft"
+          text s

@@ -25,9 +25,11 @@ theme
   line.strong = light-dark(#c9c9c5, #3d3d3a)
   // A note in the accent's colour, such as the card above an app: a tint, quieter than a fill.
   accent.soft = light-dark(#eef1fd, #171c38)
-  // What went wrong or can't be undone, and what is working: the platform's red and green, by their meaning.
+  // What went wrong or can't be undone, what is not ready yet, and what is working: the platform's red, orange and
+  // green, by their meaning.
   ink.danger = -exact-system-red
   danger.soft = light-dark(#fdeeee, #3a1d20)
+  ink.warning = -exact-system-orange
   ink.success = -exact-system-green
 
   // Type: one token a role. The text styles in look.contract apply them, with the spacing and case each role takes.
@@ -60,6 +62,12 @@ theme
   measure.form = 28rem
   measure.note = 34rem
   measure.page = 46rem
+  // A wide window's columns: the home page, the sidebar beside every page, and the chat beside an app.
+  measure.wide = 60rem
+  measure.sidebar = 17rem
+  measure.chat = 23rem
+  // How tall the bar across the top of each of those columns is, so their rules meet.
+  measure.bar = 3.5rem
 
   family.display = "Instrument Serif", "Iowan Old Style", Georgia, serif
   family.text = "Instrument Sans", ui-sans-serif, system-ui, sans-serif
