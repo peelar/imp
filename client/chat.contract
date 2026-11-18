@@ -85,8 +85,6 @@ component Composer
     prefix: string
     placeholder: string
     compact: bool
-    // On a wide window's home page, where it stands under the greeting in the page's wider column, ruled in ink.
-    hero: bool
     draft: string
     busy: bool
     sending: bool
@@ -138,8 +136,8 @@ component Composer
   action pickImages
     showPicker(`${prefix}images`)
   view
-    row justify-content="center" padding=(hero ? "space.lg space.xl space.ms" : compact ? "space.sm space.ms space.ms" : "space.sm space.md space.ms")
-      column width="100%" max-width=(hero ? "measure.wide" : "measure.page") gap="space.sm"
+    row justify-content="center" padding=(compact ? "space.sm space.ms space.ms" : "space.sm space.md space.ms")
+      column width="100%" max-width="measure.page" gap="space.sm"
         if error != ""
           text error color="ink.danger" class=Small testId=`${prefix}send-error`
         if dictating
@@ -150,7 +148,7 @@ component Composer
         // As Amp's composer: the field across the top, and under it a toolbar with the model on the left and
         // dictation and send on the right, all in one box.
         // Images dropped anywhere on the box, or pasted into its field, go with the message.
-        column border=(over ? "1px solid AccentColor" : hero ? "1px solid ink.strong" : "1px solid line.strong")
+        column border=(over ? "1px solid AccentColor" : "1px solid line.strong")
           background-color="surface.page" position="relative" dragenter=entered dragleave=left drop=dropped
           testId=`${prefix}composer-box`
           if keys

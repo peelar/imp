@@ -1,7 +1,7 @@
-// The home page's parts: a chat with nothing said yet, which app.contract lays out. On a wide window the greeting stands
-// over the composer and the apps are a ruled grid of tiles under it; on a narrow one the apps are rows, over the
-// composer at the window's foot. An app says how it stands (a preview, a key it waits for, its sync) from what the
-// host already tells the shell about it; the computer says it with a mark in its box's top right corner.
+// The home page's parts: a chat with nothing said yet, which app.contract lays out over the composer at the page's foot.
+// On a wide window the apps are a ruled grid of tiles under the greeting; on a narrow one they are rows. An app says
+// how it stands (a preview, a key it waits for, its sync) from what the host already tells the shell about it; the
+// computer says it with a mark in its box's top right corner.
 
 use Label, Body, Small, Heading, Title from "./look.contract"
 use AppTile, Computer from "./host.contract"

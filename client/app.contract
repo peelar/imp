@@ -267,7 +267,7 @@ component App
   // a drawer instead.
   derive wide = media.width >= 1280
   derive docked = wide and nav.tab != "chat"
-  // The home page on a wide window: no bar over it, the greeting over the composer, and the apps under them.
+  // The home page on a wide window: no bar over it, and the greeting, what to try and the apps over the composer.
   derive homeWide = wide and chat.messages.length == 0 and not chat.busy and chat.routine == ""
   // What the home page offers to try: the todos ones only while Todos is installed.
   derive asks = (apps.map(a => a.id).includes("todos") ? ["Add todo: Buy flowers", "What's on my todo list?"] : []).concat(["Build me an app that tracks my runs"])
@@ -994,25 +994,29 @@ component App
                       message="It stops running, and its conversation goes with it.", label="Delete",
                       confirm=deleteRoutine, testId="routine-delete")
                     if homeWide
-                      // Home on a wide window: the day and the computer over an ink rule, then the greeting. The
-                      // composer stands under it (the one composer, so its words and focus stay when the chat
-                      // begins), and what to try and the apps scroll under that.
-                      row justify-content="center" padding="space.xl space.xl 0" testId="home"
-                        column width="100%" max-width="measure.wide" gap="space.ms"
-                          row align-items="center" gap="space.ms" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
-                            text formatDate(shown, time.utcOffset, "medium") class=Label flex=1
-                            if update.version != ""
-                              RestartButton(version=update.version, busy=pending(restarting), wide=true,
-                                press=restartToUpdate, testId="update-restart-home")
-                            if computer.status != "none"
-                              row align-items="center" gap="space.sm" testId="home-computer"
-                                row width=6 height=6 aria-hidden=true
-                                  background-color=computerMark(computer)
-                                text computer.name class=Label
-                          column gap="space.ms" padding-top="space.lg"
-                            Initialled(word=salutation, size="4.75rem", heading=1)
-                            text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
-                              color="ink.muted" class=Lead max-width="measure.note"
+                      // Home on a wide window: the day and the computer over an ink rule, the greeting, what to try
+                      // and the apps, in the chat's column above the composer at the foot, which stays where the
+                      // chat has it, so sending the first message moves nothing.
+                      scroll id="home-scroll" flex=1 min-height=0
+                        row justify-content="center" padding="space.xl space.md"
+                          column width="100%" max-width="measure.page" gap="space.ms" testId="home"
+                            row align-items="center" gap="space.ms" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
+                              text formatDate(shown, time.utcOffset, "medium") class=Label flex=1
+                              if update.version != ""
+                                RestartButton(version=update.version, busy=pending(restarting), wide=true,
+                                  press=restartToUpdate, testId="update-restart-home")
+                              if computer.status != "none"
+                                row align-items="center" gap="space.sm" testId="home-computer"
+                                  row width=6 height=6 aria-hidden=true
+                                    background-color=computerMark(computer)
+                                  text computer.name class=Label
+                            column gap="space.ms" padding-top="space.lg"
+                              Initialled(word=salutation, size="4.75rem", heading=1)
+                              text "Ask for anything. Your imp uses your apps, works on a computer of its own, and builds new apps for you."
+                                color="ink.muted" class=Lead max-width="measure.note"
+                            column gap="space.xxl" padding-top="space.lg"
+                              Suggestions(asks=asks, disabled=pending(sent), send=suggest)
+                              HomeApps(apps=apps, computer=computer, tile=true, level=2, open=pick, build=startApp)
                     else if chat.messages.length == 0 and not chat.busy and chat.routine == ""
                       // Home on a narrow window: a greeting, the apps, and what to try, over the composer.
                       scroll id="home-scroll" flex=1 min-height=0
@@ -1029,27 +1033,20 @@ component App
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
                     // What the imp asked for, where the person pastes it: the value goes to the vault, not the conversation.
-                    // On a wide window's home page it stands in the page's wider column, as the composer under it does.
                     if secrets.requests.length > 0
-                      row justify-content="center" padding=(homeWide ? "space.lg space.xl 0" : "0 space.md")
-                        column width="100%" max-width=(homeWide ? "measure.wide" : "measure.page") gap="space.sm"
+                      row justify-content="center" padding="0 space.md"
+                        column width="100%" max-width="measure.page" gap="space.sm"
                           for q, k in secrets.requests key=q.id
                             SecretAsk(request=q, prefix="", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
                               error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret)
                     if previewing and nav.tab == "chat"
                       ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
                         compact=false, still=still)
-                    Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, hero=homeWide, draft=draft, busy=chat.busy,
+                    Composer(prefix="", placeholder=(chat.routine == "" ? "Ask your imp" : `Reply to ${chat.routine}`), compact=false, draft=draft, busy=chat.busy,
                       sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
                       canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
                       model=account.model, models=account.models, chooseModel=chooseModel,
                       attachments=attachments, attaching=pending(attached), attach=attach, detach=detach)
-                    if homeWide
-                      scroll id="home-scroll" flex=1 min-height=0
-                        row justify-content="center" padding="0 space.xl space.xl"
-                          column width="100%" max-width="measure.wide" gap="space.xxl"
-                            Suggestions(asks=asks, disabled=pending(sent), send=suggest)
-                            HomeApps(apps=apps, computer=computer, tile=true, level=2, open=pick, build=startApp)
                   else if e.name == "settings"
                     scroll id="settings-list" flex=1 min-height=0
                       column max-width="48.5rem" margin="0 auto" padding="space.md space.md space.xl" gap="space.lg" box-sizing="border-box" width="100%"
@@ -1213,7 +1210,7 @@ component App
             if previewing
               ScreenPreview(src=`${host.origin}/computer/screen?embed&view&scheme=${scheme}`, open=pick("computer"),
                 compact=true, still=still)
-            Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, hero=false, draft=draft, busy=chat.busy,
+            Composer(prefix="side-", placeholder=(sideSubject == "" ? "Ask your imp" : `Ask about ${sideSubject}`), compact=true, draft=draft, busy=chat.busy,
               sending=pending(sent), stopping=pending(stopped), error=composerError, edit=edit, post=post, stop=stop,
               canDictate=canDictate, dictating=dictating, heard=interimHeard, dictate=dictate, keys=keys,
               model=account.model, models=account.models, chooseModel=chooseModel,

@@ -25,14 +25,14 @@ The type scale has one token per role, `type.display.xl` through `type.code`. Sc
 
 Spacing sits on a 4px grid: `space.xxs` (2px), `xs` (4), `sm` (8), `ms` (12), `md` (16), `lg` (24), `xl` (32) and `xxl` (48), and `space.page` (20), an app's page edge. Use the tokens for `gap`, `padding` and `margin`, such as `padding="space.sm space.md"`.
 
-Widths: `measure.form` for a form, `measure.note` for a note or card, and `measure.page` for a page of reading. An app's column is `measure.page` wide inside `space.page`, centered, and what the shell puts above an app's screen sits in the same column. A wide window's columns have widths of their own: `measure.sidebar`, `measure.chat` for the chat beside a page, and `measure.wide` for the home page. `measure.bar` is how tall the bar across the top of each is.
+Widths: `measure.form` for a form, `measure.note` for a note or card, and `measure.page` for a page of reading. An app's column is `measure.page` wide inside `space.page`, centered, and what the shell puts above an app's screen sits in the same column. A wide window's columns have widths of their own: `measure.sidebar` and `measure.chat` for the chat beside a page. `measure.bar` is how tall the bar across the top of each is.
 
 ## Layout
 
 On a window at least 1280px wide the shell has up to three columns, told apart by their surface as well as a hairline:
 
 - **The sidebar**, on `surface.soft`: the wordmark, New chat, the imp's pages, the apps, the conversations, and Settings at its foot. The open place is the page's paper (`surface.page`) with an ink bar down its left; a place pointed at darkens to `line.subtle`.
-- **The page**, on `surface.page`, under a bar with its title. The home page has no bar: the day and the computer stand over an ink rule, then the greeting in the display serif at its largest, the composer ruled in ink, and the apps as a ruled grid of tiles. A tile says how its app stands in small capitals: a preview, a key it waits for, or its sync. The computer's tile has a mark in its top right corner instead: green while it is ready, orange while it starts, red when it failed.
+- **The page**, on `surface.page`, under a bar with its title. The home page has no bar: the day and the computer stand over an ink rule, then the greeting in the display serif at its largest, what to try, and the apps as a ruled grid of tiles, all in the chat's column. The composer stays at the page's foot, where the chat has it, so sending the first message moves nothing. A tile says how its app stands in small capitals: a preview, a key it waits for, or its sync. The computer's tile has a mark in its top right corner instead: green while it is ready, orange while it starts, red when it failed.
 - **The chat**, on `surface.soft`, beside every page but the chat's own, which takes that room itself.
 
 A narrower window has one column, a bar of tabs along its bottom, and the sidebar as a drawer.

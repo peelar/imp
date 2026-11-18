@@ -62,8 +62,7 @@ theme
   measure.form = 28rem
   measure.note = 34rem
   measure.page = 46rem
-  // A wide window's columns: the home page, the sidebar beside every page, and the chat beside an app.
-  measure.wide = 60rem
+  // A wide window's columns: the sidebar beside every page, and the chat beside an app.
   measure.sidebar = 17rem
   measure.chat = 23rem
   // How tall the bar across the top of each of those columns is, so their rules meet.
