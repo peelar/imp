@@ -1,4 +1,5 @@
-// Settings' General: the account the imp thinks with, how Imp looks, its notifications, and signing out.
+// Settings' General: the account the imp thinks with, how Imp looks, its notifications, signing out, and the release
+// Imp runs.
 
 use Label, Lead, Mono, Monogram, Control from "../look.contract"
 use Button from "../controls.contract"
@@ -23,7 +24,7 @@ component GeneralSettings
     signingOut: bool
     signOut: action
   view
-    SettingsPage(intro="The account your imp thinks with, how Imp looks, and what it tells you.", testId="general")
+    SettingsPage(intro="The account your imp thinks with, how Imp looks, what it tells you, and which version it is.", testId="general")
       SettingsSection(title=(onKey ? "API key" : "ChatGPT account"), aside="", asideTestId="", note="", testId="")
         SettingsRow(testId="")
           if onKey
@@ -51,3 +52,6 @@ component GeneralSettings
               class=Control
               text capitalizedWord(s)
       NotificationSettings(alerts=alerts, asking=asking, allow=allow)
+      SettingsSection(title="Version", aside="", asideTestId="", note="", testId="")
+        SettingsRow(testId="")
+          text account.version class=Lead flex=1 overflow-wrap="anywhere" testId="settings-version"

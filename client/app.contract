@@ -957,16 +957,12 @@ component App
                           syncNow=syncApp, uninstall=uninstallApp, uninstallError=uninstallError)
                       if not apps.map(a => a.id).includes(e.name)
                         row flex=1
-                      if update.version != ""
-                        RestartButton(version=update.version, busy=pending(restarting), wide=wide, press=restartToUpdate,
-                          testId=`update-restart-${e.name}`)
                       if e.name == "chat" and chat.busy
                         row gap="space.sm" align-items="center" testId="busy"
                           row width=6 height=6 background-color="AccentColor" aria-hidden=true
                             animation=(still ? "none" : "pulse 1.2s ease-in-out infinite")
                           text "Imp at work" class=Label color="ink.strong"
-                      // A narrow header gives the date's place to a ready update.
-                      else if not wide and update.version == "" and not apps.map(a => a.id).includes(e.name)
+                      else if not wide and not apps.map(a => a.id).includes(e.name)
                         text formatDate(shown, time.utcOffset, "medium") class=Label
                       // New chat from any page; on a wide window the sidebar has it.
                       if not wide
@@ -1003,9 +999,6 @@ component App
                           column width="100%" max-width="measure.page" gap="space.ms" testId="home"
                             row align-items="center" gap="space.ms" padding-bottom="space.sm" border-bottom="1px solid ink.strong"
                               text formatDate(shown, time.utcOffset, "medium") class=Label flex=1
-                              if update.version != ""
-                                RestartButton(version=update.version, busy=pending(restarting), wide=true,
-                                  press=restartToUpdate, testId="update-restart-home")
                               if computer.status != "none"
                                 row align-items="center" gap="space.sm" testId="home-computer"
                                   row width=6 height=6 aria-hidden=true
@@ -1150,14 +1143,18 @@ component App
                       symbol=tabSymbol(t.name, apps), chord=(t.name == "settings" ? "" : tabChord(t.name, appTabs)),
                       selected=(nav.tab == t.name), shown=barTabs.includes(t.name), keys=keys, side=true,
                       draft=hasDraft(t.name, apps), press=pick)
-            column box-sizing="border-box" justify-content="center" padding="space.sm space.sm"
+            // The sidebar's foot: a ready release of the Mac app above Settings, which opens like a button and shows
+            // no open state.
+            column box-sizing="border-box" justify-content="center" gap="space.xs" padding="space.sm space.sm"
               border-top="1px solid line.subtle"
-              button press=pick("settings") aria-pressed=(nav.tab == "settings") aria-keyshortcuts="Meta+,"
+              if update.version != ""
+                RestartButton(version=update.version, busy=pending(restarting), press=restartToUpdate,
+                  testId="update-restart")
+              button press=pick("settings") aria-keyshortcuts="Meta+,"
                 cursor="pointer"
                 testId="tab-settings" appearance="none" display="flex" align-items="center" gap="space.sm" padding="space.sm space.sm"
-                border="none" text-align="start" color="ink.strong"
-                border-left=(nav.tab == "settings" ? "2px solid ink.strong" : "2px solid transparent")
-                background-color=(nav.tab == "settings" ? "surface.page" : "transparent")
+                border="none" text-align="start" color="ink.strong" border-left="2px solid transparent"
+                background-color="transparent"
                 :hover
                   background-color="line.subtle"
                 image "symbol:icon.settings" width=16 height=16 aria-hidden=true
@@ -1229,6 +1226,11 @@ component App
                 archived=chat.archived, archivedOpen=archivedOpen, toggleArchived=toggleArchived, restore=restoreChat,
                 openRoutines=openRoutines, openTricks=openTricks, openDirectory=openDirectory, toggleOlder=toggleOlder,
                 keyboard=keyboard, directory=directoryOn, still=still)
+              // A narrow window's drawer has the sidebar's foot too: the ready release (Settings is in the tab bar).
+              if update.version != ""
+                column padding="space.sm space.sm" border-top="1px solid line.subtle"
+                  RestartButton(version=update.version, busy=pending(restarting), press=restartToUpdate,
+                    testId="drawer-update-restart")
             button press=toggleDrawer aria-label="Close" aria-keyshortcuts="Escape" testId="drawer-close" appearance="none"
               cursor="pointer"
               flex=1 border="none"

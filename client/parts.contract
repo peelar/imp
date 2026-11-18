@@ -64,12 +64,11 @@ component Confirm
             opacity=0.9
           text label class=Label color="inherit"
 
-// A new release of the Mac app is ready: it waits for the person to restart, never quits Imp.
+// A new release of the Mac app is ready, at the sidebar's foot: it waits for the person to restart, never quits Imp.
 component RestartButton
   props
     version: string
     busy: bool
-    wide: bool
     press: action
     testId: string
   view
@@ -83,7 +82,7 @@ component RestartButton
         background-color="surface.soft"
         color="ink.faint"
       image "symbol:icon.refresh" width=12 height=12 aria-hidden=true
-      text (wide ? `Restart for ${version}` : "Update")
+      text `Restart for ${version}`
 
 // Settings' layout, which every tab shares: a line that says what the tab is for, then its sections. A section has its
 // name in small capitals over a black rule, a note under it when the section needs one, its rows, each ruled off below

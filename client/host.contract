@@ -39,6 +39,8 @@ shape Account
   assistants: SharedApp[]
   // Whether the onboarding still shows the person their first app, Todos: until it is installed, or turned down.
   introduceApps: bool
+  // The release the host runs, such as "v0.20.3"; "dev" for a checkout, "main-<commit>" for a build of main.
+  version: string
 
 // An app as Settings → Assistants lists it: whether other assistants, such as Claude Code, may use it.
 shape SharedApp

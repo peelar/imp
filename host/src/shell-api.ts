@@ -172,6 +172,7 @@ function shellSources(options: ShellApiOptions) {
     flags: flags.list(),
     assistants: assistants.state(),
     introduceApps: studio.introduceApps(),
+    version,
   });
 
   return new Map<string, LiveSource>([

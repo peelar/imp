@@ -9,7 +9,7 @@ An installed host runs from `~/.imp/current`, a link to one unpacked release und
 3. waits until the agent is idle, then exits, and
 4. the service manager (systemd or launchd) starts it again from the new release.
 
-The web client is built into the release, so the same restart updates it. Open pages notice that the host they reconnected to is another release, and reload. `host/src/update/update.ts` is the whole updater.
+The web client is built into the release, so the same restart updates it. Settings → General shows the release the host runs (`dev` for a checkout). Open pages notice that the host they reconnected to is another release, and reload. `host/src/update/update.ts` is the whole updater.
 
 Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to keep a host at its release. A checkout never updates itself: it is the developer's to move. Nor does a build of `main` installed from the `unreleased` prerelease (its version is `main-<commit>`), since the latest release is older than it; `.github/workflows/unreleased.yml` rebuilds that prerelease on every push to `main`, without the Mac app.
 
@@ -18,7 +18,7 @@ Set `IMP_AUTO_UPDATE=0` in `~/.imp/env` to keep a host at its release. A checkou
 A launchd agent that `scripts/install-mac.sh` installs (`dev.imp.updater`) checks GitHub at login and every hour. It never quits Imp:
 
 - While Imp is closed, a new release replaces it at once.
-- While Imp is open, the release is downloaded and checked, and waits in `~/Library/Application Support/Imp/staged`. The updater writes its tag to `update.json` in the app's storage (`~/Library/Application Support/exact/dev.imp.app/data`), and every page's header shows **Restart for vX.Y.Z** (**Update** on a narrow window). Restart writes `restart` beside it and quits Imp. The agent watches for that file: once Imp is gone it puts the release in place and opens Imp again. If the quit is cancelled, the release keeps waiting.
+- While Imp is open, the release is downloaded and checked, and waits in `~/Library/Application Support/Imp/staged`. The updater writes its tag to `update.json` in the app's storage (`~/Library/Application Support/exact/dev.imp.app/data`), and **Restart for vX.Y.Z** shows at the bottom of the left sidebar, above Settings (in the sidebar's drawer on a narrow window). Restart writes `restart` beside it and quits Imp. The agent watches for that file: once Imp is gone it puts the release in place and opens Imp again. If the quit is cancelled, the release keeps waiting.
 
 After it installs a release, the updater runs that release's `install-mac.sh --refresh`, which writes the updater again, so a change to the updater reaches every Mac with the release that makes it. A Mac installed before this updater keeps the old one, which quits and reopens Imp, until `install-mac.sh` runs on it once more. What the updater did is in `~/Library/Application Support/Imp/update.log`.
 
