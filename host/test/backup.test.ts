@@ -126,7 +126,9 @@ test("turning on Backup pushes every version to the person's private repository"
 
   const pushed = await until(
     "account",
-    backupWhen(({ synced }) => synced === true)
+    backupWhen(({ synced }) => synced === true),
+    // The first push starts the egress proxy, which the host downloads first where it has no mitmproxy yet.
+    120_000
   );
 
   assert.deepEqual(
