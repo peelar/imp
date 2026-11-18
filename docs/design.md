@@ -37,6 +37,8 @@ On a window at least 1280px wide the shell has up to three columns, told apart b
 
 A narrower window has one column, a bar of tabs along its bottom, and the sidebar as a drawer.
 
+Every column starts below the window's top inset (`env(safe-area-inset-top)`). In the Mac app the page covers the title bar, and the window's toolbar, with Back, Forward and the page's title, stands over the top of it. In a browser the inset is zero.
+
 ## Text styles
 
 A text takes its role with `class=` and its colour with a colour token: `text "Backup" class=Subheading`, `text detail class=Body color="ink.muted"`.

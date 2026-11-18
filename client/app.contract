@@ -925,7 +925,9 @@ component App
             text "mp"
       else if signedIn and not needsComputer and not needsFirstApp
         // The routes. On a wide window they sit between the sidebar and, beside every page but the chat's, the chat.
-        column position="absolute" left=(wide ? "measure.sidebar" : "0px") bottom="0px" top="0px" right=(docked ? "measure.chat" : "0px")
+        // They, the sidebar and the chat start below the window's top inset: on the Mac the page covers the title bar,
+        // and the window's toolbar there would hide each column's bar.
+        column position="absolute" left=(wide ? "measure.sidebar" : "0px") bottom="0px" top="env(safe-area-inset-top)" right=(docked ? "measure.chat" : "0px")
           for t in nav.tabs key=t.name
             column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
               for e in t.stack key=e.id
@@ -1116,7 +1118,7 @@ component App
         // bottom, Settings with them. Every tab stays in a tablist, hidden while nothing shows it: a tab left out
         // unlinks its panel, which then shows over every page.
         if wide
-          aside position="absolute" top=0 left=0 bottom=0 width="measure.sidebar" box-sizing="border-box"
+          aside position="absolute" top="env(safe-area-inset-top)" left=0 bottom=0 width="measure.sidebar" box-sizing="border-box"
             display="flex" flex-direction="column" border-right="1px solid line.subtle" background-color="surface.soft"
             aria-label="Apps, conversations, routines and settings"
             // The wordmark, in a bar as tall as the page's: home.
@@ -1175,7 +1177,7 @@ component App
         // The chat, beside the open page on a wide window, tinted as the sidebar is: the same conversation, told what
         // the person is looking at. The chat's own page has none beside it, and takes its room.
         if docked
-          aside position="absolute" top=0 right=0 bottom=0 width="measure.chat" box-sizing="border-box"
+          aside position="absolute" top="env(safe-area-inset-top)" right=0 bottom=0 width="measure.chat" box-sizing="border-box"
             display="flex" flex-direction="column" border-left="1px solid line.subtle" background-color="surface.soft"
             aria-label="Chat" testId="chat-panel"
             row align-items="center" gap="space.sm" padding="0 space.sm 0 space.md" height="measure.bar" min-height="measure.bar" box-sizing="border-box"
