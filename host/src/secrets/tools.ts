@@ -159,9 +159,9 @@ function requestSecretTool({
   return defineTool({
     name: "request_secret",
     description:
-      "Ask the user to add an API key or a website login you need, such as a GitHub token. Fill in everything but the value: for another API, look up in its docs which hosts, header and word before the key it takes. The user sees the request in the chat and in Settings with the form filled in, and only pastes the value, which you never see. You can use it once they add it (it shows in your secrets).",
+      "Ask the user to add an API key or a website login you need, such as a GitHub token. Fill in everything but the value: for another API, look up in its docs which hosts, header and word before the key it takes. The user sees the request in this chat and in Settings with the form filled in, and only pastes the value, which you never see. You can use it once they add it (it shows in your secrets).",
     parameters: REQUEST,
-    execute: async (asked) => {
+    execute: async (asked, api) => {
       const { service, why, host = "" } = asked;
 
       if (service === "login" && !siteOf(host)) {
@@ -194,6 +194,7 @@ function requestSecretTool({
       }
 
       const request = {
+        conversation: String(api.conversationId),
         name: id,
         service,
         why,

@@ -98,7 +98,7 @@ test("a reply the imp finishes and a key it asks for are notices that say what t
         kind: "key",
         title: "Your imp asks for a GitHub key",
         body: "To read your issues.",
-        conversation: "",
+        conversation: current.current,
       },
       told(reply),
     ]

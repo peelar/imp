@@ -348,6 +348,15 @@ test "the imp asks for a key in the chat, and the owner pastes it there"
   clock until state secrets.requests.0.name == "weather" within 10000
   clock until state chat.busy == false within 10000
   expect text "secret-ask-detail-0" == "api.weather.example · X-Api-Key: Token … · $WEATHER_API_KEY"
+  // Only the chat that asked shows the card: a new chat leaves it alone, and going back shows it again.
+  tap "new-chat-chat"
+  clock until state chat.messages.length == 0 within 5000
+  expect tree missing "secret-ask-0"
+  expect state secrets.requests.length == 1
+  tap "drawer-toggle"
+  tap "drawer-conversation-0"
+  clock until state chat.messages.length == 3 within 5000
+  expect tree has "secret-ask-0"
   clock until state secrets.status == "ready" within 120000
   type "secret-ask-value-0" "wx-secret"
   tap "secret-ask-save-0"

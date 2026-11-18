@@ -362,6 +362,8 @@ component App
   derive newest = noticeAt(account.notices, 0)
   derive canNotify = alerts.available and alerts.state == "granted"
   derive waiting = routines.filter(r => r.unread).length + secrets.requests.length
+  // What the imp asked for in the open chat: its card shows there, and every other chat leaves it alone.
+  derive asked = secrets.requests.filter(q => q.conversation != "" and q.conversation == chat.current)
 
   // A new build (a preview, above all) loads at once, not at the next reconnect: until it does, the page shows the
   // draft's bar over the screen of the version before.
@@ -673,13 +675,15 @@ component App
   action notify(n: Notice)
     if n.at > noticedAt
       showNotification(title=n.title, body=n.body, tag=noticeTag(n), data=`${n.kind}:${n.conversation}`)
-  // A notification clicked: its conversation opens, or Settings' secrets for a key the imp asked for.
+  // A notification clicked: its conversation opens, the chat that asked for a key, or Settings' secrets for an old request.
   action openNotice(tag: string, e: NotificationEvent)
     let about = match e.data { case some(d) => d, case none => "" }
     if about.startsWith("routine:")
       showRoutine(about.slice(8))
     else if about.startsWith("reply:")
       showChat(about.slice(6))
+    else if about.startsWith("key:") and about.length > 4
+      showChat(about.slice(4))
     else if about.startsWith("key:")
       openSettings("secrets")
   action showWaiting
@@ -1026,10 +1030,10 @@ component App
                     else
                       Transcript(prefix="", compact=false, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
                     // What the imp asked for, where the person pastes it: the value goes to the vault, not the conversation.
-                    if secrets.requests.length > 0
+                    if asked.length > 0
                       row justify-content="center" padding="0 space.md"
                         column width="100%" max-width="measure.page" gap="space.sm"
-                          for q, k in secrets.requests key=q.id
+                          for q, k in asked key=q.id
                             SecretAsk(request=q, prefix="", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
                               error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret,
                               github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)
@@ -1195,10 +1199,10 @@ component App
             else
               Transcript(prefix="side-", compact=true, messages=chat.messages, lastId=lastId, still=still, origin=host.origin)
             // What the imp asked for, where the person pastes it: the value goes to the vault, not the conversation.
-            if secrets.requests.length > 0
+            if asked.length > 0
               row justify-content="center" padding="0 space.ms"
                 column width="100%" max-width="measure.page" gap="space.sm"
-                  for q, k in secrets.requests key=q.id
+                  for q, k in asked key=q.id
                     SecretAsk(request=q, prefix="side-", index=k, saving=(pending(secretSaved) or pending(loginSaved)),
                       error=(q.service == "login" ? loginError : secretError), save=saveSecret, saveLogin=saveLogin, dismiss=dismissSecret,
                       github=github, githubBusy=pending(githubConnected), connectGithub=connectGithub, cancelGithub=cancelGithub, copyGithubCode=copyGithubCode)

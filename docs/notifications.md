@@ -7,7 +7,7 @@ Imp tells you when something needs you, so you need not open it to find out. It 
 | Notice | When | Clicking it opens |
 | --- | --- | --- |
 | A routine's run | A run ended with something to say, or failed. A run that found nothing new answers only "Nothing new." and tells you nothing. | The routine's conversation |
-| A key or login | The imp asked for a key or login it lacks (`request_secret`). | Settings → Secrets |
+| A key or login | The imp asked for a key or login it lacks (`request_secret`). | The chat that asked (Settings → Secrets for a request made before Imp kept which chat asked) |
 | A reply | The imp finished a turn in one of your chats: what it said, or why it stopped. A routine's run is never told as a reply too. | That chat |
 
 The title is the routine's name, the chat's name or what the imp asks for; the body is the start of what it said, on one line. A newer notice about the same conversation replaces the older one, and opening a conversation clears its notice.

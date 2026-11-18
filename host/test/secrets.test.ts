@@ -7,6 +7,7 @@ import type { Json } from "../../sdk/app.ts";
 import {
   call,
   done,
+  first,
   isRow,
   refused,
   type Row,
@@ -49,8 +50,11 @@ after(async () => {
   await stopTestHost();
 });
 
-test("the imp asks for a key it lacks, and the owner sees the request", async () => {
+test("the imp asks for a key it lacks, and the owner sees the request in the chat that asked", async () => {
   const asked = await toolRow("Please ask for a key: linear");
+  const chat = await first("chat");
+
+  assert.ok(isRow(chat));
 
   assert.match(
     JSON.stringify(asked.text),
@@ -66,6 +70,7 @@ test("the imp asks for a key it lacks, and the owner sees the request", async ()
     rows(requests).map(({ id: _id, ...request }) => request),
     [
       {
+        conversation: chat.current,
         name: "linear",
         service: "linear",
         why: "To read your issues.",
@@ -78,6 +83,23 @@ test("the imp asks for a key it lacks, and the owner sees the request", async ()
         detail: "api.linear.app · $LINEAR_API_KEY",
       },
     ]
+  );
+
+  // Another chat asking for the same key keeps the first chat's request: each chat shows its own.
+  assert.deepEqual(await call("chatNew", []), done);
+  await toolRow("Please ask for a key: linear");
+
+  const both = await until(
+    "account",
+    secretsWhen((secrets) => rows(secrets.requests).length === 2)
+  );
+
+  const other = await first("chat");
+
+  assert.ok(isRow(other) && other.current !== chat.current);
+  assert.deepEqual(
+    rows(both.requests).map((request) => request.conversation),
+    [chat.current, other.current]
   );
 });
 
@@ -110,7 +132,7 @@ test("a key that cannot be added is refused with the reason", async () => {
   );
 });
 
-test("a key the owner adds answers the request and is never shown again; another key cannot take its variable", async () => {
+test("a key the owner adds answers every chat's request and is never shown again; another key cannot take its variable", async () => {
   // The vault starts with the host, which downloads OpenBao the first time.
   await until(
     "account",

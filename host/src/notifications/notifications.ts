@@ -21,7 +21,8 @@ const BODY = 180;
 
 /**
  * A notice. `kind` is "routine" (a run ended), "key" (the imp asks for a key or login) or "reply" (the imp finished
- * replying). `conversation` is the conversation it opens ("" for a key, which Settings takes). `at` is when it was
+ * replying). `conversation` is the conversation it opens: for a key, the chat that asked ("" for an old request, which Settings
+ * takes). `at` is when it was
  * posted, in milliseconds since the epoch, and grows with every notice, so a page tells the new ones by it.
  */
 type Notice = {
@@ -137,7 +138,7 @@ function followRoutines({ routines, chats }: NotificationsOptions, post: Post) {
   });
 }
 
-/** The imp asked for a key or a login, which only the person can add in Settings. */
+/** The imp asked for a key or a login, which the person adds in the chat that asked, or in Settings. */
 function followRequests({ secrets }: NotificationsOptions, post: Post) {
   const asked = new Set(secrets.state().requests.map((r) => r.id));
 
@@ -155,7 +156,7 @@ function followRequests({ secrets }: NotificationsOptions, post: Post) {
             ? `Your imp asks for a login for ${request.host}`
             : `Your imp asks for a ${label} key`,
         body: bodyOf(request.why),
-        conversation: "",
+        conversation: request.conversation,
       });
     }
 

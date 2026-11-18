@@ -23,10 +23,12 @@ const USES_KEPT = 200;
 /**
  * A key or login the imp asked the owner for, with everything but the value filled in: for "other", the hosts
  * (comma-separated), header, word before the key and variable; for a login, the site and, when the imp knows it, the
- * username. "" where it does not apply.
+ * username. "" where it does not apply. `conversation` is the chat that asked, where its card shows ("" for a request
+ * written before requests kept it, which only Settings shows).
  */
 export type KeyRequest = {
   readonly id: string;
+  readonly conversation: string;
   readonly name: string;
   readonly service: string;
   readonly why: string;
@@ -43,11 +45,12 @@ export type RecordedUse = EgressUse & {
   readonly at: string;
 };
 
-// Requests written before the imp filled in the rest of the form lack the last four.
+// Requests written before the imp filled in the rest of the form lack the last four, and older ones the chat.
 const requestsJson = compile(
   arr(
     obj({
       id: str(),
+      conversation: opt(str()),
       name: str(),
       service: str(),
       why: str(),
@@ -92,6 +95,7 @@ export function secretRecords(dataDir: string) {
     requestsJson
   ).map((request) => ({
     ...request,
+    conversation: request.conversation ?? "",
     header: request.header ?? "",
     prefix: request.prefix ?? "",
     envName: request.envName ?? "",
@@ -114,14 +118,18 @@ export function secretRecords(dataDir: string) {
       ].slice(-USES_KEPT);
       writeFileSync(usesFile, JSON.stringify(uses), { mode: 0o600 });
     },
-    /** The imp asks for a key; a request for the same name replaces the earlier one. */
+    /** The imp asks for a key; a request for the same name from the same chat replaces the earlier one. */
     ask: (request: Omit<KeyRequest, "id">) => {
       keepRequests([
-        ...requests.filter((open) => open.name !== request.name),
+        ...requests.filter(
+          (open) =>
+            open.name !== request.name ||
+            open.conversation !== request.conversation
+        ),
         { id: randomUUID(), ...request },
       ]);
     },
-    /** The owner added the key `name`. */
+    /** The owner added the key `name`, which answers every chat that asked for it. */
     answered: (name: string) => {
       keepRequests(requests.filter((open) => open.name !== name));
     },

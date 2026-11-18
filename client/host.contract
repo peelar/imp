@@ -185,9 +185,11 @@ shape Secret
 // A secret the imp asked for (request_secret), with its form filled in but for the value, which the owner adds or
 // dismisses. `host` is an "other" key's hosts or a login's site; `header`, `prefix` and `envName` an "other" key's,
 // `username` a login's ("" where it does not apply). `label` is what the person calls it, and `detail` one line on
-// where its value goes.
+// where its value goes. `conversation` is the chat that asked, the only one that shows its card ("" for a request
+// from before requests kept it, which only Settings shows).
 shape SecretRequest
   id: string
+  conversation: string
   name: string
   service: string
   why: string
@@ -278,7 +280,7 @@ shape Routine
 
 // Something the person is told while they are away (host/src/notifications/notifications.ts), the newest first. `kind` is
 // "routine" (a run ended with something to say), "key" (the imp asks for a key or login) or "reply" (the imp finished
-// replying); `conversation` is the one it opens ("" for a key, which Settings takes). `at` grows with every notice.
+// replying); `conversation` is the one it opens (for a key, the chat that asked; "" for an old one, which Settings takes). `at` grows with every notice.
 shape Notice
   id: string
   kind: string
