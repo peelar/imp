@@ -312,8 +312,36 @@ function whyOf(row: Row) {
   return [...new Set(words.filter((word) => word !== ""))].join(" · ");
 }
 
+/** The person's saved filters: the owners to show (none: every owner) and the repositories to hide, lowercase. */
+async function filtersOf(app: AppContext) {
+  const orgs = await app.db.all<{ org: string }>(
+    "SELECT org FROM orgs ORDER BY org"
+  );
+
+  const hidden = await app.db.all<{ repo: string }>(
+    "SELECT repo FROM hidden_repos ORDER BY repo"
+  );
+
+  return {
+    orgs: orgs.map((row) => row.org),
+    hiddenRepos: hidden.map((row) => row.repo),
+  };
+}
+
 /** Every item with its triage now, newest first, as the screen and the imp read them. */
-async function listItems(app: AppContext) {
+async function listItems(
+  app: AppContext,
+  { orgs, hiddenRepos }: { orgs: string[]; hiddenRepos: string[] }
+) {
+  const isHidden = (repo: string) => {
+    const name = repo.toLowerCase();
+
+    return (
+      hiddenRepos.includes(name) ||
+      (orgs.length > 0 && !orgs.includes(name.split("/")[0] ?? ""))
+    );
+  };
+
   const rows = await app.db.all<Row>(
     `SELECT ${COLUMNS.split(", ")
       .map((c) => `items.${c}`)
@@ -341,8 +369,52 @@ async function listItems(app: AppContext) {
     unread: row.unread === 1,
     status: statusOf(row, now),
     until: row.triage === "snoozed" && row.until ? dayOf(row.until) : "",
+    hidden: isHidden(row.repo),
   }));
 }
+
+const OWNER = /^[a-z\d](?:[a-z\d-]{0,38})$/;
+const REPO = /^[a-z\d](?:[a-z\d-]{0,38})\/[\w.-]{1,100}$/;
+
+/** Adds or removes one saved filter: an owner to show or a repository to hide. */
+async function setFilter(
+  app: AppContext,
+  filter: "org" | "repo",
+  { value, on }: { value: string; on: boolean }
+) {
+  const name = value.trim().toLowerCase();
+
+  if (!(filter === "org" ? OWNER : REPO).test(name)) {
+    return {
+      ok: false,
+      error:
+        filter === "org"
+          ? `"${value}" is not a GitHub organization or user name.`
+          : `"${value}" is not a repository as owner/name.`,
+    };
+  }
+
+  const [table, column] =
+    filter === "org" ? ["orgs", "org"] : ["hidden_repos", "repo"];
+
+  await (on
+    ? app.db.run(`INSERT OR IGNORE INTO ${table} (${column}) VALUES (?)`, name)
+    : app.db.run(`DELETE FROM ${table} WHERE ${column} = ?`, name));
+
+  return done;
+}
+
+const orgParam = {
+  org: {
+    type: "string",
+    description:
+      'A GitHub organization or user: the part of "owner/repo" before the slash.',
+  },
+} as const;
+
+const repoParam = {
+  repo: { type: "string", description: 'A repository, as "owner/repo".' },
+} as const;
 
 /** Whether the app has synced yet, and what it could not read. */
 async function syncState(app: AppContext) {
@@ -401,6 +473,9 @@ export default {
       reason TEXT NOT NULL, unread INTEGER NOT NULL)`,
     "CREATE TABLE triage (key TEXT PRIMARY KEY, state TEXT NOT NULL, until TEXT NOT NULL, seen TEXT NOT NULL)",
     "CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    // The person's saved filters, which a sync never touches.
+    "CREATE TABLE orgs (org TEXT PRIMARY KEY)",
+    "CREATE TABLE hidden_repos (repo TEXT PRIMARY KEY)",
   ],
   connections: [{ host: "api.github.com", secret: "github" }],
   sync: {
@@ -446,12 +521,17 @@ export default {
     inbox: {
       kind: "read",
       description:
-        "What needs the user on GitHub, newest first: pull requests waiting for their review, their own open pull requests, issues and pull requests assigned to them, and their unread notifications. `items` each have a key, kind (pr, issue, release, discussion, ci, other), repo, number, title, url, why it is here, and status: inbox, done or snoozed. `synced` says whether the app has read GitHub yet, and `note` what it can't read, such as notifications the user's key can't reach. To act on an item on GitHub (review, comment, merge, close, mark read), use gh with its url, then mark it done here.",
+        "What needs the user on GitHub, newest first: pull requests waiting for their review, their own open pull requests, issues and pull requests assigned to them, and their unread notifications. `items` each have a key, kind (pr, issue, release, discussion, ci, other), repo, number, title, url, why it is here, and status: inbox, done or snoozed, and `hidden` when the user's saved filters leave it out. `orgs` are the organizations or users the user chose to see (none: all of them) and `hiddenRepos` the repositories they hid; leave hidden items out unless the user asks for them. `synced` says whether the app has read GitHub yet, and `note` what it can't read, such as notifications the user's key can't reach. To act on an item on GitHub (review, comment, merge, close, mark read), use gh with its url, then mark it done here.",
       params: {},
-      run: async (_args, app) => ({
-        ...(await syncState(app)),
-        items: await listItems(app),
-      }),
+      run: async (_args, app) => {
+        const filters = await filtersOf(app);
+
+        return {
+          ...(await syncState(app)),
+          ...filters,
+          items: await listItems(app, filters),
+        };
+      },
     },
     done: {
       kind: "write",
@@ -486,6 +566,37 @@ export default {
       description: "Bring a done or snoozed GitHub item back to the inbox.",
       params: keyParam,
       run: async ({ key }, app) => await triage(app, text(key), { state: "" }),
+    },
+    showOrg: {
+      kind: "write",
+      description:
+        "Add an organization or user to the ones the GitHub app shows. While any are chosen, items from other owners are hidden. It changes nothing on GitHub.",
+      params: orgParam,
+      run: async ({ org }, app) =>
+        await setFilter(app, "org", { value: text(org), on: true }),
+    },
+    unshowOrg: {
+      kind: "write",
+      description:
+        "Take an organization or user off the ones the GitHub app shows. With none left, it shows every owner.",
+      params: orgParam,
+      run: async ({ org }, app) =>
+        await setFilter(app, "org", { value: text(org), on: false }),
+    },
+    hideRepo: {
+      kind: "write",
+      description:
+        "Hide a repository's items in the GitHub app, now and after every sync. It changes nothing on GitHub.",
+      params: repoParam,
+      run: async ({ repo }, app) =>
+        await setFilter(app, "repo", { value: text(repo), on: true }),
+    },
+    unhideRepo: {
+      kind: "write",
+      description: "Show a hidden repository's items in the GitHub app again.",
+      params: repoParam,
+      run: async ({ repo }, app) =>
+        await setFilter(app, "repo", { value: text(repo), on: false }),
     },
   },
 } satisfies AppServer;

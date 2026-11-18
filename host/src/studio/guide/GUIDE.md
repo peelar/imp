@@ -15,7 +15,7 @@ An app is a folder, `apps/<id>/`, with three files. `<id>` is lowercase letters 
 
 To change an app that exists, start with `app_code` too: `apps/<id>/` in your workspace may be gone or old.
 
-An app whose `app.json` says `"server": "imp"` comes with Imp: its `server.ts` and `app.json` are Imp's, and `preview_app` refuses a version that changes them. Change only its `app.contract`. If the screen the user wants needs data the operations do not give, tell them what is missing.
+An app whose `app.json` says `"server": "imp"` comes with Imp: its `server.ts` and `app.json` are Imp's, and `preview_app` refuses a version that changes them. Change only its `app.contract`. If the screen the user wants needs data the operations do not give, tell them what is missing. A setting the screen must remember, such as a filter, goes through one of the app's writes: only the shell's root may say `persist`. The GitHub app keeps saved filters this way: `inbox` answers `orgs`, `hiddenRepos` and each item's `hidden`, and `showOrg`, `unshowOrg`, `hideRepo` and `unhideRepo` change them.
 
 ## server.ts
 

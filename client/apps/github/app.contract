@@ -1,5 +1,6 @@
 // The GitHub app's default screen. It is yours to change: ask your imp for another one. The data under it (server.ts)
-// is Imp's. The shell feeds it: `inbox` is the read, `done`, `snooze` and `restore` the writes.
+// is Imp's. The shell feeds it: `inbox` is the read, `done`, `snooze` and `restore` the writes, and `showOrg`,
+// `unshowOrg`, `hideRepo` and `unhideRepo` the saved filters' writes. This screen leaves hidden items out.
 
 // The shell's styles are its own: an app declares the ones it uses.
 style Label
@@ -28,10 +29,16 @@ shape Item
   unread: bool
   status: string
   until: string
+  // Whether the person's saved filters (Inbox's orgs and hiddenRepos) leave it out.
+  hidden: bool
 
 shape Inbox
   synced: bool
   note: string
+  // The saved filters, kept on the host: the owners to show (none: every owner) and the repositories to hide. The
+  // writes showOrg, unshowOrg, hideRepo and unhideRepo change them.
+  orgs: string[]
+  hiddenRepos: string[]
   items: Item[]
 
 // The filters, in the order the bar shows them.
@@ -137,7 +144,7 @@ component Screen
     restore: action
   state filter = "inbox"
   state query = ""
-  derive items = inbox.items
+  derive items = inbox.items.filter(i => not i.hidden)
   derive status = inbox
   derive q = query.trim().toLowerCase()
   derive shown = items.filter(i => under(i, filter) and matches(i, q))

@@ -118,6 +118,7 @@ The GitHub app (`client/apps/github`) is the first app Imp ships this way: its s
 - **It needs your key named `github`.** Without one it shows nothing yet, and the imp asks you for one with a request in Settings, without waiting for it to build.
 - **Notifications need a classic token** with the `notifications` scope (or `repo`): GitHub gives them to nothing else. With another key, the app shows the rest and says so.
 - **Done and Snooze are the app's own.** They change nothing on GitHub, and a sync keeps them. A done item comes back when it changes on GitHub again, and a snoozed one when its snooze ends.
+- **Saved filters are the app's own too.** It keeps the organizations you want to see (none: all of them) and the repositories you hide, on the host, so they survive reloads and follow you to every device; a sync keeps them. The default screen leaves hidden items out. Ask your imp to add controls for them to the screen, or to hide a repository for you.
 - **Acting on GitHub is the imp's.** Ask in the chat beside the app ("review the gift card PR", "mark my notifications read"): the imp reads the app's items and acts with `gh`.
 
 To write an app yourself, see [Build an app](building-apps.md).

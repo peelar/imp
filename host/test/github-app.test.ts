@@ -187,6 +187,43 @@ test("a notification joins its pull request's item, and Done holds until the ite
   );
 });
 
+test("saved filters hide items by owner and repository, and outlast a sync", async () => {
+  const { answers: state, fetch } = fakeGitHub();
+  const app = appWith(fetch);
+  const { showOrg, unshowOrg, hideRepo, unhideRepo } = github.operations;
+
+  state.review = [
+    pr(7, "2026-11-10T10:00:00Z"),
+    {
+      ...pr(9, "2026-11-10T09:00:00Z"),
+      repository_url: "https://api.github.com/repos/Acme/Web",
+    },
+  ];
+  await github.sync.run(app);
+
+  const hidden = async () =>
+    (await items(app)).flatMap((item) => (item.hidden ? [item.key] : []));
+
+  assert.deepEqual(await showOrg.run({ org: "ACME" }, app), {
+    ok: true,
+    error: "",
+  });
+  assert.deepEqual(await hidden(), ["o/r#7", "n:2"]);
+  assert.deepEqual((await inbox(app)).orgs, ["acme"]);
+
+  await hideRepo.run({ repo: "acme/web" }, app);
+  await unshowOrg.run({ org: "acme" }, app);
+  await github.sync.run(app);
+  assert.deepEqual(await hidden(), ["Acme/Web#9"]);
+  assert.deepEqual((await inbox(app)).hiddenRepos, ["acme/web"]);
+
+  await unhideRepo.run({ repo: "acme/web" }, app);
+  assert.deepEqual(await hidden(), []);
+
+  assert.equal((await hideRepo.run({ repo: "web" }, app)).ok, false);
+  assert.equal((await showOrg.run({ org: "a/b" }, app)).ok, false);
+});
+
 test("a key that can't read notifications still brings in the rest, and says why", async () => {
   const { answers: state, fetch } = fakeGitHub();
   const app = appWith(fetch);
