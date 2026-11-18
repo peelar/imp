@@ -1,0 +1,198 @@
+// The walkthrough (scripts/walkthrough.sh, `pnpm walkthrough`): the app as a person meets it, each screen photographed
+// at a phone's size (390x844), the Mac app's window (900x700) and a wide browser (1280x800), into .exact/walkthrough/,
+// for whoever changed the app to look at before handing it over. It sits outside the client's own tests (app.test
+// .contract), which CI runs: these steps are there to reach the screens, and assert only what a person must find on
+// them. Exact starts the test host (host/scripts/test-host.ts) empty for each test, with its scripted model and a
+// GitHub sign-in that shows the code TEST-5678.
+//
+// A new screen, dialog or step a person goes through gets its shots here, in the test of the flow that reaches it.
+
+test "onboarding: sign in, the first app's step, and Build it"
+  size 1280x800
+  clock settle
+  screenshot ".exact/walkthrough/onboarding-1-signin-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/onboarding-1-signin-phone.png"
+  resize 1280x800
+  tap "signin"
+  clock until state account.status == "waiting" within 5000
+  expect text "signin-code" == "TEST-1234"
+  clock settle
+  screenshot ".exact/walkthrough/onboarding-2-code-wide.png"
+  clock until state account.status == "signedIn" within 5000
+  expect tree has "first-app"
+  clock settle
+  screenshot ".exact/walkthrough/onboarding-3-first-app-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/onboarding-3-first-app-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/onboarding-3-first-app-phone.png"
+  resize 1280x800
+  tap "first-app-build"
+  clock until state account.introduceApps == false within 10000
+  clock until state chat.busy == false within 10000
+  clock settle
+  // Where Build it lands: the imp is building a new app, which Imp's own GitHub app is not.
+  screenshot ".exact/walkthrough/onboarding-4-after-build-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/onboarding-4-after-build-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/onboarding-4-after-build-phone.png"
+
+test "onboarding: Skip opens Imp's GitHub app"
+  size 1280x800
+  tap "signin"
+  clock until state account.status == "signedIn" within 5000
+  tap "first-app-skip"
+  clock until state account.introduceApps == false within 10000
+  clock settle
+  screenshot ".exact/walkthrough/onboarding-5-after-skip-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/onboarding-5-after-skip-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/onboarding-5-after-skip-phone.png"
+
+test "GitHub connects from the app's page and from Settings, each showing its code"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-github"
+  tap "app-github-connect"
+  clock until state github.status == "waiting" within 5000
+  expect text "app-github-code" == "TEST-5678"
+  clock settle
+  screenshot ".exact/walkthrough/github-1-app-code-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/github-1-app-code-phone.png"
+  resize 1280x800
+  tap "app-github-cancel"
+  clock until state github.status == "off" within 5000
+  tap "tab-settings"
+  tap "settings-pane-connections"
+  tap "github-connect"
+  clock until state github.status == "waiting" within 5000
+  expect text "github-code" == "TEST-5678"
+  clock settle
+  screenshot ".exact/walkthrough/github-2-settings-code-wide.png"
+  clock until state github.status == "on" within 10000
+  clock settle
+  screenshot ".exact/walkthrough/github-3-connected-wide.png"
+
+test "managing an app: its bar, Manage, and the app directory"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  request POST "/api/call/appsInstall" ["todos"]
+  request POST "/api/call/todosAdd" ["Pack camera"]
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-todos"
+  clock until state todosReadList.length == 1 within 5000
+  expect tree has "app-bar"
+  expect tree has "app-manage"
+  clock settle
+  screenshot ".exact/walkthrough/apps-1-todos-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/apps-1-todos-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/apps-1-todos-phone.png"
+  resize 1280x800
+  tap "directory-entry"
+  expect tree has "directory"
+  clock settle
+  screenshot ".exact/walkthrough/apps-3-directory-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/apps-3-directory-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/apps-3-directory-phone.png"
+  resize 1280x800
+  tap "tab-todos"
+  tap "app-manage"
+  expect tree has "manage"
+  clock settle
+  screenshot ".exact/walkthrough/apps-2-manage-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/apps-2-manage-phone.png"
+  resize 1280x800
+
+test "the places: home, a chat, routines, tricks and the computer"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  clock settle
+  screenshot ".exact/walkthrough/places-1-home-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/places-1-home-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/places-1-home-phone.png"
+  resize 1280x800
+  tap "chat-new"
+  type "composer" "What can you do?"
+  type "composer" key "Enter"
+  clock until state chat.messages.length == 2 within 10000
+  clock until state chat.busy == false within 10000
+  clock settle
+  screenshot ".exact/walkthrough/places-2-chat-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/places-2-chat-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/places-2-chat-phone.png"
+  resize 1280x800
+  tap "routines-entry"
+  expect tree has "routines"
+  clock settle
+  screenshot ".exact/walkthrough/places-3-routines-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/places-3-routines-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/places-3-routines-phone.png"
+  resize 1280x800
+  tap "tricks-entry"
+  expect tree has "tricks"
+  clock settle
+  screenshot ".exact/walkthrough/places-4-tricks-wide.png"
+  resize 900x700
+  screenshot ".exact/walkthrough/places-4-tricks-mac.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/places-4-tricks-phone.png"
+  resize 1280x800
+  tap "tab-computer"
+  clock settle
+  screenshot ".exact/walkthrough/places-5-computer-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/places-5-computer-phone.png"
+
+test "settings, each section"
+  size 1280x800
+  request POST "/api/call/accountSignIn" []
+  request POST "/api/call/appsInstall" ["github"]
+  clock until state account.status == "signedIn" within 5000
+  tap "tab-settings"
+  tap "settings-pane-general"
+  clock settle
+  screenshot ".exact/walkthrough/settings-1-general-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/settings-1-general-phone.png"
+  resize 1280x800
+  tap "settings-pane-computer"
+  clock settle
+  screenshot ".exact/walkthrough/settings-2-computer-wide.png"
+  tap "settings-pane-memory"
+  clock settle
+  screenshot ".exact/walkthrough/settings-3-memory-wide.png"
+  tap "settings-pane-secrets"
+  clock settle
+  screenshot ".exact/walkthrough/settings-4-secrets-wide.png"
+  tap "settings-pane-connections"
+  clock settle
+  screenshot ".exact/walkthrough/settings-5-connections-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/settings-5-connections-phone.png"
+  resize 1280x800
+  tap "settings-pane-assistants"
+  clock settle
+  screenshot ".exact/walkthrough/settings-6-assistants-wide.png"
+  tap "settings-pane-experimental"
+  clock settle
+  screenshot ".exact/walkthrough/settings-7-experimental-wide.png"

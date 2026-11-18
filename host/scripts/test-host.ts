@@ -462,6 +462,8 @@ await startHost({
     localProvider({ secret, dir: path.join(dataDir, "machines") }),
   dataDir,
   appsDir: path.join(import.meta.dirname, "..", "..", "client", "apps"),
+  // The built shell, served at / as the real host serves it, for the walkthrough (scripts/walkthrough.sh).
+  clientDir: path.join(import.meta.dirname, "..", "..", "client", "dist"),
   // OpenBao and mitmproxy, downloaded once for every test run.
   toolsDir: path.join(tmpdir(), "imp-tools"),
   gh: path.join(import.meta.dirname, "fake-gh.ts"),

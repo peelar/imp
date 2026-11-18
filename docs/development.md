@@ -35,6 +35,7 @@ The repository is a [Turborepo](https://turborepo.com) monorepo on pnpm workspac
 | `pnpm check` | root | Lint, the host's context map, the lint policy, unused files, exports and dependencies ([knip](https://knip.dev), `knip.config.ts`), formatting and types. CI runs it. |
 | `pnpm test` | root | The host's HTTP API tests, each against its own host with a scripted model. CI runs it. |
 | `bun exact.mjs test web` | `client/` | The client against a host with a fake model. |
+| `pnpm walkthrough` | root | The app end to end as a person meets it, every screen photographed into `client/.exact/walkthrough/` at a phone's size, the Mac app's window and a wide window, for you to look at. `screens` runs `client/walkthrough/walkthrough.test.contract` in Exact's runner (onboarding, connecting GitHub, managing apps, every place and Settings); `build` has the imp build and save an app on the page the host itself serves, with [agent-browser](https://github.com/vercel-labs/agent-browser); `mac` drives the native Mac app on macOS and shoots each screen as a whole window, its toolbar included. About two minutes on a warm checkout. CI doesn't run it. |
 | `node scripts/smoke-machine.ts` | `host/` | One machine adapter on its own. |
 
 After you change an app in `client/apps/` by hand, run `node host/scripts/shell.ts` to rewrite its wiring in the client.

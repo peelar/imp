@@ -21,6 +21,7 @@
     "format:check": "oxfmt -c oxfmt.config.ts --check host/src host/scripts host/test host/machine sdk client/apps scripts docs oxlint.config.ts oxfmt.config.ts knip.config.ts package.json tsconfig.json turbo.json host/package.json client/package.json",
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint && pnpm typecheck",
+    "walkthrough": "sh scripts/walkthrough.sh",
     "changeset": "changeset",
     "changeset:version": "changeset version && pnpm install --lockfile-only --ignore-scripts",
     "prepare": "test -e .git && git config core.hooksPath .githooks || true"
