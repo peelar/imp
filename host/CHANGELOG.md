@@ -1,5 +1,11 @@
 # @imp/host
 
+## 0.23.0
+
+### Minor Changes
+
+- 1ac5c6b: Copy to GitHub in Settings → Backup now asks before it creates a repository: it names the repository and your GitHub account, and lets you make it private (the default) or public.
+
 ## 0.22.0
 
 ### Minor Changes
