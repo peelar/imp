@@ -1,5 +1,12 @@
 # @imp/host
 
+## 0.23.1
+
+### Patch Changes
+
+- 1e1aa5e: Apps your imp builds now ask GitHub for less at a time. A sync that sent one big GitHub query could fail every time with "GitHub returned 502" because GitHub stops a query after about 10 seconds. The imp now keeps each request small and words a failed sync by its cause: the key, an organization's SSO, or the service itself.
+- f61c4d0: An app your imp built or changed now opens straight away in the Mac app, instead of asking for your Imp's address inside the app's page.
+
 ## 0.23.0
 
 ### Minor Changes
