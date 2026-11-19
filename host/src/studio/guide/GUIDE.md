@@ -112,6 +112,8 @@ export default {
 
 - `app.fetch(url, { method, headers, body })` answers `{ status, headers, body }`, the body as text. It reaches only the hosts in `connections`, over HTTPS, with GET or HEAD, or POST to a connection's `query` path. The host puts the user's key on the request; you never see it. It throws when a request breaks a rule, and `needs secret <name>` when the user has no such key: then call request_secret.
 - The host runs `sync` on the live version: when its tab opens and the copy is due, on Sync now, on schedule while the user's computer is awake, and when a `watch` URL's answer changed. Never in a preview, so the preview shows the live data's copy. Fetch everything first, then write it in one `app.db.batch`, so a failure halfway keeps the last copy whole. Throw when something fails: the app's bar shows the error.
+- Keep each request small. A service answers a request that runs too long with a 5xx, every time, so the sync never works. GitHub's GraphQL API stops a query after about 10 seconds and answers 502 or 504: one search for 100 pull requests with their reviews, checks and files is enough to do it. Ask only for the fields the screen shows, 25 to 50 items a request (follow the page or cursor for more), no list nested in a list nested in a list, and one search a request. GitHub's REST search (`/search/issues`) is quick for lists of issues and pull requests.
+- Say why it failed by the status: 401 is the key; 403 is the key's access, or an organization's SSO (GitHub names it in the `X-GitHub-SSO` header); 5xx is the service failing or timing out, usually a request that is too big. Never blame the key for a 5xx.
 - Operations answer from `app.db`, not from `app.fetch`: a read runs again after every write.
 
 ## app.contract
