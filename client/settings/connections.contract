@@ -1,9 +1,9 @@
 // Settings' Connections: the accounts the host signs in to, and what each one turns on. GitHub first: connecting
 // signs in with a device code. Then Backup: the host always keeps every version of the apps' code in a local git
-// repository (host/src/backup/), and Copy to GitHub only adds a private copy there. Then the MCP servers the imp uses
-// for the person.
+// repository (host/src/backup/), and Copy to GitHub only adds a copy there, after the person confirms the repository it
+// makes under their account and chooses who can see it. Then the MCP servers the imp uses for the person.
 
-use Label, Body, Lead, Mono, Small from "../look.contract"
+use Label, Body, Lead, Mono, Small, Title, Control from "../look.contract"
 use Button, ButtonLink, ErrorNote, DeviceCode from "../controls.contract"
 use Connection, Backup, McpServer from "../host.contract"
 use Confirm, SettingsSection, SettingsRow, SettingsEmpty, SettingsFoot, SettingsError from "../parts.contract"
@@ -19,6 +19,13 @@ component ConnectionsSettings
     copyCode: action
     turnOn: action
     turnOff: action
+  // Who can see the repository Copy to GitHub makes: private unless the person chooses public.
+  state visibility = "private"
+  action askTurnOn
+    visibility = "private"
+    showModal("confirm-backup")
+  action choose(next: string)
+    visibility = next
   view
     column gap="space.xl" testId="connections"
       SettingsSection(title="GitHub", aside="", asideTestId="", note="", testId="")
@@ -41,7 +48,7 @@ component ConnectionsSettings
       SettingsSection(title="Backup", aside=`${backup.versions} ${backup.versions == 1 ? "version" : "versions"} kept`,
         asideTestId="backup-versions",
         note=(not backup.git ? "Needs git on your host. Install it, then restart Imp."
-          : "Your host always keeps every version of your apps' code, in a git repository on your host. You can also keep a private copy on GitHub."),
+          : "Your host always keeps every version of your apps' code, in a git repository on your host. You can also keep a copy on GitHub."),
         testId="backup")
         if backup.status == "on"
           SettingsRow(testId="")
@@ -63,9 +70,53 @@ component ConnectionsSettings
         if backup.status == "off"
           SettingsFoot(testId="")
             row
-              Button(press=turnOn, variant="secondary", disabled=(not backup.git or github.status != "on" or busy), testId="backup-turn-on")
+              Button(press=askTurnOn, variant="secondary", disabled=(not backup.git or github.status != "on" or busy), testId="backup-turn-on")
                 text "Copy to GitHub"
         SettingsError(message=backup.error, testId="backup-error")
+      BackupConfirm(login=github.login, visibility=visibility, choose=choose, confirm=turnOn(visibility))
+
+// What Copy to GitHub asks first: the repository it makes under the person's account, and who can see it, private
+// unless they choose public. A repository of that name the person has already is used as it is.
+component BackupConfirm
+  props
+    login: string
+    visibility: string
+    choose: action
+    confirm: action
+  derive repo = login == "" ? "imp-apps" : `${login}/imp-apps`
+  derive account = login == "" ? "your GitHub account" : `your GitHub account, @${login}`
+  view
+    dialog id="confirm-backup" aria-label="Create a repository on GitHub?" width="min(30rem, calc(100vw - 32px))"
+      box-sizing="border-box" padding=0 border="1px solid ink.strong" border-radius=0 background-color="surface.page"
+      color="ink.strong" box-shadow="none" testId="backup-confirm"
+      column gap="space.sm" padding="space.lg space.lg 0"
+        text "Create a repository on GitHub?" class=Title role="heading" aria-level=2
+        text `Imp creates the repository imp-apps under ${account}, and copies every version of your apps' code there. If you already have one by that name, Imp uses it as it is.` class=Body color="ink.muted"
+        text repo class=Mono color="ink.strong" overflow-wrap="anywhere" testId="backup-confirm-repo"
+      column gap="space.sm" padding="space.md space.lg 0"
+        row role="radiogroup" aria-label="Who can see it"
+          for v, i in ["private", "public"] key=v
+            button role="radio" aria-checked=(visibility == v) press=choose(v) flex=1 testId=`backup-visibility-${v}`
+              cursor="pointer"
+              padding="space.sm 0" border="1px solid line.strong" margin-left=(i == 0 ? "0" : "-1px")
+              background-color=(visibility == v ? "ink.strong" : "transparent")
+              color=(visibility == v ? "surface.page" : "ink.strong")
+              class=Control
+              text (v == "private" ? "Private" : "Public")
+        text (visibility == "private" ? "Only you, and people you invite, can see it."
+          : "Anyone on the internet can see your apps' code.") class=Small color="ink.muted" testId="backup-visibility-note"
+      row justify-content="flex-end" gap="space.sm" padding="space.md space.lg space.lg"
+        button commandfor="confirm-backup" command="close" testId="backup-confirm-cancel" padding="space.sm space.ms"
+          cursor="pointer" border="1px solid line.strong" border-radius=0 background-color="transparent" color="ink.strong"
+          :hover
+            background-color="surface.soft"
+          text "Cancel" class=Label color="inherit"
+        button press=confirm commandfor="confirm-backup" command="close" testId="backup-confirm-create"
+          padding="space.sm space.ms" cursor="pointer" border="1px solid ink.strong" border-radius=0
+          background-color="ink.strong" color="surface.page"
+          :hover
+            opacity=0.9
+          text (visibility == "private" ? "Create private repository" : "Create public repository") class=Label color="inherit"
 
 // Connecting GitHub, until it is on: the button, then GitHub's code to enter on its sign-in page (DeviceCode, as
 // ChatGPT's sign-in shows it), and why the last try failed. Settings shows it, and so does an app's page while the

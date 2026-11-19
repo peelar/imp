@@ -1,5 +1,6 @@
 // GitHub's REST API as the test host's backup sees it (test-host.ts): the account "tester", and its repositories as
-// bare git repositories in `dir`, which the backup pushes to by their path.
+// bare git repositories in `dir`, which the backup pushes to by their path. Whether one was made private is kept in its
+// git config, as fake.private.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -37,6 +38,13 @@ export function fakeGithub(dir: string): GithubApi {
         "--bare",
         "--initial-branch=main",
         repo,
+      ]);
+      execFileSync("git", [
+        "--git-dir",
+        repo,
+        "config",
+        "fake.private",
+        String(body?.private === true),
       ]);
 
       return answer(201, { clone_url: repo });

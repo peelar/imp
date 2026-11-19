@@ -1,9 +1,9 @@
 // A copy of the apps' code away from the host's own folders. Every save and undo commits the live apps' code to a git
 // repository in DATA_DIR/backup, a folder per app, so every version is kept for good (history.ts; Undo's
 // history, which also holds the data, lasts 48 hours). Turned on in Settings, under the GitHub connection
-// (connections/), the host also pushes each commit to a private GitHub repository of the person's, imp-apps
-// (github.ts), through the egress proxy, which puts the github key on the push. Only code is backed up: the apps'
-// data stays on the host.
+// (connections/), the host also pushes each commit to a GitHub repository of the person's, imp-apps, private unless
+// they choose public when Settings asks before it is made (github.ts), through the egress proxy, which puts the github
+// key on the push. Only code is backed up: the apps' data stays on the host.
 //
 // The host needs git for the history; Settings says when it is missing.
 import { rmSync, writeFileSync } from "node:fs";
@@ -11,7 +11,12 @@ import path from "node:path";
 import { compile, obj, str } from "@earendil-works/pi-schema";
 import type { AppInfo } from "../apps/apps.ts";
 import { backupCommands } from "./commands.ts";
-import { type GithubApi, personalRepository, type Remote } from "./github.ts";
+import {
+  type GithubApi,
+  personalRepository,
+  type Remote,
+  type Visibility,
+} from "./github.ts";
 import { type BackupHistory, backupHistory } from "./history.ts";
 import { readKept } from "../datadir/datadir.ts";
 import type { Topics } from "../live/live.ts";
@@ -218,8 +223,8 @@ export function appBackup(options: BackupOptions) {
   });
 
   /** The person's repository is where the versions go, starting with the ones there are. */
-  const finish = async () => {
-    const found = await personalRepository(github.api);
+  const finish = async (visibility: Visibility) => {
+    const found = await personalRepository(github.api, visibility);
 
     remote.keep(found);
     state.set({ status: "on", repo: found.repo, error: "" });
@@ -233,8 +238,9 @@ export function appBackup(options: BackupOptions) {
     start: () => {
       keeper.record("Keep the apps as the host started with them");
     },
-    /** Starts pushing to the person's imp-apps repository on GitHub, which must be connected. */
-    turnOn: () => {
+    /** Starts pushing to the person's imp-apps repository on GitHub, which must be connected; a new one is made with
+     * the visibility they chose. */
+    turnOn: (visibility: Visibility) => {
       if (state.now().status !== "off") {
         return;
       }
@@ -246,9 +252,13 @@ export function appBackup(options: BackupOptions) {
       }
 
       state.set({ status: "starting", error: "" });
-      keeper.serial(finish).catch((cause: unknown) => {
-        state.set({ ...NOT_CONNECTED, error: why(cause) });
-      });
+      keeper
+        .serial(async () => {
+          await finish(visibility);
+        })
+        .catch((cause: unknown) => {
+          state.set({ ...NOT_CONNECTED, error: why(cause) });
+        });
     },
     /** Stops pushing. The repository on GitHub stays. */
     turnOff: () => {

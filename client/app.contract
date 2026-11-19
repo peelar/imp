@@ -917,8 +917,8 @@ component App
     send serverCancelled = connectionsCancelServer(id)
   action removeServer(id: string)
     send serverRemoved = connectionsRemoveServer(id)
-  action turnOnBackup
-    send backupTurnedOn = backupTurnOn()
+  action turnOnBackup(visibility: string)
+    send backupTurnedOn = backupTurnOn(visibility)
   action turnOffBackup
     send backupTurnedOff = backupTurnOff()
   action chooseFlag(key: string, on: bool)

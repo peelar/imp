@@ -80,6 +80,20 @@ test "GitHub connects from the app's page and from Settings, each showing its co
   clock until state github.status == "on" within 10000
   clock settle
   screenshot ".exact/walkthrough/github-3-connected-wide.png"
+  tap "backup-turn-on"
+  clock settle
+  screenshot ".exact/walkthrough/github-4-backup-confirm-wide.png"
+  resize 390x844
+  screenshot ".exact/walkthrough/github-4-backup-confirm-phone.png"
+  resize 1280x800
+  tap "backup-visibility-public"
+  clock settle
+  screenshot ".exact/walkthrough/github-5-backup-public-wide.png"
+  tap "backup-visibility-private"
+  tap "backup-confirm-create"
+  clock until state backup.synced == true within 10000
+  clock settle
+  screenshot ".exact/walkthrough/github-6-backup-on-wide.png"
 
 test "managing an app: its bar, Manage, and the app directory"
   size 1280x800

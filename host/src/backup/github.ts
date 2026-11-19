@@ -1,9 +1,12 @@
-// The backup's GitHub side: the person's private imp-apps repository, found or made through GitHub's API with the
+// The backup's GitHub side: the person's imp-apps repository, found or made through GitHub's API with the
 // GitHub connection (connections/), which the host hands the backup as `GithubApi`.
 import { compile, obj, str } from "@earendil-works/pi-schema";
 
 /** The repository the apps go to, under the person's GitHub account. */
 const REPO_NAME = "imp-apps";
+
+/** Who can see the repository the backup makes: the person chooses in Settings before it is made. */
+export type Visibility = "private" | "public";
 
 /** Where the versions are pushed: "owner/imp-apps" and its address. */
 export type Remote = { readonly repo: string; readonly url: string };
@@ -39,8 +42,12 @@ function answered<T>(
   return value;
 }
 
-/** The person's imp-apps repository, made private if it is not there yet. */
-export async function personalRepository(api: GithubApi): Promise<Remote> {
+/** The person's imp-apps repository, made private (or public, as they chose) if it is not there yet. One that is
+ * there already is used as it is. */
+export async function personalRepository(
+  api: GithubApi,
+  visibility: Visibility
+): Promise<Remote> {
   const { login } = answered(
     "your account",
     await api({ method: "GET", path: "/user" }),
@@ -57,7 +64,7 @@ export async function personalRepository(api: GithubApi): Promise<Remote> {
           path: "/user/repos",
           body: {
             name: REPO_NAME,
-            private: true,
+            private: visibility !== "public",
             description: "My Imp apps' code, backed up by my Imp host.",
           },
         })

@@ -121,8 +121,8 @@ test("connecting GitHub shows the device code, then keeps the account's key in t
   );
 });
 
-test("turning on Backup pushes every version to the person's private repository", async () => {
-  assert.deepEqual(await call("backupTurnOn", []), done);
+test("turning on Backup makes the repository with the visibility the person chose, and pushes every version to it", async () => {
+  assert.deepEqual(await call("backupTurnOn", ["public"]), done);
 
   const pushed = await until(
     "account",
@@ -142,6 +142,13 @@ test("turning on Backup pushes every version to the person's private repository"
       encoding: "utf-8",
     }).trim(),
     "1"
+  );
+  assert.equal(
+    execFileSync("git", ["config", "fake.private"], {
+      cwd: path.join(dataDir, "github", "tester", "imp-apps.git"),
+      encoding: "utf-8",
+    }).trim(),
+    "false"
   );
 });
 

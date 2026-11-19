@@ -441,6 +441,12 @@ test "settings connect GitHub with a device code, then back the apps' code up to
   clock until state github.status == "on" within 30000
   expect text "github-login" == "@tester"
   tap "backup-turn-on"
+  expect text "backup-confirm-repo" == "tester/imp-apps"
+  expect text "backup-confirm-create" == "Create private repository"
+  tap "backup-visibility-public"
+  expect text "backup-confirm-create" == "Create public repository"
+  tap "backup-visibility-private"
+  tap "backup-confirm-create"
   clock until state backup.synced == true within 10000
   expect text "backup-repo" == "tester/imp-apps"
   expect text "backup-state" == "Up to date"
