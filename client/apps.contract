@@ -16,7 +16,8 @@ use GithubSignIn from "./settings/connections.contract"
 //
 // The Mac app carries the screens Imp ships and never loads the host's build. An app whose version is another
 // (`framed`: changed by the imp, previewed, or built by it) shows the host's own page for it instead, the page alone
-// (`?embed=1`), with its card and screen as the browser has them, beside this window's bar and chat.
+// (`?embed=1`), with its card and screen as the browser has them, beside this window's bar and chat. The page is told
+// the host's address (`host`), which this window already knows, for when it cannot ask the host for it itself.
 component AppPage
   props
     id: string
@@ -36,7 +37,7 @@ component AppPage
   slot
   view
     if framed
-      iframe src=`${origin}/${id}?embed=1&scheme=${scheme}` title=name testId="app-frame" flex=1 min-height=0
+      iframe src=`${origin}/${id}?embed=1&host=${origin}&scheme=${scheme}` title=name testId="app-frame" flex=1 min-height=0
         width="100%" border="none"
     else
       column flex=1 min-height=0

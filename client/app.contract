@@ -165,6 +165,8 @@ component App
   // The page alone, as the Mac app frames it for an app whose screen it does not carry (`?embed=1`, AppPage): the
   // open app's screen, without the sidebar, the bars, the chat and the notifications, which the Mac app has.
   state embedded = searchParam(top(nav), "embed") == "1"
+  // The host's address as the Mac app framing the page knows it, for when the page cannot ask the host (app.ts).
+  state framedHost = searchParam(top(nav), "embed") == "1" ? searchParam(top(nav), "host") : ""
   state hostDraft = ""
   // The onboarding's open section for the computer: "cloud", "own", "container" or none.
   state computerChoice = ""
@@ -212,7 +214,7 @@ component App
   resource media = exactViewport() as shape Media
   resource time = exactTime() as shape Time
   resource alerts = notificationStatus() as shape NotificationStatus
-  resource host = hostOrigin(hostAddress) as shape Host else empty()
+  resource host = hostOrigin(hostAddress, framedHost) as shape Host else empty()
   // Every stream to the host closes while the browser has frozen the page (`page.frozen`: a background tab, or a page
   // put in the back/forward cache), and opens again when it resumes. A frozen page with its streams open holds the
   // browser's connections to the host, so the page opened after it, another of the shell's routes, waits on the
@@ -1292,15 +1294,17 @@ component App
                 text `${onboardingStep} / 3` class=Label testId="onboarding-step"
             if unreachable
               column gap="space.ms" testId="host-connect" animation=(still ? "none" : "rise 260ms ease-out both")
-                WizardTitle(title=(hostAddress == "" ? "Connect to your Imp" : "Your Imp isn't answering"),
-                  note=(hostAddress == "" ? "Its address on your tailnet." : `Nothing answered at ${hostAddress}.`))
-                row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.ms" border="1px solid line.strong"
-                  input value=hostDraft input=editHost submit=connect placeholder="imp.your-tailnet.ts.net"
-                    aria-label="Host address" testId="host-address" flex=1 min-width=0 padding="space.sm 0" border="none"
-                    background-color="transparent" outline="none" class=Mono
-                    color="ink.strong" autocapitalize="none" autocorrect="off" spellcheck=false
-                  Button(press=connect, variant="primary", disabled=(hostDraft.trim() == ""), testId="host-connect-button")
-                    text "Connect"
+                // A framed page has no address to ask for: the Mac app around it has one, and the page tries again.
+                WizardTitle(title=(hostAddress == "" and not embedded ? "Connect to your Imp" : "Your Imp isn't answering"),
+                  note=(embedded ? "Trying again in a moment." : hostAddress == "" ? "Its address on your tailnet." : `Nothing answered at ${hostAddress}.`))
+                if not embedded
+                  row align-items="center" gap="space.sm" padding="space.xs space.xs space.xs space.ms" border="1px solid line.strong"
+                    input value=hostDraft input=editHost submit=connect placeholder="imp.your-tailnet.ts.net"
+                      aria-label="Host address" testId="host-address" flex=1 min-width=0 padding="space.sm 0" border="none"
+                      background-color="transparent" outline="none" class=Mono
+                      color="ink.strong" autocapitalize="none" autocorrect="off" spellcheck=false
+                    Button(press=connect, variant="primary", disabled=(hostDraft.trim() == ""), testId="host-connect-button")
+                      text "Connect"
             else if needsFirstApp and onboardingBack == ""
               FirstAppWizard(ask=firstAsk, edit=editFirstAsk, busy=(pending(appInstalled) or pending(sent)), error=installError,
                 build=buildFirstApp, skip=skipFirstApp, still=still)

@@ -18,18 +18,30 @@ const configured: string = import.meta.env.API_BASE_URL ?? 'http://127.0.0.1:878
 let API = configured;
 
 // `served`: only the host's own page asks it for its address, and only that page reloads into the host's newest build.
-async function hostOrigin(saved: string): Promise<{ origin: string; served: boolean }> {
+//
+// The Mac app frames the host's page for an app whose screen it does not carry, and names the host it reached
+// (`framed`, from the page's `?host=`). Where that page cannot ask the host for its address, the Mac app's serves. Only
+// then: a page that can ask never takes an address from a link.
+async function hostOrigin(saved: string, framed: string): Promise<{ origin: string; served: boolean }> {
   if (saved) {
     API = saved.replace(/\/+$/, '');
     return { origin: API, served: false };
   }
   if (configured) return { origin: configured, served: false };
+  const asked = await askedOrigin().catch((error: unknown) => {
+    if (/^https?:\/\/[^/?#\s]+$/.test(framed)) return framed;
+    throw error;
+  });
+  API = asked;
+  return { origin: asked, served: true };
+}
+
+async function askedOrigin(): Promise<string> {
   const response = await fetch('/assets/host.json');
   if (!response.ok) throw new Error(`The host answered ${response.status} for its address.`);
   const { origin } = await response.json();
   if (typeof origin !== 'string' || !/^https?:\/\//.test(origin)) throw new Error('The host sent no address.');
-  API = origin;
-  return { origin, served: true };
+  return origin;
 }
 
 // The Mac app's updater (scripts/install-mac.sh) and the app talk through two files in the app's storage: the updater
@@ -215,7 +227,7 @@ async function call(source: MutationSource, args: unknown[]) {
 }
 
 export const answer: Answer = (source, args, _store, storage) => {
-  if (source === 'hostOrigin') return hostOrigin(String(args[0] ?? ''));
+  if (source === 'hostOrigin') return hostOrigin(String(args[0] ?? ''), String(args[1] ?? ''));
   if (source === 'updateReady') return updateReady(storage);
   if (source === 'updateRestart') return updateRestart(storage);
   if (source === 'chatAttach') return chatAttach(storage, (args[0] as unknown[]).map(String), Number(args[1]), Number(args[2]));
